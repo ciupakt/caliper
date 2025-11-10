@@ -164,25 +164,34 @@ def read_serial():
                 if data:
                     log_rx(f"< {data}")
                     if data.startswith("VAL_1:"):
-                        val = data.split(":")[1]
-                        ts = datetime.now().isoformat(timespec='seconds')
-                        meas_history.append((ts, val))
-                        show_measurements()
+                        val_str = data.split(":")[1]
                         try:
-                            plot_x.append(len(plot_x) + 1)
-                            plot_y.append(float(val))
-                            dpg.set_value("plot_data", [plot_x, plot_y])
-                            update_plot_axes()
-                        except:
-                            pass
-                        if csv_writer:
-                            if timestamp_on:
-                                csv_writer.writerow([ts, val])
+                            val = float(val_str)
+                            # Walidacja zakresu
+                            if -1000.0 <= val <= 1000.0:
+                                ts = datetime.now().isoformat(timespec='seconds')
+                                meas_history.append((ts, val_str))
+                                show_measurements()
+                                try:
+                                    plot_x.append(len(plot_x) + 1)
+                                    plot_y.append(val)
+                                    dpg.set_value("plot_data", [plot_x, plot_y])
+                                    update_plot_axes()
+                                except Exception as plot_err:
+                                    log_rx(f"BLAD wykresu: {str(plot_err)}")
+                                if csv_writer:
+                                    if timestamp_on:
+                                        csv_writer.writerow([ts, val_str])
+                                    else:
+                                        csv_writer.writerow([val_str])
                             else:
-                                csv_writer.writerow([val])
+                                log_rx(f"BLAD: Wartosc poza zakresem: {val}")
+                        except ValueError as val_err:
+                            log_rx(f"BLAD: Nieprawidlowa wartosc: {val_str} - {str(val_err)}")
                 time.sleep(0.02)
             except Exception as e:
                 dpg.set_value("status", f"ERR Serial: {str(e)}")
+                log_rx(f"ERR Serial: {str(e)}")
                 time.sleep(1)
         else:
             time.sleep(1)

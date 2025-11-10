@@ -1,9 +1,14 @@
 #include <esp_now.h>
 #include <WiFi.h>
 
-#define CLOCK_PIN 23
-#define DATA_PIN 22
-#define TRIG_PIN 21
+// #define CLOCK_PIN 23
+// #define DATA_PIN 22
+// #define TRIG_PIN 21
+
+#define CLOCK_PIN 18
+#define DATA_PIN 19
+#define TRIG_PIN 5
+
 #define ESPNOW_WIFI_CHANNEL 1
 
 // Adres MAC mastera
@@ -73,8 +78,9 @@ float performMeasurement() {
   attachInterrupt(digitalPinToInterrupt(CLOCK_PIN), clockISR, FALLING);
 
   unsigned long startTime = millis();
-  while (!dataReady && (millis() - startTime < 150)) {
-    delay(1);
+  unsigned long timeout = 200; // Zwiększony timeout
+  while (!dataReady && (millis() - startTime < timeout)) {
+    delayMicroseconds(100); // Krótsze opóźnienie dla lepszej responsywności
   }
 
   detachInterrupt(digitalPinToInterrupt(CLOCK_PIN));
@@ -83,10 +89,17 @@ float performMeasurement() {
   if (dataReady) {
     reverseBits();
     float result = decodeCaliper();
-    Serial.print("Pomiar: ");
-    Serial.print(result, 3);
-    Serial.println(" mm");
-    return result;
+
+    // Walidacja wyniku
+    if (result >= -1000.0 && result <= 1000.0 && !isnan(result) && !isinf(result)) {
+      Serial.print("Pomiar: ");
+      Serial.print(result, 3);
+      Serial.println(" mm");
+      return result;
+    } else {
+      Serial.println("BLAD: Nieprawidlowa wartosc pomiaru!");
+      return -999.0;
+    }
   } else {
     Serial.println("BŁĄD: Timeout!");
     return -999.0;
@@ -94,8 +107,11 @@ float performMeasurement() {
 }
 
 void OnDataRecv(const esp_now_recv_info_t *recv_info, const uint8_t *incomingData, int len) {
-  if (len > 0 && incomingData[0] == 'M') {
+  if (len == 1 && incomingData[0] == 'M') {
     measurementRequested = true;
+    Serial.println("Otrzymano zadanie pomiaru");
+  } else {
+    Serial.println("BLAD: Nieprawidlowe dane ESP-NOW");
   }
 }
 
@@ -108,8 +124,8 @@ void setup() {
   Serial.begin(115200);
   delay(1000);
   Serial.println("\n=== ESP32 SLAVE - Suwmiarka + ESP-NOW ===");
-  pinMode(DATA_PIN, INPUT);
-  pinMode(CLOCK_PIN, INPUT);
+  pinMode(DATA_PIN, INPUT_PULLUP);
+  pinMode(CLOCK_PIN, INPUT_PULLUP);
   pinMode(TRIG_PIN, OUTPUT);
   digitalWrite(TRIG_PIN, HIGH);
 
@@ -170,13 +186,30 @@ void loop() {
     sensorData.measurement = result;
     sensorData.valid = (result != -999.0);
     sensorData.timestamp = millis();
+
     esp_err_t sendResult = esp_now_send(masterAddress, (uint8_t *) &sensorData, sizeof(sensorData));
     if (sendResult == ESP_OK) {
-      Serial.println("Wynik wysłany do Mastera");
+      Serial.println("Wynik wyslany do Mastera");
     } else {
-      Serial.println("BŁĄD wysyłania wyniku!");
+      Serial.print("BLAD wysylania wyniku: ");
+      Serial.println(sendResult);
+
+      // Próba ponownego wysłania po krótkiej przerwie
+      delay(100);
+      sendResult = esp_now_send(masterAddress, (uint8_t *) &sensorData, sizeof(sensorData));
+      if (sendResult == ESP_OK) {
+        Serial.println("Ponowne wyslanie wyniku udane");
+      } else {
+        Serial.println("Ponowne wyslanie wyniku nieudane");
+      }
     }
     Serial.println("-------------------------------\n");
   }
-  delay(10);
+
+  // Zamiast delay(10) - lepsza responsywność
+  static unsigned long lastCheck = 0;
+  if (millis() - lastCheck >= 10) {
+    lastCheck = millis();
+    // Możliwość dodania innych zadań
+  }
 }

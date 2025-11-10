@@ -4,7 +4,7 @@
 
 #define ESPNOW_WIFI_CHANNEL 1
 
-uint8_t slaveAddress[] = {0x70, 0xB8, 0xF6, 0x5B, 0xFD, 0xA4};
+uint8_t slaveAddress[] = {0xA0, 0xB7, 0x65, 0x21, 0x77, 0x5C};
 
 // Dane Access Point
 const char* ssid = "ESP32_Pomiar";
@@ -32,8 +32,21 @@ String macToString(const uint8_t *mac) {
 }
 
 void OnDataRecv(const esp_now_recv_info_t *recv_info, const uint8_t *incomingData, int len) {
+  if (len != sizeof(receivedData)) {
+    Serial.println("BLAD: Nieprawidlowa dlugosc pakietu ESP-NOW");
+    return;
+  }
+
   memcpy(&receivedData, incomingData, sizeof(receivedData));
-  
+
+  // Walidacja zakresu pomiaru
+  if (receivedData.valid && (receivedData.measurement < -1000.0 || receivedData.measurement > 1000.0)) {
+    Serial.println("BLAD: Wartosc pomiaru poza zakresem!");
+    lastMeasurement = "BLAD: Wartosc poza zakresem";
+    measurementReady = true;
+    return;
+  }
+
   if (receivedData.valid) {
     lastMeasurement = String(receivedData.measurement, 3) + " mm";
     Serial.print("VAL_1:");
@@ -42,7 +55,7 @@ void OnDataRecv(const esp_now_recv_info_t *recv_info, const uint8_t *incomingDat
     lastMeasurement = "BLAD POMIARU";
   }
   measurementReady = true;
-  
+
   Serial.println("\n=== OTRZYMANO WYNIK POMIARU ===");
   Serial.print("Wartosc: ");
   Serial.println(lastMeasurement);
@@ -62,8 +75,25 @@ void requestMeasurement() {
   uint8_t command = 'M';
   measurementReady = false;
   lastMeasurement = "Oczekiwanie na pomiar...";
-  esp_now_send(slaveAddress, &command, sizeof(command));
-  Serial.println("Wyslano zadanie pomiaru");
+
+  esp_err_t result = esp_now_send(slaveAddress, &command, sizeof(command));
+  if (result == ESP_OK) {
+    Serial.println("Wyslano zadanie pomiaru");
+  } else {
+    Serial.print("BLAD wysylania zadania: ");
+    Serial.println(result);
+    lastMeasurement = "BLAD: Nie mozna wyslac zadania";
+
+    // Próba ponownego wysłania po krótkiej przerwie
+    delay(100);
+    result = esp_now_send(slaveAddress, &command, sizeof(command));
+    if (result == ESP_OK) {
+      Serial.println("Ponowne wyslanie udane");
+      lastMeasurement = "Oczekiwanie na pomiar...";
+    } else {
+      Serial.println("Ponowne wyslanie nieudane");
+    }
+  }
 }
 
 void handleRoot() {
@@ -149,7 +179,10 @@ void setup() {
   Serial.print("IP: ");
   Serial.println(WiFi.softAPIP());
   Serial.println("================================\n");
-  
+  Serial.print("MAC Address Master: ");
+  Serial.println(WiFi.macAddress());
+  Serial.println();
+
   WiFi.setChannel(ESPNOW_WIFI_CHANNEL);
 
   if (esp_now_init() != ESP_OK) {
@@ -181,13 +214,18 @@ void setup() {
 
 void loop() {
   server.handleClient();
-  
+
   if (Serial.available()) {
     char input = Serial.read();
     if (input == 'M' || input == 'm') {
       requestMeasurement();
     }
   }
-  
-  delay(10);
+
+  // Zamiast delay(10) - lepsza responsywność
+  static unsigned long lastCheck = 0;
+  if (millis() - lastCheck >= 10) {
+    lastCheck = millis();
+    // Możliwość dodania innych zadań
+  }
 }
