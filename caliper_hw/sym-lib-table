@@ -1,0 +1,4 @@
+(sym_lib_table
+  (version 7)
+  (lib (name "esp32_devkit_v1_doit")(type "KiCad")(uri "${KIPRJMOD}/doit-esp32-devkit-v1-main/doit-esp32-devkit-v1-main/kicad/Symbols/esp32_devkit_v1_doit.kicad_sym")(options "")(descr ""))
+)
