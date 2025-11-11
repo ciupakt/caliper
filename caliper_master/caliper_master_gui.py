@@ -170,7 +170,8 @@ def read_serial():
                             # Walidacja zakresu
                             if -1000.0 <= val <= 1000.0:
                                 ts = datetime.now().isoformat(timespec='seconds')
-                                meas_history.append((ts, val_str))
+                                measurement_str = f"{val_str} mm"
+                                meas_history.append((ts, measurement_str))
                                 show_measurements()
                                 try:
                                     plot_x.append(len(plot_x) + 1)
@@ -181,13 +182,16 @@ def read_serial():
                                     log_rx(f"BLAD wykresu: {str(plot_err)}")
                                 if csv_writer:
                                     if timestamp_on:
-                                        csv_writer.writerow([ts, val_str])
+                                        csv_writer.writerow([ts, measurement_str])
                                     else:
-                                        csv_writer.writerow([val_str])
+                                        csv_writer.writerow([measurement_str])
                             else:
                                 log_rx(f"BLAD: Wartosc poza zakresem: {val}")
                         except ValueError as val_err:
                             log_rx(f"BLAD: Nieprawidlowa wartosc: {val_str} - {str(val_err)}")
+                    elif "PRAD SILNIKA" in data.upper() or "blad silnika" in data.lower():
+                        # Logowanie informacji o silniku
+                        log_rx(f"[SILNIK] {data}")
                 time.sleep(0.02)
             except Exception as e:
                 dpg.set_value("status", f"ERR Serial: {str(e)}")
@@ -222,7 +226,7 @@ with dpg.window(label="Caliper Application", width=880, height=660):
                     dpg.add_button(label="Refresh ports", callback=update_ports, width=150, height=30)
                     dpg.add_button(label="Open port", callback=open_port_callback, width=150, height=30)
                     dpg.add_spacer(height=5)
-                    dpg.add_text("", tag="status")
+                    dpg.add_text("Status: Not connected", tag="status")
                     dpg.add_text("", tag="csv_info")
                 
                 dpg.add_spacer(width=30)
@@ -237,6 +241,9 @@ with dpg.window(label="Caliper Application", width=880, height=660):
                     dpg.add_input_int(label="Interval (ms)", tag="interval_ms", default_value=1000, min_value=500, enabled=False, width=150)
                     dpg.add_spacer(height=5)
                     dpg.add_checkbox(label="Include timestamp", callback=timestamp_checkbox, tag="timestamp_cb")
+                    dpg.add_spacer(height=5)
+                    dpg.add_text("ESP32 Master: http://192.168.4.1", color=(100, 255, 100))
+                    dpg.add_text("Connect WiFi: ESP32_Pomiar", color=(100, 255, 100))
             
             dpg.add_separator()
             dpg.add_spacer(height=10)

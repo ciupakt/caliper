@@ -14,6 +14,9 @@ typedef struct struct_message {
   float measurement;
   bool valid;
   uint32_t timestamp;
+  char command;          // Command type: 'M' = measurement, 'F' = forward, 'R' = reverse, 'S' = stop, 'D' = demo
+  float motorCurrent;    // Motor current reading
+  bool motorFault;       // Motor fault status
 } struct_message;
 
 struct_message receivedData;
@@ -39,29 +42,44 @@ void OnDataRecv(const esp_now_recv_info_t *recv_info, const uint8_t *incomingDat
 
   memcpy(&receivedData, incomingData, sizeof(receivedData));
 
-  // Walidacja zakresu pomiaru
-  if (receivedData.valid && (receivedData.measurement < -1000.0 || receivedData.measurement > 1000.0)) {
-    Serial.println("BLAD: Wartosc pomiaru poza zakresem!");
-    lastMeasurement = "BLAD: Wartosc poza zakresem";
+  // Obsługa różnych typów komend
+  if (receivedData.command == 'M') {
+    // Walidacja zakresu pomiaru
+    if (receivedData.valid && (receivedData.measurement < -1000.0 || receivedData.measurement > 1000.0)) {
+      Serial.println("BLAD: Wartosc pomiaru poza zakresem!");
+      lastMeasurement = "BLAD: Wartosc poza zakresem";
+      measurementReady = true;
+      return;
+    }
+
+    if (receivedData.valid) {
+      lastMeasurement = String(receivedData.measurement, 3) + " mm";
+      Serial.print("VAL_1:");
+      Serial.println(receivedData.measurement, 3);
+    } else {
+      lastMeasurement = "BLAD POMIARU";
+    }
     measurementReady = true;
-    return;
-  }
 
-  if (receivedData.valid) {
-    lastMeasurement = String(receivedData.measurement, 3) + " mm";
-    Serial.print("VAL_1:");
-    Serial.println(receivedData.measurement, 3);
-  } else {
-    lastMeasurement = "BLAD POMIARU";
+    Serial.println("\n=== OTRZYMANO WYNIK POMIARU ===");
+    Serial.print("Wartosc: ");
+    Serial.println(lastMeasurement);
+    Serial.print("Timestamp: ");
+    Serial.println(receivedData.timestamp);
+    Serial.print("Prad silnika: ");
+    Serial.print(receivedData.motorCurrent, 3);
+    Serial.print("A, Blad silnika: ");
+    Serial.println(receivedData.motorFault ? "TAK" : "NIE");
+    Serial.println("================================\n");
+  } else if (receivedData.command == 'U') {
+    // Aktualizacja statusu silnika
+    Serial.println("\n=== AKTUALIZACJA STATUSU SILNIKA ===");
+    Serial.print("Prad silnika: ");
+    Serial.print(receivedData.motorCurrent, 3);
+    Serial.print("A, Blad silnika: ");
+    Serial.println(receivedData.motorFault ? "TAK" : "NIE");
+    Serial.println("=====================================\n");
   }
-  measurementReady = true;
-
-  Serial.println("\n=== OTRZYMANO WYNIK POMIARU ===");
-  Serial.print("Wartosc: ");
-  Serial.println(lastMeasurement);
-  Serial.print("Timestamp: ");
-  Serial.println(receivedData.timestamp);
-  Serial.println("================================\n");
 }
 
 // POPRAWKA: Zmieniona sygnatura callbacka
@@ -161,7 +179,10 @@ void handleAPI() {
   String json = "{";
   json += "\"measurement\":\"" + lastMeasurement + "\",";
   json += "\"timestamp\":" + String(receivedData.timestamp) + ",";
-  json += "\"valid\":" + String(receivedData.valid ? "true" : "false");
+  json += "\"valid\":" + String(receivedData.valid ? "true" : "false") + ",";
+  json += "\"motorCurrent\":" + String(receivedData.motorCurrent, 3) + ",";
+  json += "\"motorFault\":" + String(receivedData.motorFault ? "true" : "false") + ",";
+  json += "\"command\":\"" + String(receivedData.command) + "\"";
   json += "}";
   server.send(200, "application/json", json);
 }

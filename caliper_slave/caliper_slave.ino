@@ -1,5 +1,6 @@
 #include <esp_now.h>
 #include <WiFi.h>
+#include "caliper_slave_motor_ctrl.h"
 
 // #define CLOCK_PIN 23
 // #define DATA_PIN 22
@@ -23,6 +24,9 @@ typedef struct struct_message {
   float measurement;
   bool valid;
   uint32_t timestamp;
+  char command;          // Command type: 'M' = measurement, 'F' = forward, 'R' = reverse, 'S' = stop, 'D' = demo
+  float motorCurrent;    // Motor current reading
+  bool motorFault;       // Motor fault status
 } struct_message;
 
 struct_message sensorData;
@@ -107,9 +111,36 @@ float performMeasurement() {
 }
 
 void OnDataRecv(const esp_now_recv_info_t *recv_info, const uint8_t *incomingData, int len) {
-  if (len == 1 && incomingData[0] == 'M') {
-    measurementRequested = true;
-    Serial.println("Otrzymano zadanie pomiaru");
+  if (len == 1) {
+    char command = (char)incomingData[0];
+    Serial.print("Otrzymano komendę: ");
+    Serial.println(command);
+    
+    switch (command) {
+      case 'M':  // Measurement request
+        measurementRequested = true;
+        Serial.println("→ Zadanie pomiaru");
+        break;
+      case 'F':  // Motor forward
+        setMotorState(MOTOR_FORWARD);
+        Serial.println("→ Silnik: Forward");
+        break;
+      case 'R':  // Motor reverse
+        setMotorState(MOTOR_REVERSE);
+        Serial.println("→ Silnik: Reverse");
+        break;
+      case 'S':  // Motor stop
+        setMotorState(MOTOR_STOP);
+        Serial.println("→ Silnik: Stop");
+        break;
+      case 'D':  // Motor demo
+        Serial.println("→ Uruchamianie demo silnika...");
+        demoMotorControl();
+        break;
+      default:
+        Serial.println("→ Nieznana komenda");
+        break;
+    }
   } else {
     Serial.println("BLAD: Nieprawidlowe dane ESP-NOW");
   }
@@ -177,6 +208,11 @@ void setup() {
   }
 
   Serial.println("Oczekiwanie na żądania pomiaru...\n");
+  
+  // Initialize motor controller
+  Serial.println("Inicjalizacja sterownika silnika...");
+  initializeMotorController();
+  Serial.println("Sterownik silnika gotowy!\n");
 }
 
 void loop() {
@@ -186,10 +222,21 @@ void loop() {
     sensorData.measurement = result;
     sensorData.valid = (result != -999.0);
     sensorData.timestamp = millis();
+    sensorData.command = 'M';
+    
+    // Add motor status data
+    sensorData.motorCurrent = readMotorCurrent();
+    sensorData.motorFault = checkMotorFault();
 
     esp_err_t sendResult = esp_now_send(masterAddress, (uint8_t *) &sensorData, sizeof(sensorData));
     if (sendResult == ESP_OK) {
       Serial.println("Wynik wyslany do Mastera");
+      Serial.print("  → Pomiar: ");
+      Serial.print(result, 3);
+      Serial.print(" mm, Prąd: ");
+      Serial.print(sensorData.motorCurrent, 3);
+      Serial.print("A, Błąd: ");
+      Serial.println(sensorData.motorFault ? "TAK" : "NIE");
     } else {
       Serial.print("BLAD wysylania wyniku: ");
       Serial.println(sendResult);
@@ -210,6 +257,26 @@ void loop() {
   static unsigned long lastCheck = 0;
   if (millis() - lastCheck >= 10) {
     lastCheck = millis();
-    // Możliwość dodania innych zadań
+    // Check motor status periodically
+    static int statusCounter = 0;
+    if (++statusCounter >= 100) { // Every ~1 second
+      statusCounter = 0;
+      
+      // Send motor status update
+      sensorData.command = 'U';  // Update
+      sensorData.motorCurrent = readMotorCurrent();
+      sensorData.motorFault = checkMotorFault();
+      sensorData.measurement = 0.0;
+      sensorData.valid = true;
+      sensorData.timestamp = millis();
+      
+      esp_err_t sendResult = esp_now_send(masterAddress, (uint8_t *) &sensorData, sizeof(sensorData));
+      if (sendResult == ESP_OK) {
+        Serial.print("Status silnika: Prąd=");
+        Serial.print(sensorData.motorCurrent, 3);
+        Serial.print("A, Błąd=");
+        Serial.println(sensorData.motorFault ? "TAK" : "NIE");
+      }
+    }
   }
 }
