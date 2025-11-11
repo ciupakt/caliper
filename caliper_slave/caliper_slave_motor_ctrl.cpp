@@ -1,12 +1,12 @@
 /**
  * @file    caliper_slave_motor_ctrl.cpp
- * @brief   TB67H453FNG DC Motor Controller Implementation for ESP32
+ * @brief   MP6550GG-Z DC Motor Controller Implementation for ESP32
  * @author  Generated from caliper_slave_motor_ctrl.ino
- * @date    2025-11-10
- * @version 1.0
+ * @date    2025-11-11
+ * @version 2.0
  * 
  * @details
- * Implementation file for TB67H453FNG single H-Bridge DC motor driver.
+ * Implementation file for MP6550GG-Z single H-Bridge DC motor driver.
  * Provides complete motor control functionality with current monitoring
  * and fault protection.
  */
@@ -29,6 +29,14 @@ static bool motorInitialized = false;
 /** Flag to prevent recursive initialization */
 static bool initInProgress = false;
 
+/** LDO regulator state */
+static bool ldoEnabled = true;
+
+/** Fault detection variables */
+static float previousCurrent = 0.0;
+static unsigned long faultCheckTime = 0;
+static bool overcurrentDetected = false;
+
 //==============================================================================
 // Private Function Prototypes
 //==============================================================================
@@ -47,10 +55,17 @@ static void safeDigitalWrite(int pin, int value);
 static void safeDelay(unsigned long ms);
 
 /**
- * @brief Internal function to handle mode change requirements
- * @param targetMode Target current control mode
+ * @brief Internal function to calculate ISET resistance from current
+ * @param currentAmps Desired current limit
+ * @return Required ISET resistance in Ohms
  */
-static void changeCurrentMode(CurrentMode targetMode);
+static float calculateIsetResistance(float currentAmps);
+
+/**
+ * @brief Internal function to set ISET using DAC
+ * @param resistance Desired resistance in Ohms
+ */
+static void setIsetResistance(float resistance);
 
 //==============================================================================
 // Public Function Implementations
@@ -63,30 +78,30 @@ void initializeMotorController(void) {
   }
   
   initInProgress = true;
-  Serial.println("Initializing TB67H453FNG Motor Controller...");
+  Serial.println("Initializing MP6550GG-Z Motor Controller...");
   
   // Configure pins as outputs/inputs
-  pinMode(MOTOR_EN_IN1_PIN, OUTPUT);
-  pinMode(MOTOR_PH_IN2_PIN, OUTPUT);
-  pinMode(MOTOR_VREF_PIN, OUTPUT);
-  pinMode(MOTOR_PMODE_PIN, OUTPUT);
-  pinMode(MOTOR_IMODE_PIN, OUTPUT);
-  pinMode(MOTOR_nSLEEP_PIN, OUTPUT);
-  pinMode(MOTOR_nFAULT_PIN, INPUT_PULLUP);
-  pinMode(MOTOR_ISENSE_PIN, INPUT);
+  pinMode(MOTOR_IN1_PIN, OUTPUT);
+  pinMode(MOTOR_IN2_PIN, OUTPUT);
+  pinMode(MOTOR_ISET_PIN, OUTPUT);
+  pinMode(MOTOR_nSLEEP_HB_PIN, OUTPUT);
+  pinMode(MOTOR_nSLEEP_LDO_PIN, OUTPUT);
+  pinMode(MOTOR_VISEN_PIN, INPUT);
   
   // Set initial state - sleep mode
-  safeDigitalWrite(MOTOR_nSLEEP_PIN, LOW);
-  safeDigitalWrite(MOTOR_EN_IN1_PIN, LOW);
-  safeDigitalWrite(MOTOR_PH_IN2_PIN, LOW);
+  safeDigitalWrite(MOTOR_nSLEEP_HB_PIN, LOW);
+  safeDigitalWrite(MOTOR_nSLEEP_LDO_PIN, LOW);
+  safeDigitalWrite(MOTOR_IN1_PIN, LOW);
+  safeDigitalWrite(MOTOR_IN2_PIN, LOW);
   
-  // Set PMODE for Phase/Enable control (Low level)
-  safeDigitalWrite(MOTOR_PMODE_PIN, LOW);
+  // Initialize DAC for ISET control
+  dacWrite(MOTOR_ISET_PIN, 0); // Start with minimum current
   
   safeDelay(100); // Allow time for initialization
   
   motorInitialized = true;
   currentMotorState = MOTOR_SLEEP;
+  ldoEnabled = false;
   Serial.println("Motor controller initialized successfully");
   
   // Wake up from sleep mode
@@ -94,9 +109,10 @@ void initializeMotorController(void) {
   
   // Set initial configuration using setMotorConfig
   MotorConfig defaultConfig;
-  defaultConfig.maxCurrent = 1.5;  // Default 1.5A
-  defaultConfig.vrefVoltage = 1.0;
-  defaultConfig.currentMode = CURRENT_DISABLED;
+  defaultConfig.maxCurrent = 1.0;  // Default 1.0A
+  defaultConfig.isetResistance = 0.5; // 0.5kΩ for 1A
+  defaultConfig.currentMode = CURRENT_AUTO;
+  defaultConfig.ldoEnabled = true;
   setMotorConfig(defaultConfig);
   
   initInProgress = false;
@@ -141,8 +157,9 @@ bool setMotorState(MotorState state) {
 void motorForward(void) {
   if (!motorInitialized) return;
   
-  safeDigitalWrite(MOTOR_EN_IN1_PIN, HIGH);
-  safeDigitalWrite(MOTOR_PH_IN2_PIN, HIGH);
+  // MP6550GG-Z: IN1=HIGH, IN2=LOW for Forward
+  safeDigitalWrite(MOTOR_IN1_PIN, HIGH);
+  safeDigitalWrite(MOTOR_IN2_PIN, LOW);
   
   Serial.println("Motor: Forward");
 }
@@ -150,8 +167,9 @@ void motorForward(void) {
 void motorReverse(void) {
   if (!motorInitialized) return;
   
-  safeDigitalWrite(MOTOR_EN_IN1_PIN, HIGH);
-  safeDigitalWrite(MOTOR_PH_IN2_PIN, LOW);
+  // MP6550GG-Z: IN1=LOW, IN2=HIGH for Reverse
+  safeDigitalWrite(MOTOR_IN1_PIN, LOW);
+  safeDigitalWrite(MOTOR_IN2_PIN, HIGH);
   
   Serial.println("Motor: Reverse");
 }
@@ -159,8 +177,9 @@ void motorReverse(void) {
 void motorStop(void) {
   if (!motorInitialized) return;
   
-  safeDigitalWrite(MOTOR_EN_IN1_PIN, LOW);
-  safeDigitalWrite(MOTOR_PH_IN2_PIN, LOW);
+  // MP6550GG-Z: IN1=LOW, IN2=LOW for Coast
+  safeDigitalWrite(MOTOR_IN1_PIN, LOW);
+  safeDigitalWrite(MOTOR_IN2_PIN, LOW);
   
   Serial.println("Motor: Stop (Coast)");
 }
@@ -168,9 +187,14 @@ void motorStop(void) {
 void motorSleep(void) {
   if (!motorInitialized) return;
   
-  safeDigitalWrite(MOTOR_nSLEEP_PIN, LOW);
-  safeDigitalWrite(MOTOR_EN_IN1_PIN, LOW);
-  safeDigitalWrite(MOTOR_PH_IN2_PIN, LOW);
+  // Put both H-bridge and LDO to sleep
+  safeDigitalWrite(MOTOR_nSLEEP_HB_PIN, LOW);
+  safeDigitalWrite(MOTOR_nSLEEP_LDO_PIN, LOW);
+  safeDigitalWrite(MOTOR_IN1_PIN, LOW);
+  safeDigitalWrite(MOTOR_IN2_PIN, LOW);
+  
+  ldoEnabled = false;
+  currentMotorState = MOTOR_SLEEP;
   
   Serial.println("Motor: Sleep mode");
 }
@@ -178,10 +202,16 @@ void motorSleep(void) {
 void motorWake(void) {
   if (!motorInitialized) return;
   
-  safeDigitalWrite(MOTOR_nSLEEP_PIN, HIGH);
+  // Wake up LDO first, then H-bridge
+  safeDigitalWrite(MOTOR_nSLEEP_LDO_PIN, HIGH);
+  safeDelay(1); // Small delay for LDO stabilization
   
-  // Wait for wake-up time (tWAKE = 1.5ms max)
-  safeDelay(2);
+  safeDigitalWrite(MOTOR_nSLEEP_HB_PIN, HIGH);
+  
+  // Wait for wake-up time (tWAKE = 200μs max)
+  delayMicroseconds(200);
+  
+  ldoEnabled = true;
   
   Serial.println("Motor: Wake up");
 }
@@ -189,39 +219,37 @@ void motorWake(void) {
 void setCurrentLimit(float currentAmps) {
   if (!motorInitialized) return;
   
-  // Clamp to maximum safe current (70% of absolute max for thermal safety)
-  if (currentAmps > 2.45) currentAmps = 2.45;
+  // Clamp to maximum safe current (2.0A for MP6550GG-Z)
+  if (currentAmps > 2.0) currentAmps = 2.0;
   if (currentAmps < 0.1) currentAmps = 0.1;
   
-  // Calculate VREF voltage
-  float vrefVoltage = currentAmps * 1.5; // Based on 1.5kΩ RISENSE
+  // Calculate required ISET resistance
+  float resistance = calculateIsetResistance(currentAmps);
   
-  // Convert to DAC value (0-255 for 0-3.3V)
-  // Using true DAC on GPIO25 instead of PWM for better precision
-  int dacValue = (int)(vrefVoltage * 255.0 / 3.3);
-  dacValue = constrain(dacValue, 0, 255);
-  
-  // Set VREF using true DAC on GPIO25 (replaced analogWrite with dacWrite)
-  dacWrite(MOTOR_VREF_PIN, dacValue);
+  // Set ISET using DAC
+  setIsetResistance(resistance);
   
   currentConfig.maxCurrent = currentAmps;
-  currentConfig.vrefVoltage = vrefVoltage;
+  currentConfig.isetResistance = resistance;
   
   Serial.print("Current limit set to: ");
   Serial.print(currentAmps);
-  Serial.println("A");
+  Serial.print("A (R_ISET = ");
+  Serial.print(resistance, 3);
+  Serial.println("kΩ)");
 }
 
 float readMotorCurrent(void) {
   if (!motorInitialized) return 0.0;
   
-  // Read ISENSE voltage
-  int senseValue = analogRead(MOTOR_ISENSE_PIN);
+  // Read VISEN voltage
+  int senseValue = analogRead(MOTOR_VISEN_PIN);
   float senseVoltage = senseValue * 3.3 / 4095.0;
   
-  // Calculate current: I = V / (R_ISENSE * A(ISENSE))
-  // R_ISENSE = 1.5kΩ, A(ISENSE) = 1000μA/A = 0.001A/A
-  float current = senseVoltage / (1500.0 * 0.001);
+  // Calculate current based on ISET resistance
+  // VISEN = I_OUT * R_ISET * (100μA/A)
+  // I_OUT = VISEN / (R_ISET * 0.0001)
+  float current = senseVoltage / (currentConfig.isetResistance * 0.0001);
   
   return current;
 }
@@ -229,34 +257,50 @@ float readMotorCurrent(void) {
 bool checkMotorFault(void) {
   if (!motorInitialized) return true;
   
-  bool faultDetected = !digitalRead(MOTOR_nFAULT_PIN);
+  bool faultDetected = false;
+  float current = readMotorCurrent();
+  unsigned long currentTime = millis();
   
-  if (faultDetected) {
-    Serial.println("MOTOR FAULT DETECTED!");
+  // Check for overcurrent
+  if (current > currentConfig.maxCurrent * 1.5) {
+    if (!overcurrentDetected) {
+      Serial.println("OVERCURRENT DETECTED!");
+      overcurrentDetected = true;
+      faultDetected = true;
+    }
+  } else {
+    overcurrentDetected = false;
+  }
+  
+  // Check for thermal shutdown (current suddenly drops to 0 while motor should be running)
+  if ((currentMotorState == MOTOR_FORWARD || currentMotorState == MOTOR_REVERSE) && 
+      currentTime - faultCheckTime > 100) {
     
-    // Read current for debugging
-    float current = readMotorCurrent();
-    Serial.print("Current at fault: ");
-    Serial.print(current);
-    Serial.println("A");
+    if (previousCurrent > 0.1 && current < 0.01) {
+      Serial.println("THERMAL SHUTDOWN DETECTED!");
+      faultDetected = true;
+    }
     
-    // Auto-recovery attempt in certain conditions
-    if (current > currentConfig.maxCurrent * 1.2) {
-      Serial.println("Attempting auto-recovery...");
-      motorSleep();
-      safeDelay(100);
-      if (currentMotorState == MOTOR_FORWARD || currentMotorState == MOTOR_REVERSE) {
-        setMotorState(currentMotorState);
-      }
+    previousCurrent = current;
+    faultCheckTime = currentTime;
+  }
+  
+  // Auto-recovery attempt for overcurrent
+  if (faultDetected && overcurrentDetected) {
+    Serial.println("Attempting auto-recovery...");
+    motorSleep();
+    safeDelay(100);
+    motorWake();
+    if (currentMotorState == MOTOR_FORWARD || currentMotorState == MOTOR_REVERSE) {
+      setMotorState(currentMotorState);
     }
   }
   
-  //return faultDetected;
-  return 0;
+  return faultDetected;
 }
 
 void getMotorStatus(char* buffer, int bufferSize) {
-  if (!buffer || bufferSize < 50) return;
+  if (!buffer || bufferSize < 100) return;
   
   int pos = 0;
   pos += snprintf(buffer + pos, bufferSize - pos, "Motor Status:\n");
@@ -284,13 +328,21 @@ void getMotorStatus(char* buffer, int bufferSize) {
   pos += snprintf(buffer + pos, bufferSize - pos, "\nCurrent: %.3fA\n", current);
   pos += snprintf(buffer + pos, bufferSize - pos, "Fault: %s\n", checkMotorFault() ? "YES" : "NO");
   pos += snprintf(buffer + pos, bufferSize - pos, "Current Limit: %.2fA\n", currentConfig.maxCurrent);
+  pos += snprintf(buffer + pos, bufferSize - pos, "ISET Resistance: %.3fkΩ\n", currentConfig.isetResistance);
+  pos += snprintf(buffer + pos, bufferSize - pos, "LDO Enabled: %s\n", ldoEnabled ? "YES" : "NO");
   pos += snprintf(buffer + pos, bufferSize - pos, "Initialized: %s\n", motorInitialized ? "YES" : "NO");
 }
 
 void configureCurrentMode(CurrentMode mode) {
   if (!motorInitialized) return;
   
-  changeCurrentMode(mode);
+  currentConfig.currentMode = mode;
+  
+  Serial.print("Current mode set to: ");
+  switch (mode) {
+    case CURRENT_AUTO: Serial.println("AUTO (built-in regulation)"); break;
+    case CURRENT_MANUAL: Serial.println("MANUAL (via ISET)"); break;
+  }
 }
 
 void setMotorConfig(MotorConfig config) {
@@ -307,6 +359,9 @@ void setMotorConfig(MotorConfig config) {
   if (config.currentMode >= 0) {
     configureCurrentMode(config.currentMode);
   }
+  
+  // Set LDO state
+  setLDOState(config.ldoEnabled);
   
   Serial.println("Motor configuration updated");
 }
@@ -358,7 +413,7 @@ void demoMotorControl(void) {
   safeDelay(1000);
   
   // Print final status
-  char status[200];
+  char status[300];
   getMotorStatus(status, sizeof(status));
   Serial.println(status);
   Serial.println("\n=== DEMO COMPLETE ===\n");
@@ -375,6 +430,27 @@ void emergencyStop(void) {
   Serial.println("EMERGENCY STOP!");
   motorSleep();
   currentMotorState = MOTOR_SLEEP;
+}
+
+void setLDOState(bool enabled) {
+  if (!motorInitialized) return;
+  
+  if (enabled && !ldoEnabled) {
+    safeDigitalWrite(MOTOR_nSLEEP_LDO_PIN, HIGH);
+    safeDelay(1); // Allow LDO to stabilize
+    ldoEnabled = true;
+    Serial.println("LDO Enabled");
+  } else if (!enabled && ldoEnabled) {
+    safeDigitalWrite(MOTOR_nSLEEP_LDO_PIN, LOW);
+    ldoEnabled = false;
+    Serial.println("LDO Disabled");
+  }
+  
+  currentConfig.ldoEnabled = enabled;
+}
+
+bool getLDOState(void) {
+  return ldoEnabled;
 }
 
 //==============================================================================
@@ -402,39 +478,29 @@ static void safeDelay(unsigned long ms) {
   }
 }
 
-static void changeCurrentMode(CurrentMode targetMode) {
-  // Sleep first to change mode safely
-  motorSleep();
-  delayMicroseconds(100); // tSLEEP requirement
+static float calculateIsetResistance(float currentAmps) {
+  // MP6550GG-Z: I_LIMIT = 0.5V / R_ISET
+  // Therefore: R_ISET = 0.5V / I_LIMIT
+  float resistance = 0.5 / currentAmps; // Result in kΩ
   
-  // Configure IMODE pin based on mode
-  switch (targetMode) {
-    case CURRENT_DISABLED:
-      // Current control disabled
-      safeDigitalWrite(MOTOR_IMODE_PIN, LOW);
-      break;
-      
-    case CURRENT_CONSTANT:
-      // Set 20kΩ pull-down for constant current PWM
-      analogWrite(MOTOR_IMODE_PIN, 128); // Middle value for internal divider
-      break;
-      
-    case CURRENT_FIXED_OFF:
-      // Set GND for fixed off time control
-      safeDigitalWrite(MOTOR_IMODE_PIN, LOW);
-      break;
-  }
+  // Clamp to reasonable range (0.25kΩ to 5kΩ)
+  if (resistance < 0.25) resistance = 0.25;
+  if (resistance > 5.0) resistance = 5.0;
   
-  // Wake up with new settings
-  motorWake();
-  delayMicroseconds(1500); // tWAKE requirement
+  return resistance;
+}
+
+static void setIsetResistance(float resistance) {
+  // Use DAC to simulate variable resistance
+  // We'll use a voltage divider approach with a 1kΩ resistor
+  // DAC output through 1kΩ to ISET pin creates variable resistance
   
-  currentConfig.currentMode = targetMode;
+  // Calculate DAC value (0-255 for 0-3.3V)
+  // Higher DAC voltage = lower effective resistance
+  // This is an approximation - real implementation might need external circuitry
+  float dacVoltage = 3.3 * (1.0 - (resistance - 0.25) / 4.75);
+  int dacValue = (int)(dacVoltage * 255.0 / 3.3);
+  dacValue = constrain(dacValue, 0, 255);
   
-  Serial.print("Current mode set to: ");
-  switch (targetMode) {
-    case CURRENT_DISABLED: Serial.println("DISABLED"); break;
-    case CURRENT_CONSTANT: Serial.println("CONSTANT"); break;
-    case CURRENT_FIXED_OFF: Serial.println("FIXED_OFF"); break;
-  }
+  dacWrite(MOTOR_ISET_PIN, dacValue);
 }

@@ -850,6 +850,36 @@
 	)
 	(wire
 		(pts
+			(xy 77.47 59.69) (xy 88.9 59.69)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "8bfbaed9-cda5-448e-b69d-a93c576e107b")
+	)
+	(wire
+		(pts
+			(xy 96.52 69.85) (xy 107.95 69.85)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "8d375c9f-dc68-400c-9dee-e28b71f48233")
+	)
+	(wire
+		(pts
+			(xy 77.47 77.47) (xy 88.9 77.47)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "abab23b4-66c6-4820-8cc4-90fa3348dc97")
+	)
+	(wire
+		(pts
 			(xy 77.47 97.79) (xy 88.9 97.79)
 		)
 		(stroke
@@ -870,6 +900,16 @@
 	)
 	(wire
 		(pts
+			(xy 96.52 77.47) (xy 107.95 77.47)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "e3cc4aa6-7d55-4532-a890-2f60a41f6c1a")
+	)
+	(wire
+		(pts
 			(xy 77.47 87.63) (xy 88.9 87.63)
 		)
 		(stroke
@@ -877,6 +917,16 @@
 			(type default)
 		)
 		(uuid "eda1d193-9f1f-4f05-bb2a-e72876f63f69")
+	)
+	(wire
+		(pts
+			(xy 96.52 72.39) (xy 107.95 72.39)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "fd4e2192-c621-4d2b-908d-46955b6801de")
 	)
 	(image
 		(at 204.47 78.74)
@@ -2283,6 +2333,16 @@
 		)
 		(uuid "26d92655-04c2-4c7c-88b3-4de394ef720a")
 	)
+	(label "LED"
+		(at 80.01 59.69 0)
+		(effects
+			(font
+				(size 1.27 1.27)
+			)
+			(justify left bottom)
+		)
+		(uuid "3a6df2ff-75a7-49ad-87bd-e80dbe3214a1")
+	)
 	(label "TRIG"
 		(at 80.01 67.31 0)
 		(effects
@@ -2303,16 +2363,6 @@
 		)
 		(uuid "485b22cc-d1b0-406b-9b55-80a5eb4309b9")
 	)
-	(label "PWM2"
-		(at 80.01 72.39 0)
-		(effects
-			(font
-				(size 1.27 1.27)
-			)
-			(justify left bottom)
-		)
-		(uuid "58bc4eba-3ced-427a-a1ec-04a0204fdf7f")
-	)
 	(label "CLK"
 		(at 80.01 85.09 0)
 		(effects
@@ -2323,7 +2373,17 @@
 		)
 		(uuid "75752fd4-3af8-4dc3-a838-92e84e52f7aa")
 	)
-	(label "VREF"
+	(label "MOTOR_nFAULT_PIN"
+		(at 99.06 77.47 0)
+		(effects
+			(font
+				(size 1.27 1.27)
+			)
+			(justify left bottom)
+		)
+		(uuid "7ac0c792-0393-4d9d-a089-c0122e0a88a2")
+	)
+	(label "MOTOR_VREF_PIN"
 		(at 99.06 97.79 0)
 		(effects
 			(font
@@ -2343,7 +2403,7 @@
 		)
 		(uuid "7e550eac-2e2b-4d35-b197-55ee787ebfe5")
 	)
-	(label "ISENSE"
+	(label "MOTOR_ISENSE_PIN"
 		(at 99.06 64.77 0)
 		(effects
 			(font
@@ -2353,15 +2413,92 @@
 		)
 		(uuid "b1d03516-abe7-479a-8c62-76592eed977c")
 	)
-	(label "PWM1"
-		(at 80.01 69.85 0)
+	(label "MOTOR_PH_IN2_PIN"
+		(at 99.06 72.39 0)
 		(effects
 			(font
 				(size 1.27 1.27)
 			)
 			(justify left bottom)
 		)
-		(uuid "d891f326-9532-45a3-a0bc-4a4ace48ff7d")
+		(uuid "cbeb845c-8743-43f5-995f-33c0384715cf")
+	)
+	(label "MOTOR_EN_IN1_PIN"
+		(at 99.06 69.85 0)
+		(effects
+			(font
+				(size 1.27 1.27)
+			)
+			(justify left bottom)
+		)
+		(uuid "dee01fee-758d-45ed-9824-1370314914ee")
+	)
+	(symbol
+		(lib_id "Device:R")
+		(at 92.71 72.39 270)
+		(unit 1)
+		(exclude_from_sim no)
+		(in_bom yes)
+		(on_board yes)
+		(dnp no)
+		(uuid "1d0dcda3-dc4e-4f8c-8cbf-0e250ef8021d")
+		(property "Reference" "R5"
+			(at 88.646 71.628 90)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Value" "100"
+			(at 92.202 72.39 90)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Footprint" ""
+			(at 92.71 70.612 90)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "Datasheet" "~"
+			(at 92.71 72.39 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "Description" "Resistor"
+			(at 92.71 72.39 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(pin "2"
+			(uuid "32c96aea-8b6b-424e-be19-4b73308d27d5")
+		)
+		(pin "1"
+			(uuid "5917e08c-ccc8-4e0b-97ff-e232fc60e5d6")
+		)
+		(instances
+			(project "esp32_slave"
+				(path "/542743e6-23ef-4839-88de-ac18689cadfd"
+					(reference "R5")
+					(unit 1)
+				)
+			)
+		)
 	)
 	(symbol
 		(lib_id "Device:R")
@@ -2425,6 +2562,140 @@
 			(project "esp32_slave"
 				(path "/542743e6-23ef-4839-88de-ac18689cadfd"
 					(reference "R2")
+					(unit 1)
+				)
+			)
+		)
+	)
+	(symbol
+		(lib_id "Device:R")
+		(at 92.71 69.85 270)
+		(unit 1)
+		(exclude_from_sim no)
+		(in_bom yes)
+		(on_board yes)
+		(dnp no)
+		(uuid "78dc2f06-6e21-4929-a8d7-97a51d672697")
+		(property "Reference" "R4"
+			(at 88.646 69.088 90)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Value" "100"
+			(at 92.202 69.85 90)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Footprint" ""
+			(at 92.71 68.072 90)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "Datasheet" "~"
+			(at 92.71 69.85 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "Description" "Resistor"
+			(at 92.71 69.85 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(pin "2"
+			(uuid "b29e0f99-ba6c-4df5-a4db-2d3ae4c68bca")
+		)
+		(pin "1"
+			(uuid "6cb699da-12c5-4eb2-afa8-989fa2ea6467")
+		)
+		(instances
+			(project "esp32_slave"
+				(path "/542743e6-23ef-4839-88de-ac18689cadfd"
+					(reference "R4")
+					(unit 1)
+				)
+			)
+		)
+	)
+	(symbol
+		(lib_id "Device:R")
+		(at 92.71 77.47 270)
+		(unit 1)
+		(exclude_from_sim no)
+		(in_bom yes)
+		(on_board yes)
+		(dnp no)
+		(uuid "99238608-5b17-4146-8d4e-12ab81b26617")
+		(property "Reference" "R3"
+			(at 88.646 76.708 90)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Value" "100"
+			(at 92.202 77.47 90)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Footprint" ""
+			(at 92.71 75.692 90)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "Datasheet" "~"
+			(at 92.71 77.47 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "Description" "Resistor"
+			(at 92.71 77.47 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(pin "2"
+			(uuid "27aa8bda-a24b-42ed-b059-a9f46a467f38")
+		)
+		(pin "1"
+			(uuid "37c5e08f-c64e-4fda-bf65-c70a8fbd799b")
+		)
+		(instances
+			(project "esp32_slave"
+				(path "/542743e6-23ef-4839-88de-ac18689cadfd"
+					(reference "R3")
 					(unit 1)
 				)
 			)
