@@ -22,137 +22,129 @@ System składa się z trzech głównych komponentów:
 - ✅ Zaawansowana walidacja danych i obsługa błędów
 - ✅ Retry mechanizm dla niezawodnej komunikacji
 - ✅ Optymalizacja wydajności i responsywności
-- ✅ **Moduł sterowania silnikiem DC z TB67H453FNG**
+- ✅ **Moduł sterowania silnikiem DC z MP6550GG-Z**
 
 ## Architektura Systemu
 
-```plantuml
-@startuml
-!theme plain
-package "System Pomiarowy ESP32" {
-  node "ESP32 Master" {
-    component "Serwer HTTP" as http
-    component "Access Point WiFi" as ap
-    component "ESP-NOW Receiver" as recv
-    component "Web Interface" as web
-  }
-  
-  node "ESP32 Slave" {
-    component "Caliper Interface" as cal
-    component "ESP-NOW Sender" as send
-    component "Data Processor" as proc
-  }
-  
-  node "Aplikacja Python" as py
-  node "Przeglądarka" as browser
-  node "Suwmiarka Cyfrowa" as suw
-  
-  suw --> cal : Digital Data
-  cal --> proc
-  proc --> send
-  send -.->|ESP-NOW| recv
-  recv --> http
-  http --> web
-  web --> browser
-  
-  http <--> py : Serial Communication
-  py --> browser : GUI Visualization
-}
-
-cloud "WiFi Network" {
-  ap
-  browser
-}
-@enduml
+```mermaid
+graph TD
+    subgraph "System Pomiarowy ESP32"
+        A[ESP32 Master]
+        A1[Serwer HTTP]
+        A2[Access Point WiFi]
+        A3[ESP-NOW Receiver]
+        A4[Web Interface]
+    
+        B[ESP32 Slave]
+        B1[Caliper Interface]
+        B2[ESP-NOW Sender]
+        B3[Data Processor]
+    
+        C[Aplikacja Python]
+        D[Przeglądarka]
+        E[Suwmiarka Cyfrowa]
+    
+        E --> B1
+        B1 --> B3
+        B3 --> B2
+        B2 -.->|ESP-NOW| A3
+        A3 --> A1
+        A1 --> A4
+        A4 --> D
+        
+        A1 <--> C
+        C --> D
+    end
+    
+    subgraph "WiFi Network"
+        A2
+        D
+    end
 ```
 
 ## Przepływ Komunikacji
 
-```plantuml
-@startuml
-!theme plain
-actor "Użytkownik" as user
-participant "Aplikacja Python" as py
-participant "ESP32 Master" as master
-participant "ESP-NOW" as espnow
-participant "ESP32 Slave" as slave
-participant "Suwmiarka" as suw
+```mermaid
+sequenceDiagram
+    participant Użytkownik
+    participant Aplikacja_Python
+    participant ESP32_Master
+    participant ESP_NOW
+    participant ESP32_Slave
+    participant Suwmiarka
 
-== Inicjalizacja ==
-slave -> master: ESP-NOW Peer Connection
-master -> master: Access Point Start (ESP32_Pomiar)
-py -> master: Serial Connection (115200)
+    == Inicjalizacja ==
+        ESP32_Slave->>ESP32_Master: ESP-NOW Peer Connection
+        ESP32_Master->>ESP32_Master: Access Point Start (ESP32_Pomiar)
+        Aplikacja_Python->>ESP32_Master: Serial Connection (115200)
 
-== Pomiar Manualny ==
-user -> py: "Trigger Measurement"
-py -> master: Serial Command 'm'
-master -> espnow: Send 'M' Command
-espnow -> slave: Measurement Request
+    == Pomiar Manualny ==
+        Użytkownik->>Aplikacja_Python: "Trigger Measurement"
+        Aplikacja_Python->>ESP32_Master: Serial Command 'm'
+        ESP32_Master->>ESP_NOW: Send 'M' Command
+        ESP_NOW->>ESP32_Slave: Measurement Request
 
-== Wykonanie Pomiaru ==
-slave -> suw: Trigger Measurement
-suw -> slave: 52-bit Data Stream
-slave -> slave: Decode Caliper Data
-slave -> espnow: Send Results
-espnow -> master: ESP-NOW Data
-master -> master: Process & Store Data
-master -> py: Serial Output "VAL_1:xxx.xxx"
-py -> user: GUI Update + CSV Log
+    == Wykonanie Pomiaru ==
+        ESP32_Slave->>Suwmiarka: Trigger Measurement
+        Suwmiarka->>ESP32_Slave: 52-bit Data Stream
+        ESP32_Slave->>ESP32_Slave: Decode Caliper Data
+        ESP32_Slave->>ESP_NOW: Send Results
+        ESP_NOW->>ESP32_Master: ESP-NOW Data
+        ESP32_Master->>ESP32_Master: Process & Store Data
+        ESP32_Master->>Aplikacja_Python: Serial Output "VAL_1:xxx.xxx"
+        Aplikacja_Python->>Użytkownik: GUI Update + CSV Log
 
-== Pomiar Automatyczny ==
-loop Auto Mode
-  py -> master: Periodic 'm' command
-  master -> espnow: 'M' Command
-  espnow -> slave: Request
-  slave -> espnow: Measurement Data
-  espnow -> master: Results
-  master -> py: Data Update
-  py -> user: Live Plot Update
-end
+    == Pomiar Automatyczny ==
+        loop Auto Mode
+            Aplikacja_Python->>ESP32_Master: Periodic 'm' command
+            ESP32_Master->>ESP_NOW: 'M' Command
+            ESP_NOW->>ESP32_Slave: Request
+            ESP32_Slave->>ESP_NOW: Measurement Data
+            ESP_NOW->>ESP32_Master: Results
+            ESP32_Master->>Aplikacja_Python: Data Update
+            Aplikacja_Python->>Użytkownik: Live Plot Update
+        end
 
-== Web Interface ==
-user -> browser: Access http://192.168.4.1
-browser -> master: HTTP GET /
-master -> browser: HTML Interface
-user -> browser: "Wykonaj Pomiar"
-browser -> master: /measure endpoint
-master -> espnow: 'M' Command
-master -> browser: "Pomiar wyzwolony"
-user -> browser: "Odswierz Wynik"
-browser -> master: /read endpoint
-master -> browser: Current Measurement
-@enduml
+    == Web Interface ==
+        Użytkownik->>Przeglądarka: Access http://192.168.4.1
+        Przeglądarka->>ESP32_Master: HTTP GET /
+        ESP32_Master->>Przeglądarka: HTML Interface
+        Użytkownik->>Przeglądarka: "Wykonaj Pomiar"
+        Przeglądarka->>ESP32_Master: /measure endpoint
+        ESP32_Master->>ESP_NOW: 'M' Command
+        ESP32_Master->>Przeglądarka: "Pomiar wyzwolony"
+        Użytkownik->>Przeglądarka: "Odswierz Wynik"
+        Przeglądarka->>ESP32_Master: /read endpoint
+        ESP32_Master->>Przeglądarka: Current Measurement
 ```
 
 ## Połączenia Hardware
 
-```plantuml
-@startuml
-!theme plain
-rectangle "ESP32 Slave" {
-  component "GPIO 18" as CLK
-  component "GPIO 19" as DATA  
-  component "GPIO 5" as TRIG
-  component "ESP32 Chip" as chip
-}
-
-rectangle "Suwmiarka Cyfrowa" {
-  component "Clock Output" as clock
-  component "Data Output" as data
-  component "Trigger Input" as trig
-}
-
-rectangle "ESP32 Master" {
-  component "WiFi Antenna" as wifi
-  component "ESP32 Chip" as master_chip
-}
-
-clock --> CLK
-data --> DATA
-TRIG --> trig
-
-slave = master : ESP-NOW Communication
-@enduml
+```mermaid
+graph LR
+    subgraph "ESP32 Slave"
+        GPIO18[GPIO 18]
+        GPIO19[GPIO 19]
+        GPIO5[GPIO 5]
+        Chip[ESP32 Chip]
+    end
+    
+    subgraph "Suwmiarka Cyfrowa"
+        Clock[Clock Output]
+        Data[Data Output]
+        Trigger[Trigger Input]
+    end
+    
+    subgraph "ESP32 Master"
+        WiFi[WiFi Antenna]
+        MasterChip[ESP32 Chip]
+    end
+    
+    Clock --> GPIO18
+    Data --> GPIO19
+    Trigger --> GPIO5
+    
+    ESP32_Slave -.->|ESP-NOW Communication| ESP32_Master
 ```
 
 ## Struktura Plików
@@ -176,7 +168,7 @@ caliper/
 
 ## Moduł Sterowania Silnikiem DC
 
-Moduł sterowania silnikiem DC został przekształcony z pliku `.ino` na standardową strukturę C/C++ z wykorzystaniem sterownika **TB67H453FNG**.
+Moduł sterowania silnikiem DC został zaktualizowany do użycia sterownika **MP6550GG-Z**.
 
 ### Struktura Modułu
 
@@ -193,21 +185,23 @@ Moduł sterowania silnikiem DC został przekształcony z pliku `.ino` na standar
 
 ##### Sterowanie silnikiem:
 - `setMotorState(MotorState state)` - Ustawienie stanu silnika
-- `motorForward()` - Rotacja do przodu
-- `motorReverse()` - Rotacja do tyłu
-- `motorStop()` - Zatrzymanie (tryb coast)
+- `motorForward()` - Rotacja do przodu (IN1=HIGH, IN2=LOW)
+- `motorReverse()` - Rotacja do tyłu (IN1=LOW, IN2=HIGH)
+- `motorStop()` - Zatrzymanie (tryb coast) (IN1=LOW, IN2=LOW)
+- `motorBrake()` - Hamowanie (IN1=HIGH, IN2=HIGH)
 - `motorSleep()` - Tryb uśpienia
 - `motorWake()` - Wybudzenie z trybu uśpienia
 
 ##### Monitorowanie:
-- `readMotorCurrent()` - Odczyt prądu silnika
-- `checkMotorFault()` - Sprawdzenie błędów
+- `readMotorCurrent()` - Odczyt prądu silnika przez VISEN
+- `checkMotorFault()` - Sprawdzenie błędów (bez dedykowanego pinu)
 - `getMotorStatus()` - Status silnika jako string
 - `getMotorState()` - Aktualny stan silnika
 
 ##### Konfiguracja:
-- `setCurrentLimit(float currentAmps)` - Ograniczenie prądu
+- `setCurrentLimit(float currentAmps)` - Ograniczenie prądu przez ISET
 - `configureCurrentMode(CurrentMode mode)` - Tryb kontroli prądu
+- `setLDOState(bool enabled)` - Sterowanie regulatorem 3.3V
 
 ##### Dodatkowe:
 - `demoMotorControl()` - Demo funkcji
@@ -219,21 +213,22 @@ Moduł sterowania silnikiem DC został przekształcony z pliku `.ino` na standar
 ```c
 typedef struct {
   float maxCurrent;           // Maksymalny prąd (A)
-  float vrefVoltage;          // Napięcie VREF 
+  float isetResistance;       // Rezystancja ISET (kΩ)
   CurrentMode currentMode;    // Tryb kontroli prądu
+  bool ldoEnabled;           // Stan regulatora 3.3V
 } MotorConfig;
 
 typedef enum {
   MOTOR_SLEEP = -1,      // Tryb uśpienia
   MOTOR_STOP = 0,        // Zatrzymanie/Coast
   MOTOR_FORWARD = 1,     // Rotacja do przodu
-  MOTOR_REVERSE = 2      // Rotacja do tyłu
+  MOTOR_REVERSE = 2,      // Rotacja do tyłu
+  MOTOR_BRAKE = 3        // Hamowanie aktywne
 } MotorState;
 
 typedef enum {
-  CURRENT_DISABLED = 0,      // Brak kontroli prądu
-  CURRENT_CONSTANT = 1,      // Stały prąd PWM
-  CURRENT_FIXED_OFF = 2      // Stały czas wyłączenia
+  CURRENT_AUTO = 0,        // Automatyczna regulacja (wbudowana)
+  CURRENT_MANUAL = 1       // Ręczna kontrola przez ISET
 } CurrentMode;
 ```
 
@@ -260,7 +255,7 @@ if (fault) {
 
 #### Zabezpieczenia:
 
-- Ograniczenie prądu do 2.45A (70% z maksymalnego)
+- Ograniczenie prądu do 2.0A (maksymalny dla MP6550GG-Z)
 - Automatyczna detekcja i obsługa błędów
 - Sprawdzenie inicjalizacji przed operacjami
 - Zabezpieczenie przed rekurencyjną inicjalizacją
@@ -268,12 +263,33 @@ if (fault) {
 
 #### Specyfikacje techniczne:
 
-- **Sterownik**: TB67H453FNG (Single H-Bridge)
-- **Maksymalny prąd**: 3.5A (ograniczony do 2.45A)
-- **Napięcie zasilania**: 4.5V - 44V
-- **Tryb sterowania**: Phase/Enable (PMODE = Low)
-- **Rozdzielczość prądu**: ~1.5mA (z 1.5kΩ RISENSE)
-- **Czas reakcji**: < 2ms (tWAKE)
+- **Sterownik**: MP6550GG-Z (Single H-Bridge)
+- **Maksymalny prąd**: 2.0A (ograniczony programowo)
+- **Napięcie zasilania**: 1.8V - 22V
+- **Tryb sterowania**: PWM Input (IN1/IN2)
+- **Rozdzielczość prądu**: ~0.01A (przez VISEN)
+- **Czas reakcji**: < 200μs (tWAKE)
+- **Tryby sleep**: Osobne dla H-bridge i LDO
+
+#### Mapa pinów ESP32:
+
+```cpp
+#define MOTOR_IN1_PIN 12       // IN1 input (PWM control input 1)
+#define MOTOR_IN2_PIN 13       // IN2 input (PWM control input 2)
+#define MOTOR_ISET_PIN 25       // ISET input (Current programming via DAC)
+#define MOTOR_VISEN_PIN 4      // VISEN output (Current sense voltage)
+#define MOTOR_nSLEEP_HB_PIN 34  // nSLEEP_HB input (H-bridge sleep control)
+#define MOTOR_nSLEEP_LDO_PIN 35 // nSLEEP_LDO input (LDO sleep control)
+```
+
+#### Tabela sterowania MP6550GG-Z:
+
+| IN1 | IN2 | OUT1 | OUT2 | Funkcja |
+|-----|-----|------|------|---------|
+| L   | L   | Hi-Z | Hi-Z | Coast |
+| L   | H   | L    | H    | Reverse |
+| H   | L   | H    | L    | Forward |
+| H   | H   | L    | L    | Brake |
 
 Moduł jest gotowy do użycia w projekcie kalibratora z ESP32.
 
@@ -426,8 +442,8 @@ python caliper_master_gui.py
 ### ESP-NOW Messages
 
 **Command** (Master → Slave):
-```
-uint8_t command = 'M'  // Request measurement
+```c
+uint8_t command = 'M'; // Request measurement
 ```
 
 **Data** (Slave → Master):
@@ -442,13 +458,13 @@ typedef struct struct_message {
 ### Serial Protocol
 
 **Trigger** (Python → Master):
-```
-'m' + '\n'  // Single measurement trigger
+```c
+'m' + '\n'; // Single measurement trigger
 ```
 
 **Response** (Master → Python):
-```
-"VAL_1:xxx.xxx"  // Measurement value
+```c
+"VAL_1:xxx.xxx"; // Measurement value
 ```
 
 ### HTTP API
