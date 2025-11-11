@@ -74,48 +74,48 @@ sequenceDiagram
     participant Suwmiarka
 
     == Inicjalizacja ==
-        ESP32_Slave->>ESP32_Master: ESP-NOW Peer Connection
-        ESP32_Master->>ESP32_Master: Access Point Start (ESP32_Pomiar)
-        Aplikacja_Python->>ESP32_Master: Serial Connection (115200)
+    ESP32_Slave->>ESP32_Master: ESP-NOW Peer Connection
+    ESP32_Master->>ESP32_Master: Access Point Start (ESP32_Pomiar)
+    Aplikacja_Python->>ESP32_Master: Serial Connection (115200)
 
     == Pomiar Manualny ==
-        Użytkownik->>Aplikacja_Python: "Trigger Measurement"
-        Aplikacja_Python->>ESP32_Master: Serial Command 'm'
-        ESP32_Master->>ESP_NOW: Send 'M' Command
-        ESP_NOW->>ESP32_Slave: Measurement Request
+    Użytkownik->>Aplikacja_Python: "Trigger Measurement"
+    Aplikacja_Python->>ESP32_Master: Serial Command 'm'
+    ESP32_Master->>ESP_NOW: Send 'M' Command
+    ESP_NOW->>ESP32_Slave: Measurement Request
 
     == Wykonanie Pomiaru ==
-        ESP32_Slave->>Suwmiarka: Trigger Measurement
-        Suwmiarka->>ESP32_Slave: 52-bit Data Stream
-        ESP32_Slave->>ESP32_Slave: Decode Caliper Data
-        ESP32_Slave->>ESP_NOW: Send Results
-        ESP_NOW->>ESP32_Master: ESP-NOW Data
-        ESP32_Master->>ESP32_Master: Process & Store Data
-        ESP32_Master->>Aplikacja_Python: Serial Output "VAL_1:xxx.xxx"
-        Aplikacja_Python->>Użytkownik: GUI Update + CSV Log
+    ESP32_Slave->>Suwmiarka: Trigger Measurement
+    Suwmiarka->>ESP32_Slave: 52-bit Data Stream
+    ESP32_Slave->>ESP32_Slave: Decode Caliper Data
+    ESP32_Slave->>ESP_NOW: Send Results
+    ESP_NOW->>ESP32_Master: ESP-NOW Data
+    ESP32_Master->>ESP32_Master: Process & Store Data
+    ESP32_Master->>Aplikacja_Python: Serial Output "VAL_1:xxx.xxx"
+    Aplikacja_Python->>Użytkownik: GUI Update + CSV Log
 
     == Pomiar Automatyczny ==
-        loop Auto Mode
-            Aplikacja_Python->>ESP32_Master: Periodic 'm' command
-            ESP32_Master->>ESP_NOW: 'M' Command
-            ESP_NOW->>ESP32_Slave: Request
-            ESP32_Slave->>ESP_NOW: Measurement Data
-            ESP_NOW->>ESP32_Master: Results
-            ESP32_Master->>Aplikacja_Python: Data Update
-            Aplikacja_Python->>Użytkownik: Live Plot Update
-        end
+    loop Auto Mode
+        Aplikacja_Python->>ESP32_Master: Periodic 'm' command
+        ESP32_Master->>ESP_NOW: 'M' Command
+        ESP_NOW->>ESP32_Slave: Request
+        ESP32_Slave->>ESP_NOW: Measurement Data
+        ESP_NOW->>ESP32_Master: Results
+        ESP32_Master->>Aplikacja_Python: Data Update
+        Aplikacja_Python->>Użytkownik: Live Plot Update
+    end
 
     == Web Interface ==
-        Użytkownik->>Przeglądarka: Access http://192.168.4.1
-        Przeglądarka->>ESP32_Master: HTTP GET /
-        ESP32_Master->>Przeglądarka: HTML Interface
-        Użytkownik->>Przeglądarka: "Wykonaj Pomiar"
-        Przeglądarka->>ESP32_Master: /measure endpoint
-        ESP32_Master->>ESP_NOW: 'M' Command
-        ESP32_Master->>Przeglądarka: "Pomiar wyzwolony"
-        Użytkownik->>Przeglądarka: "Odswierz Wynik"
-        Przeglądarka->>ESP32_Master: /read endpoint
-        ESP32_Master->>Przeglądarka: Current Measurement
+    Użytkownik->>Przeglądarka: Access http://192.168.4.1
+    Przeglądarka->>ESP32_Master: HTTP GET /
+    ESP32_Master->>Przeglądarka: HTML Interface
+    Użytkownik->>Przeglądarka: "Wykonaj Pomiar"
+    Przeglądarka->>ESP32_Master: /measure endpoint
+    ESP32_Master->>ESP_NOW: 'M' Command
+    ESP32_Master->>Przeglądarka: "Pomiar wyzwolony"
+    Użytkownik->>Przeglądarka: "Odswierz Wynik"
+    Przeglądarka->>ESP32_Master: /read endpoint
+    ESP32_Master->>Przeglądarka: Current Measurement
 ```
 
 ## Połączenia Hardware
