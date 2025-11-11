@@ -114,6 +114,54 @@ void requestMeasurement() {
   }
 }
 
+void sendMotorForward() {
+  uint8_t command = 'F';
+  esp_err_t result = esp_now_send(slaveAddress, &command, sizeof(command));
+  if (result == ESP_OK) {
+    Serial.println("Wyslano komendę: Silnik do przodu");
+    lastMeasurement = "Silnik: Forward";
+  } else {
+    Serial.print("BLAD wysylania komendy Forward: ");
+    Serial.println(result);
+  }
+}
+
+void sendMotorReverse() {
+  uint8_t command = 'R';
+  esp_err_t result = esp_now_send(slaveAddress, &command, sizeof(command));
+  if (result == ESP_OK) {
+    Serial.println("Wyslano komendę: Silnik do tyłu");
+    lastMeasurement = "Silnik: Reverse";
+  } else {
+    Serial.print("BLAD wysylania komendy Reverse: ");
+    Serial.println(result);
+  }
+}
+
+void sendMotorStop() {
+  uint8_t command = 'S';
+  esp_err_t result = esp_now_send(slaveAddress, &command, sizeof(command));
+  if (result == ESP_OK) {
+    Serial.println("Wyslano komendę: Zatrzymaj silnik");
+    lastMeasurement = "Silnik: Stop";
+  } else {
+    Serial.print("BLAD wysylania komendy Stop: ");
+    Serial.println(result);
+  }
+}
+
+void sendMotorDemo() {
+  uint8_t command = 'D';
+  esp_err_t result = esp_now_send(slaveAddress, &command, sizeof(command));
+  if (result == ESP_OK) {
+    Serial.println("Wyslano komendę: Demo silnika");
+    lastMeasurement = "Silnik: Demo";
+  } else {
+    Serial.print("BLAD wysylania komendy Demo: ");
+    Serial.println(result);
+  }
+}
+
 void handleRoot() {
   String html = "<!DOCTYPE html><html><head>";
   html += "<meta charset='UTF-8'>";
@@ -126,6 +174,15 @@ void handleRoot() {
   html += ".measurement { font-size: 48px; text-align: center; color: #007bff; margin: 30px 0; padding: 20px; background: #e7f3ff; border-radius: 5px; }";
   html += "button { width: 100%; padding: 15px; font-size: 18px; background: #007bff; color: white; border: none; border-radius: 5px; cursor: pointer; margin: 10px 0; }";
   html += "button:hover { background: #0056b3; }";
+  html += "button.motor { width: 48%; float: left; margin: 1%; font-size: 14px; padding: 10px; }";
+  html += "button.motor.forward { background: #28a745; }";
+  html += "button.motor.forward:hover { background: #218838; }";
+  html += "button.motor.reverse { background: #ffc107; color: black; }";
+  html += "button.motor.reverse:hover { background: #e0a800; }";
+  html += "button.motor.stop { background: #dc3545; }";
+  html += "button.motor.stop:hover { background: #c82333; }";
+  html += "button.motor.demo { background: #6f42c1; }";
+  html += "button.motor.demo:hover { background: #5a32a3; }";
   html += ".status { text-align: center; color: #666; margin-top: 20px; font-size: 14px; }";
   html += "</style></head><body>";
   html += "<div class='container'>";
@@ -187,6 +244,37 @@ void handleAPI() {
   server.send(200, "application/json", json);
 }
 
+void handleMotorForward() {
+  sendMotorForward();
+  server.send(200, "text/plain", "Silnik: Forward");
+}
+
+void handleMotorReverse() {
+  sendMotorReverse();
+  server.send(200, "text/plain", "Silnik: Reverse");
+}
+
+void handleMotorStop() {
+  sendMotorStop();
+  server.send(200, "text/plain", "Silnik: Stop");
+}
+
+void handleMotorDemo() {
+  sendMotorDemo();
+  server.send(200, "text/plain", "Silnik: Demo");
+}
+
+void printSerialHelp() {
+  Serial.println("\n=== DOSTĘPNE KOMENDY SERIAL ===");
+  Serial.println("M/m - Wykonaj pomiar");
+  Serial.println("F/f - Silnik do przodu (Forward)");
+  Serial.println("R/r - Silnik do tyłu (Reverse)");
+  Serial.println("S/s - Zatrzymaj silnik (Stop)");
+  Serial.println("D/d - Demo sterowania silnikiem");
+  Serial.println("H/h/? - Wyświetl tę pomoc");
+  Serial.println("===============================\n");
+}
+
 void setup() {
   Serial.begin(115200);
   delay(1000);
@@ -226,6 +314,10 @@ void setup() {
   server.on("/measure", handleMeasure);
   server.on("/read", handleRead);
   server.on("/api", handleAPI);
+  server.on("/forward", handleMotorForward);
+  server.on("/reverse", handleMotorReverse);
+  server.on("/stop", handleMotorStop);
+  server.on("/demo", handleMotorDemo);
   
   server.begin();
   Serial.println("Serwer HTTP uruchomiony na porcie 80");
@@ -238,8 +330,35 @@ void loop() {
 
   if (Serial.available()) {
     char input = Serial.read();
-    if (input == 'M' || input == 'm') {
-      requestMeasurement();
+    switch (input) {
+      case 'M':
+      case 'm':
+        requestMeasurement();
+        break;
+      case 'F':
+      case 'f':
+        sendMotorForward();
+        break;
+      case 'R':
+      case 'r':
+        sendMotorReverse();
+        break;
+      case 'S':
+      case 's':
+        sendMotorStop();
+        break;
+      case 'D':
+      case 'd':
+        sendMotorDemo();
+        break;
+      case 'H':
+      case 'h':
+      case '?':
+        printSerialHelp();
+        break;
+      default:
+        Serial.println("Nieznana komenda. Wpisz 'H' lub '?' aby zobaczyć dostępne komendy.");
+        break;
     }
   }
 

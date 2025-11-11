@@ -37,14 +37,14 @@ extern "C" {
 // Pin definitions for TB67H453FNG (Single H-Bridge Channel)
 //==============================================================================
 
-#define MOTOR_EN_IN1_PIN 2    // EN/IN1 input (Enable/IN1 control)
-#define MOTOR_PH_IN2_PIN 15   // PH/IN2 input (Phase/IN2 control)
+#define MOTOR_EN_IN1_PIN 12    // EN/IN1 input (Enable/IN1 control)
+#define MOTOR_PH_IN2_PIN 13   // PH/IN2 input (Phase/IN2 control)
 #define MOTOR_VREF_PIN 25     // VREF input (Current limit reference)
 #define MOTOR_ISENSE_PIN 4    // ISENSE output (Current monitoring)
+#define MOTOR_nFAULT_PIN 15    // nFAULT output (Error detection)
 #define MOTOR_PMODE_PIN 36    // PMODE input (Control mode setting)
 #define MOTOR_IMODE_PIN 39    // IMODE input (Current control mode setting)
 #define MOTOR_nSLEEP_PIN 34   // nSLEEP input (Sleep/Normal operation)
-#define MOTOR_nFAULT_PIN 35    // nFAULT output (Error detection)
 
 //==============================================================================
 // Enumerations

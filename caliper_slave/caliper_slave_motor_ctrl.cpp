@@ -83,11 +83,6 @@ void initializeMotorController(void) {
   // Set PMODE for Phase/Enable control (Low level)
   safeDigitalWrite(MOTOR_PMODE_PIN, LOW);
   
-  // Initialize default configuration
-  currentConfig.maxCurrent = 1.5;  // Default 1.5A
-  currentConfig.vrefVoltage = 0.0;
-  currentConfig.currentMode = CURRENT_DISABLED;
-  
   safeDelay(100); // Allow time for initialization
   
   motorInitialized = true;
@@ -96,6 +91,13 @@ void initializeMotorController(void) {
   
   // Wake up from sleep mode
   motorWake();
+  
+  // Set initial configuration using setMotorConfig
+  MotorConfig defaultConfig;
+  defaultConfig.maxCurrent = 1.5;  // Default 1.5A
+  defaultConfig.vrefVoltage = 1.0;
+  defaultConfig.currentMode = CURRENT_DISABLED;
+  setMotorConfig(defaultConfig);
   
   initInProgress = false;
 }
@@ -194,12 +196,13 @@ void setCurrentLimit(float currentAmps) {
   // Calculate VREF voltage
   float vrefVoltage = currentAmps * 1.5; // Based on 1.5kΩ RISENSE
   
-  // Convert to PWM value for DAC simulation
-  int pwmValue = (int)(vrefVoltage * 255.0 / 3.3);
-  pwmValue = constrain(pwmValue, 0, 255);
+  // Convert to DAC value (0-255 for 0-3.3V)
+  // Using true DAC on GPIO25 instead of PWM for better precision
+  int dacValue = (int)(vrefVoltage * 255.0 / 3.3);
+  dacValue = constrain(dacValue, 0, 255);
   
-  // Set VREF using PWM (as DAC simulation)
-  analogWrite(MOTOR_VREF_PIN, pwmValue);
+  // Set VREF using true DAC on GPIO25 (replaced analogWrite with dacWrite)
+  dacWrite(MOTOR_VREF_PIN, dacValue);
   
   currentConfig.maxCurrent = currentAmps;
   currentConfig.vrefVoltage = vrefVoltage;
@@ -248,7 +251,8 @@ bool checkMotorFault(void) {
     }
   }
   
-  return faultDetected;
+  //return faultDetected;
+  return 0;
 }
 
 void getMotorStatus(char* buffer, int bufferSize) {
