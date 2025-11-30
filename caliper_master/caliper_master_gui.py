@@ -5,45 +5,53 @@ import threading
 import time
 import csv
 from datetime import datetime
+from collections import deque
 
-ser = None
-auto_event = threading.Event()
-current_port = ''
-csv_file = None
-csv_writer = None
-timestamp_on = False
-auto_interval = 1000
-log_lines = []
-meas_history = []
-plot_x = []
-plot_y = []
-log_tab_visible = False
+class CaliperApp:
+    def __init__(self):
+        self.ser = None
+        self.auto_event = threading.Event()
+        self.current_port = ''
+        self.csv_file = None
+        self.csv_writer = None
+        self.timestamp_on = False
+        self.auto_interval = 1000
+        self.log_lines = deque(maxlen=200)  # Use deque for better performance
+        self.meas_history = deque(maxlen=1000)  # Limit history size
+        self.plot_x = deque(maxlen=500)  # Limit plot points for performance
+        self.plot_y = deque(maxlen=500)
+        self.log_tab_visible = False
+        self.last_measurement_time = 0
+        self.measurement_count = 0
+
+# Global app instance
+app = CaliperApp()
 
 def list_ports():
     return [port.device for port in serial.tools.list_ports.comports()]
 
 def open_port_callback():
-    global ser, current_port, csv_file, csv_writer
     port = dpg.get_value("port_combo")
     baud = 115200
-    if ser:
-        ser.close()
+    if app.ser:
+        app.ser.close()
     try:
-        ser = serial.Serial(port, baud, timeout=0.2)
-        current_port = port
+        app.ser = serial.Serial(port, baud, timeout=0.2)
+        app.current_port = port
         dpg.set_value("status", f"Connected to {port}")
         fname = datetime.now().strftime("measurement_%Y%m%d_%H%M%S.csv")
-        csv_file = open(fname, "w", newline="")
-        csv_writer = csv.writer(csv_file)
+        app.csv_file = open(fname, "w", newline="")
+        app.csv_writer = csv.writer(app.csv_file)
         dpg.set_value("csv_info", f"CSV file: {fname}")
     except Exception as e:
         dpg.set_value("status", f"ERR: {str(e)}")
-        ser = None
+        app.ser = None
 
 def close_all():
-    global ser, csv_file
-    if ser: ser.close()
-    if csv_file: csv_file.close()
+    if app.ser:
+        app.ser.close()
+    if app.csv_file:
+        app.csv_file.close()
 
 def update_ports():
     ports = list_ports()
@@ -51,83 +59,97 @@ def update_ports():
     if ports:
         dpg.set_value("port_combo", ports[0])
 
-def send_trigger():
-    if ser and ser.is_open:
-        ser.write(b"m\n")
-        log_rx("> m")
+def send_command(command):
+    """Unified command sending function"""
+    if app.ser and app.ser.is_open:
+        app.ser.write(f"{command}\n".encode())
+        log_rx(f"> {command}")
     else:
         dpg.set_value("status", "Port not open!")
+
+def send_trigger():
+    send_command("m")
+
+def send_motor_forward():
+    send_command("f")
+
+def send_motor_reverse():
+    send_command("r")
+
+def send_motor_stop():
+    send_command("s")
 
 def set_auto(sender, app_data):
     running = dpg.get_value("auto_checkbox")
     dpg.configure_item("interval_ms", enabled=running)
     if running:
-        global auto_thread, auto_event
-        auto_event.clear()
+        app.auto_event.clear()
         auto_thread = threading.Thread(target=auto_task, daemon=True)
         auto_thread.start()
     else:
-        auto_event.set()
+        app.auto_event.set()
 
 def auto_task():
-    global auto_interval
     try:
         interval = int(dpg.get_value("interval_ms"))
         if interval < 500: interval = 500
-        auto_interval = interval
+        app.auto_interval = interval
     except:
-        auto_interval = 1000
-    while not auto_event.is_set():
+        app.auto_interval = 1000
+    while not app.auto_event.is_set():
         send_trigger()
-        time.sleep(auto_interval/1000.0)
+        time.sleep(app.auto_interval/1000.0)
 
 def timestamp_checkbox(sender, app_data):
-    global timestamp_on
-    timestamp_on = app_data
+    app.timestamp_on = app_data
     show_measurements()
 
 def on_trigger():
     send_trigger()
 
 def clear_measurements():
-    global meas_history, csv_file, csv_writer, plot_x, plot_y
-    meas_history.clear()
-    plot_x.clear()
-    plot_y.clear()
-    dpg.set_value("plot_data", [plot_x, plot_y])
+    app.meas_history.clear()
+    app.plot_x.clear()
+    app.plot_y.clear()
+    app.measurement_count = 0
+    dpg.set_value("plot_data", [list(app.plot_x), list(app.plot_y)])
     show_measurements()
-    if csv_file:
-        csv_file.close()
+    if app.csv_file:
+        app.csv_file.close()
     fname = datetime.now().strftime("measurement_%Y%m%d_%H%M%S.csv")
-    csv_file = open(fname, "w", newline="")
-    csv_writer = csv.writer(csv_file)
+    app.csv_file = open(fname, "w", newline="")
+    app.csv_writer = csv.writer(app.csv_file)
     dpg.set_value("csv_info", f"CSV file: {fname}")
     dpg.set_value("status", "Measurements cleared, new CSV created")
 
 def log_rx(line):
-    log_lines.append(line)
-    dpg.set_value("log_text", "\n".join(log_lines[-200:]))
+    app.log_lines.append(line)
+    dpg.set_value("log_text", "\n".join(list(app.log_lines)))
 
 def show_measurements():
     if dpg.does_item_exist("meas_container"):
         dpg.delete_item("meas_container", children_only=True)
     
-    for idx, (t, v) in enumerate(meas_history, start=1):
-        if timestamp_on:
+    # Show only last 50 measurements for performance
+    recent_measurements = list(app.meas_history)[-50:]
+    start_idx = max(1, len(app.meas_history) - len(recent_measurements) + 1)
+    
+    for idx, (t, v) in enumerate(recent_measurements, start=start_idx):
+        if app.timestamp_on:
             line = f"{idx}: {t} {v}"
         else:
             line = f"{idx}: {v}"
         dpg.add_text(line, parent="meas_container")
     
-    if len(meas_history) > 0:
+    if len(app.meas_history) > 0:
         dpg.set_y_scroll("meas_scroll", dpg.get_y_scroll_max("meas_scroll"))
 
 def update_plot_axes():
-    if len(plot_y) == 0:
+    if len(app.plot_y) == 0:
         return
     
-    y_min = min(plot_y)
-    y_max = max(plot_y)
+    y_min = min(app.plot_y)
+    y_max = max(app.plot_y)
     y_range = y_max - y_min
     
     if y_range < 0.001:
@@ -137,13 +159,12 @@ def update_plot_axes():
     
     dpg.set_axis_limits("y_axis", y_min - margin, y_max + margin)
     
-    if len(plot_x) > 0:
-        dpg.set_axis_limits("x_axis", min(plot_x) - 0.5, max(plot_x) + 0.5)
+    if len(app.plot_x) > 0:
+        dpg.set_axis_limits("x_axis", min(app.plot_x) - 0.5, max(app.plot_x) + 0.5)
 
 def toggle_log_tab():
-    global log_tab_visible
-    log_tab_visible = not log_tab_visible
-    if log_tab_visible:
+    app.log_tab_visible = not app.log_tab_visible
+    if app.log_tab_visible:
         dpg.show_item("log_tab")
     else:
         dpg.hide_item("log_tab")
@@ -156,42 +177,53 @@ def key_press_handler(sender, key):
         if ctrl_pressed and alt_pressed:
             toggle_log_tab()
 
+def process_measurement_data(data):
+    """Process measurement data with validation and storage"""
+    try:
+        val_str = data.split(":")[1]
+        val = float(val_str)
+        
+        # Validate range
+        if -1000.0 <= val <= 1000.0:
+            ts = datetime.now().isoformat(timespec='seconds')
+            measurement_str = f"{val_str} mm"
+            app.meas_history.append((ts, measurement_str))
+            app.measurement_count += 1
+            
+            # Update plot with rolling window
+            app.plot_x.append(app.measurement_count)
+            app.plot_y.append(val)
+            
+            # Update GUI elements
+            dpg.set_value("plot_data", [list(app.plot_x), list(app.plot_y)])
+            update_plot_axes()
+            show_measurements()
+            
+            # Save to CSV
+            if app.csv_writer:
+                if app.timestamp_on:
+                    app.csv_writer.writerow([ts, measurement_str])
+                else:
+                    app.csv_writer.writerow([measurement_str])
+        else:
+            log_rx(f"BLAD: Wartosc poza zakresem: {val}")
+    except ValueError as val_err:
+        log_rx(f"BLAD: Nieprawidlowa wartosc: {val_str} - {str(val_err)}")
+
 def read_serial():
     while True:
-        if ser and ser.is_open:
+        if app.ser and app.ser.is_open:
             try:
-                data = ser.readline().decode(errors='ignore').strip()
+                data = app.ser.readline().decode(errors='ignore').strip()
                 if data:
                     log_rx(f"< {data}")
+                    
+                    # Process measurement data
                     if data.startswith("VAL_1:"):
-                        val_str = data.split(":")[1]
-                        try:
-                            val = float(val_str)
-                            # Walidacja zakresu
-                            if -1000.0 <= val <= 1000.0:
-                                ts = datetime.now().isoformat(timespec='seconds')
-                                measurement_str = f"{val_str} mm"
-                                meas_history.append((ts, measurement_str))
-                                show_measurements()
-                                try:
-                                    plot_x.append(len(plot_x) + 1)
-                                    plot_y.append(val)
-                                    dpg.set_value("plot_data", [plot_x, plot_y])
-                                    update_plot_axes()
-                                except Exception as plot_err:
-                                    log_rx(f"BLAD wykresu: {str(plot_err)}")
-                                if csv_writer:
-                                    if timestamp_on:
-                                        csv_writer.writerow([ts, measurement_str])
-                                    else:
-                                        csv_writer.writerow([measurement_str])
-                            else:
-                                log_rx(f"BLAD: Wartosc poza zakresem: {val}")
-                        except ValueError as val_err:
-                            log_rx(f"BLAD: Nieprawidlowa wartosc: {val_str} - {str(val_err)}")
-                    elif "PRAD SILNIKA" in data.upper() or "blad silnika" in data.lower():
-                        # Logowanie informacji o silniku
+                        process_measurement_data(data)
+                    elif "SILNIK" in data.upper() or "blad silnika" in data.lower():
                         log_rx(f"[SILNIK] {data}")
+                        
                 time.sleep(0.02)
             except Exception as e:
                 dpg.set_value("status", f"ERR Serial: {str(e)}")
@@ -241,6 +273,14 @@ with dpg.window(label="Caliper Application", width=880, height=660):
                     dpg.add_input_int(label="Interval (ms)", tag="interval_ms", default_value=1000, min_value=500, enabled=False, width=150)
                     dpg.add_spacer(height=5)
                     dpg.add_checkbox(label="Include timestamp", callback=timestamp_checkbox, tag="timestamp_cb")
+                    dpg.add_spacer(height=10)
+                    
+                    dpg.add_text("Motor Controls:", color=(100, 200, 255))
+                    dpg.add_spacer(height=5)
+                    with dpg.group(horizontal=True):
+                        dpg.add_button(label="Forward", callback=send_motor_forward, width=95, height=30)
+                        dpg.add_button(label="Reverse", callback=send_motor_reverse, width=95, height=30)
+                    dpg.add_button(label="Stop Motor", callback=send_motor_stop, width=200, height=30)
                     dpg.add_spacer(height=5)
                     dpg.add_text("ESP32 Master: http://192.168.4.1", color=(100, 255, 100))
                     dpg.add_text("Connect WiFi: ESP32_Pomiar", color=(100, 255, 100))

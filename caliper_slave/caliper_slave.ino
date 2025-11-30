@@ -1,16 +1,12 @@
 #include <esp_now.h>
 #include <WiFi.h>
 #include "caliper_slave_motor_ctrl.h"
+#include "config.h"
+#include "common.h"
 
 // #define CLOCK_PIN 23
 // #define DATA_PIN 22
 // #define TRIG_PIN 21
-
-#define CLOCK_PIN 18
-#define DATA_PIN 19
-#define TRIG_PIN 5
-
-#define ESPNOW_WIFI_CHANNEL 1
 
 // Adres MAC mastera
 uint8_t masterAddress[] = {0xA0, 0xB7, 0x65, 0x20, 0xC0, 0x8C};
@@ -20,16 +16,7 @@ volatile int bitCount = 0;
 volatile bool dataReady = false;
 volatile bool measurementRequested = false;
 
-typedef struct struct_message {
-  float measurement;
-  bool valid;
-  uint32_t timestamp;
-  char command;          // Command type: 'M' = measurement, 'F' = forward, 'R' = reverse, 'S' = stop, 'D' = demo
-  float motorCurrent;    // Motor current reading
-  bool motorFault;       // Motor fault status
-} struct_message;
-
-struct_message sensorData;
+Message sensorData;
 esp_now_peer_info_t peerInfo;
 
 void IRAM_ATTR clockISR() {
@@ -73,6 +60,38 @@ float decodeCaliper() {
   return measurement;
 }
 
+// Battery voltage reading with caching and averaging
+uint16_t readBatteryVoltage() {
+  static uint16_t cachedVoltage = 0;
+  static uint32_t lastReadTime = 0;
+  
+  uint32_t currentTime = millis();
+  
+  // Return cached value if read interval hasn't passed
+  if (cachedVoltage != 0 && (currentTime - lastReadTime) < BATTERY_UPDATE_INTERVAL_MS) {
+    return cachedVoltage;
+  }
+  
+  // Read and average multiple samples for better accuracy
+  uint32_t adcSum = 0;
+  
+  for (int i = 0; i < ADC_SAMPLES; i++) {
+    adcSum += analogRead(BATTERY_VOLTAGE_PIN);
+    delay(1);  // Small delay between samples
+  }
+  
+  int adcAverage = adcSum / ADC_SAMPLES;
+  
+  // Convert ADC value to millivolts using constants from config.h
+  uint16_t voltage_mV = (uint16_t)((adcAverage * ADC_REFERENCE_VOLTAGE_MV) / ADC_RESOLUTION);
+  
+  // Update cache
+  cachedVoltage = voltage_mV;
+  lastReadTime = currentTime;
+  
+  return voltage_mV;
+}
+
 float performMeasurement() {
   Serial.println("Wyzwalam pomiar TRIG...");
   digitalWrite(TRIG_PIN, LOW);
@@ -82,8 +101,7 @@ float performMeasurement() {
   attachInterrupt(digitalPinToInterrupt(CLOCK_PIN), clockISR, FALLING);
 
   unsigned long startTime = millis();
-  unsigned long timeout = 200; // Zwiększony timeout
-  while (!dataReady && (millis() - startTime < timeout)) {
+  while (!dataReady && (millis() - startTime < MEASUREMENT_TIMEOUT_MS)) {
     delayMicroseconds(100); // Krótsze opóźnienie dla lepszej responsywności
   }
 
@@ -94,19 +112,19 @@ float performMeasurement() {
     reverseBits();
     float result = decodeCaliper();
 
-    // Walidacja wyniku
-    if (result >= -1000.0 && result <= 1000.0 && !isnan(result) && !isinf(result)) {
+    // Walidacja wyniku z użyciem stałych z config.h
+    if (result >= MEASUREMENT_MIN_VALUE && result <= MEASUREMENT_MAX_VALUE && !isnan(result) && !isinf(result)) {
       Serial.print("Pomiar: ");
       Serial.print(result, 3);
       Serial.println(" mm");
       return result;
     } else {
       Serial.println("BLAD: Nieprawidlowa wartosc pomiaru!");
-      return -999.0;
+      return INVALID_MEASUREMENT_VALUE;
     }
   } else {
     Serial.println("BŁĄD: Timeout!");
-    return -999.0;
+    return INVALID_MEASUREMENT_VALUE;
   }
 }
 
@@ -117,24 +135,21 @@ void OnDataRecv(const esp_now_recv_info_t *recv_info, const uint8_t *incomingDat
     Serial.println(command);
     
     switch (command) {
-      case 'M':  // Measurement request
+      case CMD_MEASURE:  // Measurement request
         measurementRequested = true;
         Serial.println("→ Zadanie pomiaru");
         break;
-      case 'F':  // Motor forward
+      case CMD_FORWARD:  // Motor forward
         setMotorSpeed(110, MOTOR_FORWARD);
         Serial.println("→ Silnik: Forward");
         break;
-      case 'R':  // Motor reverse
+      case CMD_REVERSE:  // Motor reverse
         setMotorSpeed(150, MOTOR_REVERSE);
         Serial.println("→ Silnik: Reverse");
         break;
-      case 'S':  // Motor stop
+      case CMD_STOP:  // Motor stop
         setMotorSpeed(0, MOTOR_STOP);
         Serial.println("→ Silnik: Stop");
-        break;
-      case 'D':  // Motor demo
-        Serial.println("→ Demo silnika - nie jest zaimplementowane");
         break;
       default:
         Serial.println("→ Nieznana komenda");
@@ -219,29 +234,27 @@ void loop() {
     measurementRequested = false;
     float result = performMeasurement();
     sensorData.measurement = result;
-    sensorData.valid = (result != -999.0);
+    sensorData.valid = (result != INVALID_MEASUREMENT_VALUE);
     sensorData.timestamp = millis();
-    sensorData.command = 'M';
+    sensorData.command = CMD_MEASURE;
     
-    // Add motor status data
-    sensorData.motorCurrent = 0;
-    sensorData.motorFault = 0;
+    // Add battery voltage data
+    sensorData.batteryVoltage = readBatteryVoltage();
 
     esp_err_t sendResult = esp_now_send(masterAddress, (uint8_t *) &sensorData, sizeof(sensorData));
     if (sendResult == ESP_OK) {
       Serial.println("Wynik wyslany do Mastera");
       Serial.print("  → Pomiar: ");
       Serial.print(result, 3);
-      Serial.print(" mm, Prąd: ");
-      Serial.print(sensorData.motorCurrent, 3);
-      Serial.print("A, Błąd: ");
-      Serial.println(sensorData.motorFault ? "TAK" : "NIE");
+      Serial.print(" mm, Napięcie baterii: ");
+      Serial.print(sensorData.batteryVoltage);
+      Serial.print("mV");
     } else {
       Serial.print("BLAD wysylania wyniku: ");
       Serial.println(sendResult);
 
       // Próba ponownego wysłania po krótkiej przerwie
-      delay(100);
+      delay(ESPNOW_RETRY_DELAY_MS);
       sendResult = esp_now_send(masterAddress, (uint8_t *) &sensorData, sizeof(sensorData));
       if (sendResult == ESP_OK) {
         Serial.println("Ponowne wyslanie wyniku udane");
@@ -261,20 +274,18 @@ void loop() {
     if (++statusCounter >= 100) { // Every ~1 second
       statusCounter = 0;
       
-      // Send motor status update
-      sensorData.command = 'U';  // Update
-      sensorData.motorCurrent = 0;
-      sensorData.motorFault = 0;
+      // Send status update with battery voltage
+      sensorData.command = CMD_UPDATE;  // Update
+      sensorData.batteryVoltage = readBatteryVoltage();
       sensorData.measurement = 0.0;
       sensorData.valid = true;
       sensorData.timestamp = millis();
       
       esp_err_t sendResult = esp_now_send(masterAddress, (uint8_t *) &sensorData, sizeof(sensorData));
       if (sendResult == ESP_OK) {
-        Serial.print("Status silnika: Prąd=");
-        Serial.print(sensorData.motorCurrent, 3);
-        Serial.print("A, Błąd=");
-        Serial.println(sensorData.motorFault ? "TAK" : "NIE");
+        Serial.print("Status: Napięcie baterii=");
+        Serial.print(sensorData.batteryVoltage);
+        Serial.println("mV");
       }
     }
   }

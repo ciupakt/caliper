@@ -17,18 +17,11 @@
 #define CALIPER_SLAVE_MOTOR_CTRL_H
 
 #include <Arduino.h>
+#include "common.h"
 
 // Motor pin definitions
 #define MOTOR_IN2_PIN   12
 #define MOTOR_IN1_PIN   13
-
-// Motor state enumeration
-typedef enum {
-  MOTOR_STOP = 0,     /**< Motor stopped (coast) */
-  MOTOR_FORWARD = 1,  /**< Motor rotating forward */
-  MOTOR_REVERSE = 2,  /**< Motor rotating reverse */
-  MOTOR_BRAKE = 3     /**< Motor braking */
-} MotorState;
 
 #ifdef __cplusplus
 extern "C" {

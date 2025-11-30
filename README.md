@@ -241,14 +241,19 @@ Moduł jest gotowy do użycia w projekcie kalibratora z ESP32.
   - ESP-NOW Communication
 
 ### ESP32 Slave
-- **Funkcje**: Caliper Interface, ESP-NOW Sender
+- **Funkcje**: Caliper Interface, ESP-NOW Sender, Motor Controller, Battery Monitor
 - **GPIO**:
   - GPIO 18: Clock Input (z suwarki)
   - GPIO 19: Data Input (z suwarki)
   - GPIO 5: Trigger Output (do suwarki)
+  - GPIO 13: Motor IN1 (sterownik MP6550GG-Z)
+  - GPIO 12: Motor IN2 (sterownik MP6550GG-Z)
+  - GPIO 34: Battery Voltage Input (ADC)
 - **ESP-NOW**: Kanał 1, wysyłanie danych z retry mechanizmem
 - **Bezpieczeństwo**: Walidacja danych pomiarowych, timeout 200ms
 - **Obsługa**: Dekodowanie 52-bitowego strumienia danych z walidacją
+- **Sterowanie silnikiem**: PWM 8-bit, 4 tryby pracy (Stop, Forward, Reverse, Brake)
+- **Monitorowanie baterii**: Pomiar napięcia 0-3.3V przez ADC
 
 ### Aplikacja Python
 - **Framework**: Dear PyGui
@@ -278,8 +283,19 @@ Moduł jest gotowy do użycia w projekcie kalibratora z ESP32.
 4. **Połączenia suwarki**:
    ```
    Suwmiarka CLK  -> ESP32 Slave GPIO 18
-   Suwmiarka DATA -> ESP32 Slave GPIO 19  
+   Suwmiarka DATA -> ESP32 Slave GPIO 19
    Suwmiarka TRIG <- ESP32 Slave GPIO 5
+   ```
+
+5. **Połączenia sterownika silnika**:
+   ```
+   MP6550GG-Z IN1 -> ESP32 Slave GPIO 13
+   MP6550GG-Z IN2 -> ESP32 Slave GPIO 12
+   ```
+
+6. **Połączenia monitorowania baterii**:
+   ```
+   Bateria (0-3.3V) -> ESP32 Slave GPIO 34 (przez dzielnik napięcia jeśli potrzeba)
    ```
 
 ### Konfiguracja Aplikacji Python
@@ -338,13 +354,24 @@ python caliper_master_gui.py
 
 1. **Główna strona**:
    - Wyświetlanie ostatniego pomiaru
+   - Wyświetlanie napięcia baterii
    - Przyciski sterowania
    - Status połączenia
 
-2. **Funkcje**:
+2. **Funkcje pomiarowe**:
    - **"Wykonaj Pomiar"** - inicjuje pomiar
    - **"Odswież Wynik"** - pobiera najnowsze dane
-   - **API endpoint**: `/api` - dane JSON
+
+3. **Funkcje sterowania silnikiem**:
+   - **"Forward"** - uruchom silnik do przodu
+   - **"Reverse"** - uruchom silnik do tyłu
+   - **"Stop"** - zatrzymaj silnik
+
+4. **API endpointy**:
+   - `/api` - dane JSON z pomiarami i statusem
+   - `/forward` - sterowanie silnikiem do przodu
+   - `/reverse` - sterowanie silnikiem do tyłu
+   - `/stop` - zatrzymanie silnika
 
 ### Obsługa Błędów
 
@@ -379,6 +406,9 @@ python caliper_master_gui.py
 **Command** (Master → Slave):
 ```c
 uint8_t command = 'M'; // Request measurement
+uint8_t command = 'F'; // Motor forward
+uint8_t command = 'R'; // Motor reverse
+uint8_t command = 'S'; // Motor stop
 ```
 
 **Data** (Slave → Master):
@@ -387,6 +417,8 @@ typedef struct struct_message {
   float measurement;   // Wartość pomiaru w mm
   bool valid;         // Czy pomiar jest poprawny
   uint32_t timestamp; // Czas od startu systemu
+  char command;       // Typ komendy ('M' - measurement, 'U' - update, 'F'/'R'/'S' - motor)
+  uint16_t batteryVoltage; // Napięcie baterii w milliwoltach
 } struct_message;
 ```
 
@@ -395,6 +427,10 @@ typedef struct struct_message {
 **Trigger** (Python → Master):
 ```c
 'm' + '\n'; // Single measurement trigger
+'f' + '\n'; // Motor forward
+'r' + '\n'; // Motor reverse
+'s' + '\n'; // Motor stop
+'h' + '\n'; // Help
 ```
 
 **Response** (Master → Python):
@@ -402,17 +438,29 @@ typedef struct struct_message {
 "VAL_1:xxx.xxx"; // Measurement value
 ```
 
+**Available commands** (Master Serial Console):
+- `M/m` - Wykonaj pomiar
+- `F/f` - Silnik do przodu (Forward)
+- `R/r` - Silnik do tyłu (Reverse)
+- `S/s` - Zatrzymaj silnik (Stop)
+- `H/h/?` - Wyświetl pomoc
+
 ### HTTP API
 
-**GET** `/` - Główna strona HTML  
-**GET** `/measure` - Wyzwolenie pomiaru  
-**GET** `/read` - Odczyt ostatniego wyniku  
+**GET** `/` - Główna strona HTML
+**GET** `/measure` - Wyzwolenie pomiaru
+**GET** `/read` - Odczyt ostatniego wyniku
+**GET** `/forward` - Sterowanie silnikiem do przodu
+**GET** `/reverse` - Sterowanie silnikiem do tyłu
+**GET** `/stop` - Zatrzymanie silnika
 **GET** `/api` - Dane JSON:
 ```json
 {
   "measurement": "25.430 mm",
   "timestamp": 12345,
-  "valid": true
+  "valid": true,
+  "batteryVoltage": 3300,
+  "command": "M"
 }
 ```
 
@@ -482,6 +530,10 @@ Projekt stworzony do celów edukacyjnych i hobbystycznych.
 - ✅ **OPTYMALIZACJA**: Usunięto nieużywaną definicję `MOTOR_SLEEP` z enuma MotorState
 - ✅ **POPRAWKA IMPLEMENTACJI**: Zaktualizowano sterowanie MP6550GG-Z zgodnie ze specyfikacją (PWM na IN1/IN2)
 - ✅ **MODUŁ SILNIKA**: Zaktualizowano sterowanie silnikiem do używania PWM z kontrolą prędkości
+- ✅ **MONITOROWANIE BATERII**: Dodano pomiar napięcia baterii przez ADC (GPIO 34)
+- ✅ **KOMUNIKACJA**: Rozszerzono protokół ESP-NOW o przesyłanie napięcia baterii
+- ✅ **INTERFEJS WEB**: Dodano przyciski sterowania silnikiem i wyświetlanie napięcia baterii
+- ✅ **SERIAL COMMANDS**: Dodano komendy sterowania silnikiem przez konsolę szeregową
 - ✅ **DOKUMENTACJA**: Zaktualizowano README.md i dokumentację kodu
 
 **Wersja 1.1** (2025-11-10)

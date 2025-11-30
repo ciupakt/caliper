@@ -1,30 +1,22 @@
 #include <esp_now.h>
 #include <WiFi.h>
 #include <WebServer.h>
+#include "config.h"
+#include "common.h"
+#include "communication.h"
 
-#define ESPNOW_WIFI_CHANNEL 1
-
+// Slave device MAC address
 uint8_t slaveAddress[] = {0xA0, 0xB7, 0x65, 0x21, 0x77, 0x5C};
 
-// Dane Access Point
-const char* ssid = "ESP32_Pomiar";
-const char* password = "12345678";
+// Global objects
+WebServer server(WEB_SERVER_PORT);
+CommunicationManager commManager;
+SystemStatus systemStatus;
+Message receivedData;
 
-typedef struct struct_message {
-  float measurement;
-  bool valid;
-  uint32_t timestamp;
-  char command;          // Command type: 'M' = measurement, 'F' = forward, 'R' = reverse, 'S' = stop, 'D' = demo
-  float motorCurrent;    // Motor current reading
-  bool motorFault;       // Motor fault status
-} struct_message;
-
-struct_message receivedData;
-esp_now_peer_info_t peerInfo;
-
-WebServer server(80);
-
+// Global variables
 String lastMeasurement = "Brak pomiaru";
+String lastBatteryVoltage = "Brak danych";
 bool measurementReady = false;
 
 String macToString(const uint8_t *mac) {
@@ -42,13 +34,18 @@ void OnDataRecv(const esp_now_recv_info_t *recv_info, const uint8_t *incomingDat
 
   memcpy(&receivedData, incomingData, sizeof(receivedData));
 
-  // Obsługa różnych typów komend
-  if (receivedData.command == 'M') {
-    // Walidacja zakresu pomiaru
-    if (receivedData.valid && (receivedData.measurement < -1000.0 || receivedData.measurement > 1000.0)) {
+  // Update system status
+  systemStatus.lastUpdate = millis();
+  systemStatus.communicationActive = true;
+
+  // Handle different command types
+  if (receivedData.command == CMD_MEASURE) {
+    // Validate measurement range
+    if (receivedData.valid && (receivedData.measurement < MEASUREMENT_MIN_VALUE || receivedData.measurement > MEASUREMENT_MAX_VALUE)) {
       Serial.println("BLAD: Wartosc pomiaru poza zakresem!");
       lastMeasurement = "BLAD: Wartosc poza zakresem";
       measurementReady = true;
+      systemStatus.measurementValid = false;
       return;
     }
 
@@ -56,9 +53,14 @@ void OnDataRecv(const esp_now_recv_info_t *recv_info, const uint8_t *incomingDat
       lastMeasurement = String(receivedData.measurement, 3) + " mm";
       Serial.print("VAL_1:");
       Serial.println(receivedData.measurement, 3);
+      systemStatus.lastMeasurement = receivedData.measurement;
+      systemStatus.measurementValid = true;
     } else {
       lastMeasurement = "BLAD POMIARU";
+      systemStatus.measurementValid = false;
     }
+    lastBatteryVoltage = String(receivedData.batteryVoltage) + " mV";
+    systemStatus.batteryVoltage = receivedData.batteryVoltage;
     measurementReady = true;
 
     Serial.println("\n=== OTRZYMANO WYNIK POMIARU ===");
@@ -66,100 +68,74 @@ void OnDataRecv(const esp_now_recv_info_t *recv_info, const uint8_t *incomingDat
     Serial.println(lastMeasurement);
     Serial.print("Timestamp: ");
     Serial.println(receivedData.timestamp);
-    Serial.print("Prad silnika: ");
-    Serial.print(receivedData.motorCurrent, 3);
-    Serial.print("A, Blad silnika: ");
-    Serial.println(receivedData.motorFault ? "TAK" : "NIE");
+    Serial.print("Napiecie baterii: ");
+    Serial.print(receivedData.batteryVoltage);
+    Serial.println("mV");
     Serial.println("================================\n");
-  } else if (receivedData.command == 'U') {
-    // Aktualizacja statusu silnika
-    Serial.println("\n=== AKTUALIZACJA STATUSU SILNIKA ===");
-    Serial.print("Prad silnika: ");
-    Serial.print(receivedData.motorCurrent, 3);
-    Serial.print("A, Blad silnika: ");
-    Serial.println(receivedData.motorFault ? "TAK" : "NIE");
-    Serial.println("=====================================\n");
+  } else if (receivedData.command == CMD_UPDATE) {
+    // Status update
+    Serial.println("\n=== AKTUALIZACJA STATUSU ===");
+    Serial.print("Napiecie baterii: ");
+    Serial.print(receivedData.batteryVoltage);
+    Serial.println("mV");
+    lastBatteryVoltage = String(receivedData.batteryVoltage) + " mV";
+    systemStatus.batteryVoltage = receivedData.batteryVoltage;
+    Serial.println("==============================\n");
   }
 }
 
-// POPRAWKA: Zmieniona sygnatura callbacka
 void OnDataSent(const wifi_tx_info_t *info, esp_now_send_status_t status) {
   if (status != ESP_NOW_SEND_SUCCESS) {
     Serial.println("ERR: Wyslanie nie powiodlo sie!");
+    systemStatus.communicationActive = false;
+  } else {
+    systemStatus.communicationActive = true;
   }
+}
+
+// Unified command sending function
+ErrorCode sendCommand(CommandType command, const char* commandName) {
+  measurementReady = false;
+  lastMeasurement = "Oczekiwanie na odpowiedź...";
+  
+  ErrorCode result = commManager.sendCommand(command);
+  
+  if (result == ERR_NONE) {
+    Serial.print("Wyslano komendę: ");
+    Serial.println(commandName);
+    lastMeasurement = String("Komenda: ") + commandName;
+    
+    // Update motor status if it's a motor command
+    if (command == CMD_FORWARD || command == CMD_REVERSE || command == CMD_STOP) {
+      systemStatus.motorRunning = (command != CMD_STOP);
+      systemStatus.motorDirection = (command == CMD_FORWARD) ? MOTOR_FORWARD :
+                                   (command == CMD_REVERSE) ? MOTOR_REVERSE : MOTOR_STOP;
+    }
+  } else {
+    Serial.print("BLAD wysylania komendy ");
+    Serial.print(commandName);
+    Serial.print(": ");
+    Serial.println(result);
+    lastMeasurement = "BLAD: Nie można wysłać komendy";
+  }
+  
+  return result;
 }
 
 void requestMeasurement() {
-  uint8_t command = 'M';
-  measurementReady = false;
-  lastMeasurement = "Oczekiwanie na pomiar...";
-
-  esp_err_t result = esp_now_send(slaveAddress, &command, sizeof(command));
-  if (result == ESP_OK) {
-    Serial.println("Wyslano zadanie pomiaru");
-  } else {
-    Serial.print("BLAD wysylania zadania: ");
-    Serial.println(result);
-    lastMeasurement = "BLAD: Nie mozna wyslac zadania";
-
-    // Próba ponownego wysłania po krótkiej przerwie
-    delay(100);
-    result = esp_now_send(slaveAddress, &command, sizeof(command));
-    if (result == ESP_OK) {
-      Serial.println("Ponowne wyslanie udane");
-      lastMeasurement = "Oczekiwanie na pomiar...";
-    } else {
-      Serial.println("Ponowne wyslanie nieudane");
-    }
-  }
+  sendCommand(CMD_MEASURE, "Pomiar");
 }
 
 void sendMotorForward() {
-  uint8_t command = 'F';
-  esp_err_t result = esp_now_send(slaveAddress, &command, sizeof(command));
-  if (result == ESP_OK) {
-    Serial.println("Wyslano komendę: Silnik do przodu");
-    lastMeasurement = "Silnik: Forward";
-  } else {
-    Serial.print("BLAD wysylania komendy Forward: ");
-    Serial.println(result);
-  }
+  sendCommand(CMD_FORWARD, "Silnik do przodu");
 }
 
 void sendMotorReverse() {
-  uint8_t command = 'R';
-  esp_err_t result = esp_now_send(slaveAddress, &command, sizeof(command));
-  if (result == ESP_OK) {
-    Serial.println("Wyslano komendę: Silnik do tyłu");
-    lastMeasurement = "Silnik: Reverse";
-  } else {
-    Serial.print("BLAD wysylania komendy Reverse: ");
-    Serial.println(result);
-  }
+  sendCommand(CMD_REVERSE, "Silnik do tyłu");
 }
 
 void sendMotorStop() {
-  uint8_t command = 'S';
-  esp_err_t result = esp_now_send(slaveAddress, &command, sizeof(command));
-  if (result == ESP_OK) {
-    Serial.println("Wyslano komendę: Zatrzymaj silnik");
-    lastMeasurement = "Silnik: Stop";
-  } else {
-    Serial.print("BLAD wysylania komendy Stop: ");
-    Serial.println(result);
-  }
-}
-
-void sendMotorDemo() {
-  uint8_t command = 'D';
-  esp_err_t result = esp_now_send(slaveAddress, &command, sizeof(command));
-  if (result == ESP_OK) {
-    Serial.println("Wyslano komendę: Demo silnika");
-    lastMeasurement = "Silnik: Demo";
-  } else {
-    Serial.print("BLAD wysylania komendy Demo: ");
-    Serial.println(result);
-  }
+  sendCommand(CMD_STOP, "Zatrzymaj silnik");
 }
 
 void handleRoot() {
@@ -181,19 +157,17 @@ void handleRoot() {
   html += "button.motor.reverse:hover { background: #e0a800; }";
   html += "button.motor.stop { background: #dc3545; }";
   html += "button.motor.stop:hover { background: #c82333; }";
-  html += "button.motor.demo { background: #6f42c1; }";
-  html += "button.motor.demo:hover { background: #5a32a3; }";
   html += ".status { text-align: center; color: #666; margin-top: 20px; font-size: 14px; }";
   html += "</style></head><body>";
   html += "<div class='container'>";
   html += "<h1>System Pomiarowy ESP32</h1>";
   html += "<div class='measurement' id='value'>" + lastMeasurement + "</div>";
+  html += "<div style='text-align: center; font-size: 18px; color: #666; margin: 10px 0;'>Napięcie baterii: <span id='battery'>" + lastBatteryVoltage + "</span></div>";
   html += "<button onclick='measure()'>Wykonaj Pomiar</button>";
   html += "<button onclick='refresh()'>Odswiez Wynik</button>";
   html += "<button class='motor forward' onclick='motorForward()'>Forward</button>";
   html += "<button class='motor reverse' onclick='motorReverse()'>Reverse</button>";
   html += "<button class='motor stop' onclick='motorStop()'>Stop</button>";
-  html += "<button class='motor demo' onclick='motorDemo()'>Demo</button>";
   html += "<div class='status' id='status'></div>";
   html += "</div>";
   html += "<script>";
@@ -254,17 +228,6 @@ void handleRoot() {
   html += "      document.getElementById('status').textContent = 'Blad: ' + error;";
   html += "    });";
   html += "}";
-  html += "function motorDemo() {";
-  html += "  document.getElementById('status').textContent = 'Wysylanie komendy Demo...';";
-  html += "  fetch('/demo')";
-  html += "    .then(response => response.text())";
-  html += "    .then(data => {";
-  html += "      document.getElementById('status').textContent = 'Demo: ' + data;";
-  html += "    })";
-  html += "    .catch(error => {";
-  html += "      document.getElementById('status').textContent = 'Blad: ' + error;";
-  html += "    });";
-  html += "}";
   html += "</script>";
   html += "</body></html>";
   
@@ -285,8 +248,7 @@ void handleAPI() {
   json += "\"measurement\":\"" + lastMeasurement + "\",";
   json += "\"timestamp\":" + String(receivedData.timestamp) + ",";
   json += "\"valid\":" + String(receivedData.valid ? "true" : "false") + ",";
-  json += "\"motorCurrent\":" + String(receivedData.motorCurrent, 3) + ",";
-  json += "\"motorFault\":" + String(receivedData.motorFault ? "true" : "false") + ",";
+  json += "\"batteryVoltage\":" + String(receivedData.batteryVoltage) + ",";
   json += "\"command\":\"" + String(receivedData.command) + "\"";
   json += "}";
   server.send(200, "application/json", json);
@@ -307,10 +269,6 @@ void handleMotorStop() {
   server.send(200, "text/plain", "Silnik: Stop");
 }
 
-void handleMotorDemo() {
-  sendMotorDemo();
-  server.send(200, "text/plain", "Silnik: Demo");
-}
 
 void printSerialHelp() {
   Serial.println("\n=== DOSTĘPNE KOMENDY SERIAL ===");
@@ -318,7 +276,6 @@ void printSerialHelp() {
   Serial.println("F/f - Silnik do przodu (Forward)");
   Serial.println("R/r - Silnik do tyłu (Reverse)");
   Serial.println("S/s - Zatrzymaj silnik (Stop)");
-  Serial.println("D/d - Demo sterowania silnikiem");
   Serial.println("H/h/? - Wyświetl tę pomoc");
   Serial.println("===============================\n");
 }
@@ -327,12 +284,17 @@ void setup() {
   Serial.begin(115200);
   delay(1000);
   
+  // Initialize system status
+  memset(&systemStatus, 0, sizeof(systemStatus));
+  systemStatus.motorDirection = MOTOR_STOP;
+  
+  // Setup WiFi
   WiFi.mode(WIFI_AP_STA);
-  WiFi.softAP(ssid, password);
+  WiFi.softAP(WIFI_SSID, WIFI_PASSWORD);
   
   Serial.println("\n=== Access Point uruchomiony ===");
   Serial.print("SSID: ");
-  Serial.println(ssid);
+  Serial.println(WIFI_SSID);
   Serial.print("IP: ");
   Serial.println(WiFi.softAPIP());
   Serial.println("================================\n");
@@ -342,22 +304,17 @@ void setup() {
 
   WiFi.setChannel(ESPNOW_WIFI_CHANNEL);
 
-  if (esp_now_init() != ESP_OK) {
+  // Initialize communication manager
+  if (commManager.initialize(slaveAddress) != ERR_NONE) {
     Serial.println("ESP-NOW init failed!");
     return;
   }
+  
+  // Set callbacks
+  commManager.setReceiveCallback(OnDataRecv);
+  commManager.setSendCallback(OnDataSent);
 
-  esp_now_register_recv_cb(OnDataRecv);
-  esp_now_register_send_cb(OnDataSent);
-
-  memcpy(peerInfo.peer_addr, slaveAddress, 6);
-  peerInfo.channel = ESPNOW_WIFI_CHANNEL;
-  peerInfo.encrypt = false;
-
-  if (esp_now_add_peer(&peerInfo) != ESP_OK) {
-    Serial.println("Failed to add peer");
-  }
-
+  // Setup web server routes
   server.on("/", handleRoot);
   server.on("/measure", handleMeasure);
   server.on("/read", handleRead);
@@ -365,11 +322,10 @@ void setup() {
   server.on("/forward", handleMotorForward);
   server.on("/reverse", handleMotorReverse);
   server.on("/stop", handleMotorStop);
-  server.on("/demo", handleMotorDemo);
   
   server.begin();
-  Serial.println("Serwer HTTP uruchomiony na porcie 80");
-  Serial.println("Polacz sie z WiFi: " + String(ssid));
+  Serial.println("Serwer HTTP uruchomiony na porcie " + String(WEB_SERVER_PORT));
+  Serial.println("Polacz sie z WiFi: " + String(WIFI_SSID));
   Serial.println("Otworz: http://" + WiFi.softAPIP().toString());
 }
 
@@ -394,10 +350,6 @@ void loop() {
       case 'S':
       case 's':
         sendMotorStop();
-        break;
-      case 'D':
-      case 'd':
-        sendMotorDemo();
         break;
       case 'H':
       case 'h':
