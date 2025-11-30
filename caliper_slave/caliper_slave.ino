@@ -122,20 +122,19 @@ void OnDataRecv(const esp_now_recv_info_t *recv_info, const uint8_t *incomingDat
         Serial.println("→ Zadanie pomiaru");
         break;
       case 'F':  // Motor forward
-        setMotorState(MOTOR_FORWARD);
+        setMotorSpeed(110, MOTOR_FORWARD);
         Serial.println("→ Silnik: Forward");
         break;
       case 'R':  // Motor reverse
-        setMotorState(MOTOR_REVERSE);
+        setMotorSpeed(150, MOTOR_REVERSE);
         Serial.println("→ Silnik: Reverse");
         break;
       case 'S':  // Motor stop
-        setMotorState(MOTOR_STOP);
+        setMotorSpeed(0, MOTOR_STOP);
         Serial.println("→ Silnik: Stop");
         break;
       case 'D':  // Motor demo
-        Serial.println("→ Uruchamianie demo silnika...");
-        demoMotorControl();
+        Serial.println("→ Demo silnika - nie jest zaimplementowane");
         break;
       default:
         Serial.println("→ Nieznana komenda");
@@ -225,8 +224,8 @@ void loop() {
     sensorData.command = 'M';
     
     // Add motor status data
-    sensorData.motorCurrent = readMotorCurrent();
-    sensorData.motorFault = checkMotorFault();
+    sensorData.motorCurrent = 0;
+    sensorData.motorFault = 0;
 
     esp_err_t sendResult = esp_now_send(masterAddress, (uint8_t *) &sensorData, sizeof(sensorData));
     if (sendResult == ESP_OK) {
@@ -264,8 +263,8 @@ void loop() {
       
       // Send motor status update
       sensorData.command = 'U';  // Update
-      sensorData.motorCurrent = readMotorCurrent();
-      sensorData.motorFault = checkMotorFault();
+      sensorData.motorCurrent = 0;
+      sensorData.motorFault = 0;
       sensorData.measurement = 0.0;
       sensorData.valid = true;
       sensorData.timestamp = millis();

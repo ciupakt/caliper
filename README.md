@@ -136,21 +136,6 @@ graph LR
     end
     
     subgraph "ESP32 Master"
-        WiFi[WiFi Antenna]
-        MasterChip[ESP32 Chip]
-    end
-    
-    Clock --> GPIO18
-    Data --> GPIO19
-    Trigger --> GPIO5
-    
-    ESP32_Slave -.->|ESP-NOW Communication| ESP32_Master
-```
-
-## Struktura Plików
-
-```
-caliper/
 ├── README.md                    # Ten plik
 ├── caliper_master/
 │   ├── caliper_master.ino      # Kod Master ESP32
@@ -168,68 +153,36 @@ caliper/
 
 ## Moduł Sterowania Silnikiem DC
 
-Moduł sterowania silnikiem DC został zaktualizowany do użycia sterownika **MP6550GG-Z**.
+Moduł sterowania silnikiem DC wykorzystuje sterownik **MP6550GG-Z** w minimalistycznej konfiguracji.
 
 ### Struktura Modułu
 
 #### Pliki:
-- **`caliper_slave_motor_ctrl.h`** - Plik nagłówkowy z definicjami, strukturami i deklaracjami funkcji
-- **`caliper_slave_motor_ctrl.cpp`** - Plik implementacji C++ z definicjami wszystkich funkcji
-- **`caliper_slave.ino`** - Główny plik zaktualizowany do używania nowego modułu
+- **`caliper_slave_motor_ctrl.h`** - Plik nagłówkowy z definicjami i deklaracjami funkcji
+- **`caliper_slave_motor_ctrl.cpp`** - Plik implementacji C++ z funkcjami sterowania
+- **`caliper_slave.ino`** - Główny plik używający modułu sterowania silnikiem
 
-#### Główne funkcje publiczne:
+#### Dostępne funkcje:
 
 ##### Inicjalizacja:
 - `initializeMotorController()` - Inicjalizacja sterownika i konfiguracja pinów
-- `setMotorConfig(MotorConfig config)` - Ustawienie pełnej konfiguracji
 
 ##### Sterowanie silnikiem:
-- `setMotorState(MotorState state)` - Ustawienie stanu silnika
-- `motorForward()` - Rotacja do przodu (IN1=HIGH, IN2=LOW)
-- `motorReverse()` - Rotacja do tyłu (IN1=LOW, IN2=HIGH)
-- `motorStop()` - Zatrzymanie (tryb coast) (IN1=LOW, IN2=LOW)
-- `motorBrake()` - Hamowanie (IN1=HIGH, IN2=HIGH)
-- `motorSleep()` - Tryb uśpienia
-- `motorWake()` - Wybudzenie z trybu uśpienia
-
-##### Monitorowanie:
-- `readMotorCurrent()` - Odczyt prądu silnika przez VISEN
-- `checkMotorFault()` - Sprawdzenie błędów (bez dedykowanego pinu)
-- `getMotorStatus()` - Status silnika jako string
-- `getMotorState()` - Aktualny stan silnika
-
-##### Konfiguracja:
-- `setCurrentLimit(float currentAmps)` - Ograniczenie prądu przez ISET
-- `configureCurrentMode(CurrentMode mode)` - Tryb kontroli prądu
-- `setLDOState(bool enabled)` - Sterowanie regulatorem 3.3V
-
-##### Dodatkowe:
-- `demoMotorControl()` - Demo funkcji
-- `emergencyStop()` - Awaryjne zatrzymanie
-- `resetMotorController()` - Reset sterownika
+- `setMotorSpeed(uint8_t speed, MotorState direction)` - Ustawienie prędkości i kierunku silnika (PWM)
+  - `speed=0, direction=MOTOR_STOP` - Zatrzymanie (tryb coast) (IN1=LOW, IN2=LOW)
+  - `speed>0, direction=MOTOR_FORWARD` - Rotacja do przodu z PWM
+  - `speed>0, direction=MOTOR_REVERSE` - Rotacja do tyłu z PWM
+  - `speed>0, direction=MOTOR_BRAKE` - Hamowanie aktywne
 
 #### Struktury danych:
 
 ```c
-typedef struct {
-  float maxCurrent;           // Maksymalny prąd (A)
-  float isetResistance;       // Rezystancja ISET (kΩ)
-  CurrentMode currentMode;    // Tryb kontroli prądu
-  bool ldoEnabled;           // Stan regulatora 3.3V
-} MotorConfig;
-
 typedef enum {
-  MOTOR_SLEEP = -1,      // Tryb uśpienia
   MOTOR_STOP = 0,        // Zatrzymanie/Coast
   MOTOR_FORWARD = 1,     // Rotacja do przodu
-  MOTOR_REVERSE = 2,      // Rotacja do tyłu
+  MOTOR_REVERSE = 2,     // Rotacja do tyłu
   MOTOR_BRAKE = 3        // Hamowanie aktywne
 } MotorState;
-
-typedef enum {
-  CURRENT_AUTO = 0,        // Automatyczna regulacja (wbudowana)
-  CURRENT_MANUAL = 1       // Ręczna kontrola przez ISET
-} CurrentMode;
 ```
 
 #### Użycie w głównym programie:
@@ -241,55 +194,37 @@ typedef enum {
 initializeMotorController();
 
 // W loop():
-if (setMotorState(MOTOR_FORWARD)) {
-  // Silnik pracuje do przodu
-}
-
-float current = readMotorCurrent();
-bool fault = checkMotorFault();
-
-if (fault) {
-  emergencyStop();
-}
+setMotorSpeed(128, MOTOR_FORWARD);  // Silnik pracuje do przodu z prędkością 50%
+setMotorSpeed(0, MOTOR_STOP);       // Zatrzymanie silnika
 ```
-
-#### Zabezpieczenia:
-
-- Ograniczenie prądu do 2.0A (maksymalny dla MP6550GG-Z)
-- Automatyczna detekcja i obsługa błędów
-- Sprawdzenie inicjalizacji przed operacjami
-- Zabezpieczenie przed rekurencyjną inicjalizacją
-- Auto-recovery w przypadku przekroczenia prądu
 
 #### Specyfikacje techniczne:
 
 - **Sterownik**: MP6550GG-Z (Single H-Bridge)
-- **Maksymalny prąd**: 2.0A (ograniczony programowo)
-- **Napięcie zasilania**: 1.8V - 22V
 - **Tryb sterowania**: PWM Input (IN1/IN2)
-- **Rozdzielczość prądu**: ~0.01A (przez VISEN)
-- **Czas reakcji**: < 200μs (tWAKE)
-- **Tryby sleep**: Osobne dla H-bridge i LDO
+- **Napięcie zasilania**: 1.8V - 22V
 
 #### Mapa pinów ESP32:
 
 ```cpp
 #define MOTOR_IN1_PIN 12       // IN1 input (PWM control input 1)
 #define MOTOR_IN2_PIN 13       // IN2 input (PWM control input 2)
-#define MOTOR_ISET_PIN 25       // ISET input (Current programming via DAC)
-#define MOTOR_VISEN_PIN 4      // VISEN output (Current sense voltage)
-#define MOTOR_nSLEEP_HB_PIN 34  // nSLEEP_HB input (H-bridge sleep control)
-#define MOTOR_nSLEEP_LDO_PIN 35 // nSLEEP_LDO input (LDO sleep control)
 ```
 
 #### Tabela sterowania MP6550GG-Z:
 
-| IN1 | IN2 | OUT1 | OUT2 | Funkcja |
-|-----|-----|------|------|---------|
-| L   | L   | Hi-Z | Hi-Z | Coast |
-| L   | H   | L    | H    | Reverse |
-| H   | L   | H    | L    | Forward |
-| H   | H   | L    | L    | Brake |
+| IN1  | IN2  | OUT1        | OUT2        | Funkcja                         |
+|------|------|-------------|-------------|----------------------------------|
+| 0    | 0    | Z           | Z           | Coast (outputs off)              |
+| PWM  | 0    | PWM (H/Z)   | PWM (L/Z)   | Forward/Coast at speed PWM %     |
+| 0    | PWM  | PWM (L/Z)   | PWM (H/Z)   | Reverse/Coast at speed PWM %     |
+| 1    | 1    | L           | L           | Brake low (outputs shorted)      |
+
+**Implementacja w kodzie:**
+- `setMotorSpeed(speed, MOTOR_FORWARD)` → IN1=PWM, IN2=0
+- `setMotorSpeed(speed, MOTOR_REVERSE)` → IN1=0, IN2=PWM
+- `setMotorSpeed(0, MOTOR_STOP)` → IN1=0, IN2=0 (Coast)
+- `setMotorSpeed(speed, MOTOR_BRAKE)` → IN1=1, IN2=1 (Brake low)
 
 Moduł jest gotowy do użycia w projekcie kalibratora z ESP32.
 
@@ -540,6 +475,14 @@ System obsługuje 52-bitowy strumień danych z suwarki cyfrowej:
 Projekt stworzony do celów edukacyjnych i hobbystycznych.
 
 ## Wersja i Aktualizacje
+
+**Wersja 1.2** (2025-11-30)
+- ✅ **REFACTORING**: Usunięto funkcję `setMotorState` i zastąpiono przez `setMotorSpeed`
+- ✅ **REFACTORING**: Usunięto funkcję `motorStop` i zastąpiono przez `setMotorSpeed(0, MOTOR_STOP)`
+- ✅ **OPTYMALIZACJA**: Usunięto nieużywaną definicję `MOTOR_SLEEP` z enuma MotorState
+- ✅ **POPRAWKA IMPLEMENTACJI**: Zaktualizowano sterowanie MP6550GG-Z zgodnie ze specyfikacją (PWM na IN1/IN2)
+- ✅ **MODUŁ SILNIKA**: Zaktualizowano sterowanie silnikiem do używania PWM z kontrolą prędkości
+- ✅ **DOKUMENTACJA**: Zaktualizowano README.md i dokumentację kodu
 
 **Wersja 1.1** (2025-11-10)
 - ✅ Dodano zaawansowaną walidację danych
