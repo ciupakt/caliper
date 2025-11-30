@@ -12,4 +12,5 @@ javascripts/bundles
 stylesheets/bundles
 arduino-cli.exe
 arduino-cli.zip
+*.csv
 

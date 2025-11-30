@@ -19,6 +19,12 @@ String lastMeasurement = "Brak pomiaru";
 String lastBatteryVoltage = "Brak danych";
 bool measurementReady = false;
 
+// Session management variables
+String currentSessionName = "";
+bool sessionActive = false;
+int calibrationOffset = 0;
+float calibrationError = 0.0;
+
 String macToString(const uint8_t *mac) {
   char buf[18];
   sprintf(buf, "%02X,%02X,%02X,%02X,%02X,%02X",
@@ -142,11 +148,13 @@ void handleRoot() {
   String html = "<!DOCTYPE html><html><head>";
   html += "<meta charset='UTF-8'>";
   html += "<meta name='viewport' content='width=device-width, initial-scale=1.0'>";
-  html += "<title>ESP32 Pomiar</title>";
+  html += "<title>ESP32 System Pomiarowy</title>";
   html += "<style>";
   html += "body { font-family: Arial; max-width: 600px; margin: 50px auto; padding: 20px; background: #f0f0f0; }";
   html += ".container { background: white; padding: 30px; border-radius: 10px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }";
   html += "h1 { color: #333; text-align: center; }";
+  html += ".view { display: block; }";
+  html += ".hidden { display: none; }";
   html += ".measurement { font-size: 48px; text-align: center; color: #007bff; margin: 30px 0; padding: 20px; background: #e7f3ff; border-radius: 5px; }";
   html += "button { width: 100%; padding: 15px; font-size: 18px; background: #007bff; color: white; border: none; border-radius: 5px; cursor: pointer; margin: 10px 0; }";
   html += "button:hover { background: #0056b3; }";
@@ -158,76 +166,219 @@ void handleRoot() {
   html += "button.motor.stop { background: #dc3545; }";
   html += "button.motor.stop:hover { background: #c82333; }";
   html += ".status { text-align: center; color: #666; margin-top: 20px; font-size: 14px; }";
+  html += "input { width: 100%; padding: 15px; font-size: 18px; border: 1px solid #ddd; border-radius: 5px; margin: 10px 0; box-sizing: border-box; outline: none; }";
+  html += "input:focus { border-color: #007bff; box-shadow: 0 0 5px rgba(0,123,255,0.5); }";
+  html += ".result { text-align: center; font-size: 16px; color: #333; margin: 15px 0; padding: 10px; background: #f8f9fa; border-radius: 5px; }";
   html += "</style></head><body>";
   html += "<div class='container'>";
+  
+  // Widok Menu
+  html += "<div id='menu-view' class='view'>";
   html += "<h1>System Pomiarowy ESP32</h1>";
-  html += "<div class='measurement' id='value'>" + lastMeasurement + "</div>";
+  html += "<button onclick='showView(\"calibration\")'>Kalibracja</button>";
+  html += "<button onclick='showView(\"session-name\")'>Nowa sesja pomiarowa</button>";
+  html += "</div>";
+  
+  // Widok Kalibracja
+  html += "<div id='calibration-view' class='view hidden'>";
+  html += "<h1>Kalibracja</h1>";
+  html += "<input type='number' id='offset-input' min='74' max='165' placeholder='Offset (74-165)'>";
+  html += "<button onclick='calibrate()'>Kalibruj</button>";
+  html += "<button onclick='showView(\"menu\")'>Menu</button>";
+  html += "<div id='calibration-result' class='result'></div>";
+  html += "</div>";
+  
+  // Widok Nazwa Sesji
+  html += "<div id='session-name-view' class='view hidden'>";
+  html += "<h1>Nowa Sesja Pomiarowa</h1>";
+  html += "<input type='text' id='session-name-input' placeholder='Nazwa sesji' autocomplete='off' autofocus>";
+  html += "<button onclick='startSession()'>Start</button>";
+  html += "<button onclick='showView(\"menu\")'>Menu</button>";
+  html += "</div>";
+  
+  // Widok Pomiarów
+  html += "<div id='measurement-view' class='view hidden'>";
+  html += "<h1>Sesja: <span id='session-name-display'></span></h1>";
+  html += "<div class='measurement' id='measurement-value'>" + lastMeasurement + "</div>";
   html += "<div style='text-align: center; font-size: 18px; color: #666; margin: 10px 0;'>Napięcie baterii: <span id='battery'>" + lastBatteryVoltage + "</span></div>";
-  html += "<button onclick='measure()'>Wykonaj Pomiar</button>";
-  html += "<button onclick='refresh()'>Odswiez Wynik</button>";
+  html += "<button onclick='measureSession()'>Wykonaj pomiar</button>";
+  html += "<button onclick='refreshSession()'>Odśwież wynik</button>";
   html += "<button class='motor forward' onclick='motorForward()'>Forward</button>";
   html += "<button class='motor reverse' onclick='motorReverse()'>Reverse</button>";
   html += "<button class='motor stop' onclick='motorStop()'>Stop</button>";
+  html += "<button onclick='showView(\"menu\")'>Menu</button>";
   html += "<div class='status' id='status'></div>";
   html += "</div>";
+  
+  html += "</div>";
   html += "<script>";
-  html += "function measure() {";
-  html += "  document.getElementById('status').textContent = 'Wysylanie zadania...';";
-  html += "  fetch('/measure')";
-  html += "    .then(response => response.text())";
+  
+  // Funkcje zarządzania widokami
+  html += "function showView(viewId) {";
+  html += "  document.querySelectorAll('.view').forEach(view => {";
+  html += "    view.classList.add('hidden');";
+  html += "  });";
+  html += "  document.getElementById(viewId + '-view').classList.remove('hidden');";
+  html += "}";
+  
+  // Funkcje kalibracji
+  html += "function calibrate() {";
+  html += "  const offset = document.getElementById('offset-input').value;";
+  html += "  if (offset < 74 || offset > 165) {";
+  html += "    alert('Offset musi być w zakresie 74-165');";
+  html += "    return;";
+  html += "  }";
+  html += "  document.getElementById('status').textContent = 'Wykonywanie kalibracji...';";
+  html += "  fetch('/calibrate', {";
+  html += "    method: 'POST',";
+  html += "    headers: {'Content-Type': 'application/x-www-form-urlencoded'},";
+  html += "    body: 'offset=' + offset";
+  html += "  })";
+  html += "    .then(response => {";
+  html += "      if (!response.ok) {";
+  html += "        return response.json().then(err => { throw new Error(err.error || 'Błąd serwera'); });";
+  html += "      }";
+  html += "      return response.json();";
+  html += "    })";
   html += "    .then(data => {";
-  html += "      document.getElementById('status').textContent = 'Zadanie wyslane! Odczekaj chwile i odswiez.';";
-  html += "      setTimeout(refresh, 1500);";
+  html += "      if (data.error && !data.offset) {";
+  html += "        document.getElementById('status').textContent = 'Błąd: ' + data.error;";
+  html += "      } else {";
+  html += "        document.getElementById('calibration-result').innerHTML = 'Offset: ' + data.offset + '<br>Błąd: ' + data.error + ' mm';";
+  html += "        document.getElementById('status').textContent = 'Kalibracja zakończona';";
+  html += "      }";
   html += "    })";
   html += "    .catch(error => {";
-  html += "      document.getElementById('status').textContent = 'Blad: ' + error;";
+  html += "      document.getElementById('status').textContent = 'Błąd: ' + error.message;";
   html += "    });";
   html += "}";
-  html += "function refresh() {";
+  
+  // Funkcje sesji pomiarowej
+  html += "function startSession() {";
+  html += "  const sessionName = document.getElementById('session-name-input').value;";
+  html += "  if (!sessionName) {";
+  html += "    alert('Podaj nazwę sesji');";
+  html += "    return;";
+  html += "  }";
+  html += "  fetch('/start_session', {";
+  html += "    method: 'POST',";
+  html += "    headers: {'Content-Type': 'application/x-www-form-urlencoded'},";
+  html += "    body: 'sessionName=' + encodeURIComponent(sessionName)";
+  html += "  })";
+  html += "    .then(response => {";
+  html += "      if (!response.ok) {";
+  html += "        return response.json().then(err => { throw new Error(err.error || 'Błąd serwera'); });";
+  html += "      }";
+  html += "      return response.json();";
+  html += "    })";
+  html += "    .then(data => {";
+  html += "      if (data.error) {";
+  html += "        document.getElementById('status').textContent = 'Błąd: ' + data.error;";
+  html += "      } else {";
+  html += "        document.getElementById('session-name-display').textContent = sessionName;";
+  html += "        showView('measurement');";
+  html += "      }";
+  html += "    })";
+  html += "    .catch(error => {";
+  html += "      document.getElementById('status').textContent = 'Błąd: ' + error.message;";
+  html += "    });";
+  html += "}";
+  
+  html += "function measureSession() {";
+  html += "  document.getElementById('status').textContent = 'Wysyłanie zadania...';";
+  html += "  fetch('/measure_session', {";
+  html += "    method: 'POST'";
+  html += "  })";
+  html += "    .then(response => {";
+  html += "      if (!response.ok) {";
+  html += "        return response.json().then(err => { throw new Error(err.error || 'Błąd serwera'); });";
+  html += "      }";
+  html += "      return response.json();";
+  html += "    })";
+  html += "    .then(data => {";
+  html += "      if (data.error) {";
+  html += "        document.getElementById('status').textContent = 'Błąd: ' + data.error;";
+  html += "      } else {";
+  html += "        document.getElementById('measurement-value').textContent = data.measurement;";
+  html += "        document.getElementById('status').textContent = 'Zadanie wysłane! Odczekaj chwile i odśwież.';";
+  html += "        setTimeout(refreshSession, 1500);";
+  html += "      }";
+  html += "    })";
+  html += "    .catch(error => {";
+  html += "      document.getElementById('status').textContent = 'Błąd: ' + error.message;";
+  html += "    });";
+  html += "}";
+  
+  html += "function refreshSession() {";
   html += "  document.getElementById('status').textContent = 'Pobieranie danych...';";
   html += "  fetch('/read')";
-  html += "    .then(response => response.text())";
+  html += "    .then(response => {";
+  html += "      if (!response.ok) {";
+  html += "        throw new Error('Błąd serwera: ' + response.status);";
+  html += "      }";
+  html += "      return response.text();";
+  html += "    })";
   html += "    .then(data => {";
-  html += "      document.getElementById('value').textContent = data;";
+  html += "      document.getElementById('measurement-value').textContent = data;";
   html += "      document.getElementById('status').textContent = 'Zaktualizowano: ' + new Date().toLocaleTimeString();";
   html += "    })";
   html += "    .catch(error => {";
-  html += "      document.getElementById('status').textContent = 'Blad: ' + error;";
+  html += "      document.getElementById('status').textContent = 'Błąd: ' + error.message;";
   html += "    });";
   html += "}";
+  
+  // Funkcje sterowania silnikiem
   html += "function motorForward() {";
-  html += "  document.getElementById('status').textContent = 'Wysylanie komendy Forward...';";
+  html += "  document.getElementById('status').textContent = 'Wysyłanie komendy Forward...';";
   html += "  fetch('/forward')";
-  html += "    .then(response => response.text())";
+  html += "    .then(response => {";
+  html += "      if (!response.ok) {";
+  html += "        throw new Error('Błąd serwera: ' + response.status);";
+  html += "      }";
+  html += "      return response.text();";
+  html += "    })";
   html += "    .then(data => {";
   html += "      document.getElementById('status').textContent = 'Forward: ' + data;";
   html += "    })";
   html += "    .catch(error => {";
-  html += "      document.getElementById('status').textContent = 'Blad: ' + error;";
+  html += "      document.getElementById('status').textContent = 'Błąd: ' + error.message;";
   html += "    });";
   html += "}";
+  
   html += "function motorReverse() {";
-  html += "  document.getElementById('status').textContent = 'Wysylanie komendy Reverse...';";
+  html += "  document.getElementById('status').textContent = 'Wysyłanie komendy Reverse...';";
   html += "  fetch('/reverse')";
-  html += "    .then(response => response.text())";
+  html += "    .then(response => {";
+  html += "      if (!response.ok) {";
+  html += "        throw new Error('Błąd serwera: ' + response.status);";
+  html += "      }";
+  html += "      return response.text();";
+  html += "    })";
   html += "    .then(data => {";
   html += "      document.getElementById('status').textContent = 'Reverse: ' + data;";
   html += "    })";
   html += "    .catch(error => {";
-  html += "      document.getElementById('status').textContent = 'Blad: ' + error;";
+  html += "      document.getElementById('status').textContent = 'Błąd: ' + error.message;";
   html += "    });";
   html += "}";
+  
   html += "function motorStop() {";
-  html += "  document.getElementById('status').textContent = 'Wysylanie komendy Stop...';";
+  html += "  document.getElementById('status').textContent = 'Wysyłanie komendy Stop...';";
   html += "  fetch('/stop')";
-  html += "    .then(response => response.text())";
+  html += "    .then(response => {";
+  html += "      if (!response.ok) {";
+  html += "        throw new Error('Błąd serwera: ' + response.status);";
+  html += "      }";
+  html += "      return response.text();";
+  html += "    })";
   html += "    .then(data => {";
   html += "      document.getElementById('status').textContent = 'Stop: ' + data;";
   html += "    })";
   html += "    .catch(error => {";
-  html += "      document.getElementById('status').textContent = 'Blad: ' + error;";
+  html += "      document.getElementById('status').textContent = 'Błąd: ' + error.message;";
   html += "    });";
   html += "}";
+  
   html += "</script>";
   html += "</body></html>";
   
@@ -269,6 +420,77 @@ void handleMotorStop() {
   server.send(200, "text/plain", "Silnik: Stop");
 }
 
+void handleCalibrate() {
+  String offset = server.arg("offset");
+  int offsetValue = offset.toInt();
+  
+  if (offsetValue < 74 || offsetValue > 165) {
+    server.send(400, "application/json", "{\"error\":\"Offset poza zakresem\"}");
+    return;
+  }
+  
+  // Zapisz offset i wyślij przez Serial
+  calibrationOffset = offsetValue;
+  Serial.print("CAL_OFFSET:");
+  Serial.println(offsetValue);
+  
+  // Wykonaj pomiar
+  requestMeasurement();
+  
+  // Poczekaj na wynik
+  delay(1000);
+  
+  // Wyślij błąd przez Serial
+  if (systemStatus.measurementValid) {
+    calibrationError = systemStatus.lastMeasurement;
+    Serial.print("CAL_ERROR:");
+    Serial.println(calibrationError, 3);
+  }
+  
+  String response = "{\"offset\":" + offset + ",\"error\":" +
+                   String(calibrationError, 3) + "}";
+  server.send(200, "application/json", response);
+}
+
+void handleStartSession() {
+  String sessionName = server.arg("sessionName");
+  sessionName.replace("%20", " "); // Zamień spacje z URL encoding
+  
+  if (sessionName.length() == 0) {
+    server.send(400, "application/json", "{\"error\":\"Nazwa sesji nie może być pusta\"}");
+    return;
+  }
+  
+  currentSessionName = sessionName;
+  sessionActive = true;
+  
+  String response = "{\"sessionName\":\"" + sessionName + "\",\"active\":true}";
+  server.send(200, "application/json", response);
+}
+
+void handleMeasureSession() {
+  if (!sessionActive) {
+    server.send(400, "application/json", "{\"error\":\"Sesja nieaktywna\"}");
+    return;
+  }
+  
+  requestMeasurement();
+  
+  // Poczekaj na wynik
+  delay(1000);
+  
+  if (systemStatus.measurementValid) {
+    // Wyślij przez Serial
+    Serial.print("MEAS_SESSION:");
+    Serial.print(currentSessionName);
+    Serial.print(" ");
+    Serial.println(systemStatus.lastMeasurement, 3);
+  }
+  
+  String response = "{\"sessionName\":\"" + currentSessionName +
+                   "\",\"measurement\":\"" + lastMeasurement + "\"}";
+  server.send(200, "application/json", response);
+}
 
 void printSerialHelp() {
   Serial.println("\n=== DOSTĘPNE KOMENDY SERIAL ===");
@@ -322,6 +544,18 @@ void setup() {
   server.on("/forward", handleMotorForward);
   server.on("/reverse", handleMotorReverse);
   server.on("/stop", handleMotorStop);
+  server.on("/calibrate", HTTP_POST, handleCalibrate);
+  server.on("/start_session", HTTP_POST, handleStartSession);
+  server.on("/measure_session", HTTP_POST, handleMeasureSession);
+  
+  // Handle 404 errors with proper JSON response
+  server.onNotFound([]() {
+    if (server.method() == HTTP_POST) {
+      server.send(404, "application/json", "{\"error\":\"Not found\",\"message\":\"Endpoint nie istnieje\"}");
+    } else {
+      server.send(404, "text/plain", "Not found");
+    }
+  });
   
   server.begin();
   Serial.println("Serwer HTTP uruchomiony na porcie " + String(WEB_SERVER_PORT));

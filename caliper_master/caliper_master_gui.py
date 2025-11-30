@@ -180,35 +180,70 @@ def key_press_handler(sender, key):
 def process_measurement_data(data):
     """Process measurement data with validation and storage"""
     try:
-        val_str = data.split(":")[1]
-        val = float(val_str)
-        
-        # Validate range
-        if -1000.0 <= val <= 1000.0:
-            ts = datetime.now().isoformat(timespec='seconds')
-            measurement_str = f"{val_str} mm"
-            app.meas_history.append((ts, measurement_str))
-            app.measurement_count += 1
+        # Obsługa danych kalibracji
+        if data.startswith("CAL_OFFSET:"):
+            val_str = data.split(":")[1]
+            log_rx(f"[KALIBRACJA] Offset: {val_str}")
+            return
             
-            # Update plot with rolling window
-            app.plot_x.append(app.measurement_count)
-            app.plot_y.append(val)
+        if data.startswith("CAL_ERROR:"):
+            val_str = data.split(":")[1]
+            log_rx(f"[KALIBRACJA] Błąd: {val_str} mm")
+            return
             
-            # Update GUI elements
-            dpg.set_value("plot_data", [list(app.plot_x), list(app.plot_y)])
-            update_plot_axes()
-            show_measurements()
+        # Obsługa danych sesji pomiarowej
+        if data.startswith("MEAS_SESSION:"):
+            parts = data.split(" ", 2)
+            if len(parts) >= 3:
+                session_name = parts[1]
+                val_str = parts[2]
+                log_rx(f"[SESJA {session_name}] Pomiar: {val_str} mm")
+                
+                # Zapis do CSV z nazwą sesji
+                if app.csv_writer:
+                    ts = datetime.now().isoformat(timespec='seconds')
+                    measurement_str = f"{val_str} mm"
+                    if app.timestamp_on:
+                        app.csv_writer.writerow([ts, f"[{session_name}] {measurement_str}"])
+                    else:
+                        app.csv_writer.writerow([f"[{session_name}] {measurement_str}"])
+            return
             
-            # Save to CSV
-            if app.csv_writer:
-                if app.timestamp_on:
-                    app.csv_writer.writerow([ts, measurement_str])
-                else:
-                    app.csv_writer.writerow([measurement_str])
-        else:
-            log_rx(f"BLAD: Wartosc poza zakresem: {val}")
+        # Istniejąca obsługa pomiarów VAL_1:
+        if data.startswith("VAL_1:"):
+            val_str = data.split(":")[1]
+            val = float(val_str)
+            
+            # Validate range
+            if -1000.0 <= val <= 1000.0:
+                ts = datetime.now().isoformat(timespec='seconds')
+                measurement_str = f"{val_str} mm"
+                app.meas_history.append((ts, measurement_str))
+                app.measurement_count += 1
+                
+                # Update plot with rolling window
+                app.plot_x.append(app.measurement_count)
+                app.plot_y.append(val)
+                
+                # Update GUI elements
+                dpg.set_value("plot_data", [list(app.plot_x), list(app.plot_y)])
+                update_plot_axes()
+                show_measurements()
+                
+                # Save to CSV
+                if app.csv_writer:
+                    if app.timestamp_on:
+                        app.csv_writer.writerow([ts, measurement_str])
+                    else:
+                        app.csv_writer.writerow([measurement_str])
+            else:
+                log_rx(f"BLAD: Wartosc poza zakresem: {val}")
+        elif "SILNIK" in data.upper() or "blad silnika" in data.lower():
+            log_rx(f"[SILNIK] {data}")
     except ValueError as val_err:
-        log_rx(f"BLAD: Nieprawidlowa wartosc: {val_str} - {str(val_err)}")
+        log_rx(f"BLAD: Nieprawidlowa wartosc - {str(val_err)}")
+    except Exception as e:
+        log_rx(f"BLAD przetwarzania danych: {str(e)}")
 
 def read_serial():
     while True:
@@ -219,7 +254,7 @@ def read_serial():
                     log_rx(f"< {data}")
                     
                     # Process measurement data
-                    if data.startswith("VAL_1:"):
+                    if data.startswith("VAL_1:") or data.startswith("CAL_OFFSET:") or data.startswith("CAL_ERROR:") or data.startswith("MEAS_SESSION:"):
                         process_measurement_data(data)
                     elif "SILNIK" in data.upper() or "blad silnika" in data.lower():
                         log_rx(f"[SILNIK] {data}")
