@@ -1,5 +1,7 @@
 #include <esp_now.h>
 #include <WiFi.h>
+#include<Wire.h>
+#include<ADXL345_WE.h>
 #include "caliper_slave_motor_ctrl.h"
 #include "config.h"
 #include "common.h"
@@ -18,6 +20,10 @@ volatile bool measurementRequested = false;
 
 Message sensorData;
 esp_now_peer_info_t peerInfo;
+
+#define ADXL345_I2CADDR 0x53 // 0x1D if SDO = HIGH
+xyzFloat raw, g, angle, corrAngle;
+ADXL345_WE myAcc = ADXL345_WE(ADXL345_I2CADDR);
 
 void IRAM_ATTR clockISR() {
   if (bitCount < 52) {
@@ -174,6 +180,14 @@ void setup() {
   pinMode(TRIG_PIN, OUTPUT);
   digitalWrite(TRIG_PIN, HIGH);
 
+  Wire.begin();
+  if(!myAcc.init()){
+    Serial.println("ADXL345 not connected!");
+  }
+
+  myAcc.setDataRate(ADXL345_DATA_RATE_50);
+  myAcc.setRange(ADXL345_RANGE_2G);
+
   WiFi.mode(WIFI_STA);
   delay(100);
 
@@ -240,6 +254,18 @@ void loop() {
     
     // Add battery voltage data
     sensorData.batteryVoltage = readBatteryVoltage();
+    myAcc.getRawValues(&raw);
+    myAcc.getGValues(&g);
+    myAcc.getAngles(&angle);
+    myAcc.getCorrAngles(&corrAngle);
+    /* Angles use the corrected raws. Angles are simply calculated by
+    angle = arcsin(g Value) */
+    Serial.print("Angle x  = ");
+    Serial.print(angle.x);
+    Serial.print("  |  Angle y  = ");
+    Serial.print(angle.y);
+    Serial.print("  |  Angle z  = ");
+    Serial.println(angle.z);
 
     esp_err_t sendResult = esp_now_send(masterAddress, (uint8_t *) &sensorData, sizeof(sensorData));
     if (sendResult == ESP_OK) {
@@ -248,7 +274,7 @@ void loop() {
       Serial.print(result, 3);
       Serial.print(" mm, Napięcie baterii: ");
       Serial.print(sensorData.batteryVoltage);
-      Serial.print("mV");
+      Serial.println("mV");
     } else {
       Serial.print("BLAD wysylania wyniku: ");
       Serial.println(sendResult);
@@ -287,6 +313,20 @@ void loop() {
         Serial.print(sensorData.batteryVoltage);
         Serial.println("mV");
       }
+
+      myAcc.getRawValues(&raw);
+      myAcc.getGValues(&g);
+      myAcc.getAngles(&angle);
+      myAcc.getCorrAngles(&corrAngle);
+      /* Angles use the corrected raws. Angles are simply calculated by
+      angle = arcsin(g Value) */
+      Serial.print("Angle x  = ");
+      Serial.print(angle.x);
+      Serial.print("  |  Angle y  = ");
+      Serial.print(angle.y);
+      Serial.print("  |  Angle z  = ");
+      Serial.println(angle.z);
+
     }
   }
 }
