@@ -10,7 +10,7 @@
 #define COMMUNICATION_H
 
 #include "config.h"
-#include "common.h"
+#include <shared_common.h>
 #include <esp_now.h>
 #include <WiFi.h>
 

@@ -1,0 +1,11 @@
+# Caliper Master GUI - Python Dependencies
+# Install with: pip install -r requirements.txt
+
+# GUI Framework
+dearpygui>=1.9.0
+
+# Serial Communication
+pyserial>=3.5
+
+# Optional: Development dependencies
+# pip install -r requirements-dev.txt for development

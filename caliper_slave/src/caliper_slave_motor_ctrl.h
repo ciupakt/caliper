@@ -17,7 +17,7 @@
 #define CALIPER_SLAVE_MOTOR_CTRL_H
 
 #include <Arduino.h>
-#include "common.h"
+#include <shared_common.h>
 
 // Motor pin definitions
 #define MOTOR_IN2_PIN 12

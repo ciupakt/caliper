@@ -2,11 +2,11 @@
 #include <WiFi.h>
 #include <WebServer.h>
 #include "config.h"
-#include "common.h"
+#include <shared_common.h>
 #include "communication.h"
 
-// Slave device MAC address
-uint8_t slaveAddress[] = {0xA0, 0xB7, 0x65, 0x21, 0x77, 0x5C};
+// Slave device MAC address (defined in config.h)
+uint8_t slaveAddress[] = SLAVE_MAC_ADDR;
 
 // Global objects
 WebServer server(WEB_SERVER_PORT);

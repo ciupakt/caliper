@@ -4,14 +4,10 @@
 #include <ADXL345_WE.h>
 #include "caliper_slave_motor_ctrl.h"
 #include "config.h"
-#include "common.h"
+#include <shared_common.h>
 
-// #define CLOCK_PIN 23
-// #define DATA_PIN 22
-// #define TRIG_PIN 21
-
-// Adres MAC mastera
-uint8_t masterAddress[] = {0xA0, 0xB7, 0x65, 0x20, 0xC0, 0x8C};
+// Master device MAC address (defined in config.h)
+uint8_t masterAddress[] = MASTER_MAC_ADDR;
 
 volatile uint8_t bitBuffer[52];
 volatile int bitCount = 0;

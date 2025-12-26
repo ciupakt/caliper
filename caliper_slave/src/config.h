@@ -1,9 +1,12 @@
 /**
  * @file config.h
- * @brief Central configuration file for ESP32 Caliper Slave System
+ * @brief Configuration file for ESP32 Caliper Slave
  * @author System Generated
- * @date 2025-11-30
- * @version 1.0
+ * @date 2025-12-26
+ * @version 2.0
+ * 
+ * This file contains Slave-specific configuration.
+ * Common settings are inherited from shared/config_base.h
  */
 
 #ifndef CONFIG_SLAVE_H
@@ -11,37 +14,30 @@
 
 #include <Arduino.h>
 
-// ESP-NOW Configuration
-#define ESPNOW_WIFI_CHANNEL 1
-#define ESPNOW_RETRY_DELAY_MS 100
-#define ESPNOW_MAX_RETRIES 3
+// Include shared base configuration
+#include <shared_config.h>
 
-// Timing Configuration
-#define MEASUREMENT_TIMEOUT_MS 200
-#define BATTERY_UPDATE_INTERVAL_MS 1000
-#define MOTOR_COMMAND_TIMEOUT_MS 50
+// ============================================================================
+// Device MAC Address Configuration
+// ============================================================================
 
-// Pin Definitions
-#define CLOCK_PIN 18
-#define DATA_PIN 19
-#define TRIG_PIN 5
-#define BATTERY_VOLTAGE_PIN 34
+/**
+ * @brief MAC address of the Master device
+ * To find the MAC address, run the master and check Serial output at startup.
+ */
+#define MASTER_MAC_ADDR {0xA0, 0xB7, 0x65, 0x20, 0xC0, 0x8C}
 
-// Motor Pins (from motor controller)
-#define MOTOR_IN1_PIN 13
-#define MOTOR_IN2_PIN 12
+// ============================================================================
+// Slave-specific Pin Aliases (for backward compatibility)
+// ============================================================================
+// These use the definitions from config_base.h
+#define CLOCK_PIN CALIPER_CLOCK_PIN
+#define DATA_PIN CALIPER_DATA_PIN
+#define TRIG_PIN CALIPER_TRIG_PIN
 
-// Measurement Validation
-#define MEASUREMENT_MIN_VALUE -1000.0f
-#define MEASUREMENT_MAX_VALUE 1000.0f
-#define INVALID_MEASUREMENT_VALUE -999.0f
-
-// ADC Configuration
-#define ADC_RESOLUTION 4095
-#define ADC_REFERENCE_VOLTAGE_MV 3300
+// ============================================================================
+// Slave-specific Settings
+// ============================================================================
 #define ADC_SAMPLES 8
-
-// Debug Configuration
-#define DEBUG_ENABLED true
 
 #endif // CONFIG_SLAVE_H
