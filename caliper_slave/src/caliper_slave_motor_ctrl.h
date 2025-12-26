@@ -20,29 +20,30 @@
 #include "common.h"
 
 // Motor pin definitions
-#define MOTOR_IN2_PIN   12
-#define MOTOR_IN1_PIN   13
+#define MOTOR_IN2_PIN 12
+#define MOTOR_IN1_PIN 13
 
 #ifdef __cplusplus
-extern "C" {
+extern "C"
+{
 #endif
 
-/**
- * @brief Initialize the motor controller
- * @details
- * Configures motor pins for PWM control.
- * This function must be called before using any other motor control functions.
- */
-void initializeMotorController(void);
+    /**
+     * @brief Initialize the motor controller
+     * @details
+     * Configures motor pins for PWM control.
+     * This function must be called before using any other motor control functions.
+     */
+    void initializeMotorController(void);
 
-/**
- * @brief Set motor speed and direction
- * @param speed Motor speed (0-255)
- * @param direction Motor direction (MOTOR_STOP, MOTOR_FORWARD, MOTOR_REVERSE, MOTOR_BRAKE)
- * @details
- * Sets PWM-controlled motor speed. Speed 0 stops the motor, 255 is maximum speed.
- */
-void setMotorSpeed(uint8_t speed, MotorState direction);
+    /**
+     * @brief Set motor speed and direction
+     * @param speed Motor speed (0-255)
+     * @param direction Motor direction (MOTOR_STOP, MOTOR_FORWARD, MOTOR_REVERSE, MOTOR_BRAKE)
+     * @details
+     * Sets PWM-controlled motor speed. Speed 0 stops the motor, 255 is maximum speed.
+     */
+    void setMotorSpeed(uint8_t speed, MotorState direction);
 
 #ifdef __cplusplus
 }

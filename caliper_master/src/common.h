@@ -12,7 +12,8 @@
 #include <stdint.h>
 
 // Command types for ESP-NOW communication
-enum CommandType : char {
+enum CommandType : char
+{
   CMD_MEASURE = 'M',
   CMD_FORWARD = 'F',
   CMD_REVERSE = 'R',
@@ -21,15 +22,17 @@ enum CommandType : char {
 };
 
 // Motor state enumeration
-enum MotorState : uint8_t {
-  MOTOR_STOP = 0,     /**< Motor stopped (coast) */
-  MOTOR_FORWARD = 1,  /**< Motor rotating forward */
-  MOTOR_REVERSE = 2,  /**< Motor rotating reverse */
-  MOTOR_BRAKE = 3     /**< Motor braking */
+enum MotorState : uint8_t
+{
+  MOTOR_STOP = 0,    /**< Motor stopped (coast) */
+  MOTOR_FORWARD = 1, /**< Motor rotating forward */
+  MOTOR_REVERSE = 2, /**< Motor rotating reverse */
+  MOTOR_BRAKE = 3    /**< Motor braking */
 };
 
 // Error codes
-enum ErrorCode : uint8_t {
+enum ErrorCode : uint8_t
+{
   ERR_NONE = 0,
   ERR_ESPNOW_SEND,
   ERR_MEASUREMENT_TIMEOUT,
@@ -39,23 +42,25 @@ enum ErrorCode : uint8_t {
 };
 
 // Communication message structure
-struct Message {
-  float measurement;        /**< Measurement value in mm */
+struct Message
+{
+  float measurement;       /**< Measurement value in mm */
   bool valid;              /**< Whether measurement is valid */
-  uint32_t timestamp;       /**< Timestamp from system start */
-  CommandType command;      /**< Command type */
-  uint16_t batteryVoltage;  /**< Battery voltage in millivolts */
+  uint32_t timestamp;      /**< Timestamp from system start */
+  CommandType command;     /**< Command type */
+  uint16_t batteryVoltage; /**< Battery voltage in millivolts */
 };
 
 // System status structure
-struct SystemStatus {
+struct SystemStatus
+{
   float lastMeasurement;     /**< Last valid measurement */
   uint16_t batteryVoltage;   /**< Current battery voltage */
   bool motorRunning;         /**< Whether motor is running */
   MotorState motorDirection; /**< Current motor direction */
   uint32_t lastUpdate;       /**< Last update timestamp */
-  bool measurementValid;      /**< Whether last measurement is valid */
-  bool communicationActive;   /**< Whether ESP-NOW communication is active */
+  bool measurementValid;     /**< Whether last measurement is valid */
+  bool communicationActive;  /**< Whether ESP-NOW communication is active */
 };
 
 #endif // COMMON_H

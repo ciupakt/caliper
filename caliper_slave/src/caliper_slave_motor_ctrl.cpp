@@ -24,7 +24,6 @@ void initializeMotorController(void)
   // Configure pins as outputs/inputs
   pinMode(MOTOR_IN1_PIN, OUTPUT);
   pinMode(MOTOR_IN2_PIN, OUTPUT);
-
 }
 
 void setMotorSpeed(uint8_t speed, MotorState direction)
@@ -33,17 +32,19 @@ void setMotorSpeed(uint8_t speed, MotorState direction)
   speed = constrain(speed, 0, 255);
 
   // Optimized lookup table for motor control
-  static const struct {
+  static const struct
+  {
     uint8_t in1, in2;
-    const char* name;
+    const char *name;
   } motorTable[] = {
-    {0, 0, "Stop"},           // MOTOR_STOP
-    {0, 255, "Forward"},      // MOTOR_FORWARD (will be modified below)
-    {255, 0, "Reverse"},      // MOTOR_REVERSE (will be modified below)
-    {255, 255, "Brake"}       // MOTOR_BRAKE
+      {0, 0, "Stop"},      // MOTOR_STOP
+      {0, 255, "Forward"}, // MOTOR_FORWARD (will be modified below)
+      {255, 0, "Reverse"}, // MOTOR_REVERSE (will be modified below)
+      {255, 255, "Brake"}  // MOTOR_BRAKE
   };
 
-  if (direction > MOTOR_BRAKE) {
+  if (direction > MOTOR_BRAKE)
+  {
     Serial.println("Error: Invalid motor direction");
     digitalWrite(MOTOR_IN1_PIN, LOW);
     digitalWrite(MOTOR_IN2_PIN, LOW);
@@ -51,13 +52,18 @@ void setMotorSpeed(uint8_t speed, MotorState direction)
   }
 
   // Handle PWM cases with speed control
-  if (direction == MOTOR_FORWARD) {
+  if (direction == MOTOR_FORWARD)
+  {
     analogWrite(MOTOR_IN1_PIN, 255 - speed);
     analogWrite(MOTOR_IN2_PIN, 255);
-  } else if (direction == MOTOR_REVERSE) {
+  }
+  else if (direction == MOTOR_REVERSE)
+  {
     analogWrite(MOTOR_IN1_PIN, 255);
     analogWrite(MOTOR_IN2_PIN, 255 - speed);
-  } else {
+  }
+  else
+  {
     // Direct values for STOP and BRAKE
     analogWrite(MOTOR_IN1_PIN, motorTable[direction].in1);
     analogWrite(MOTOR_IN2_PIN, motorTable[direction].in2);
@@ -66,15 +72,16 @@ void setMotorSpeed(uint8_t speed, MotorState direction)
   // Optimized debug output (only when speed changes significantly or direction changes)
   static uint8_t lastSpeed = 255;
   static MotorState lastDirection = MOTOR_STOP;
-  
-  if (abs(speed - lastSpeed) > 10 || direction != lastDirection) {
+
+  if (abs(speed - lastSpeed) > 10 || direction != lastDirection)
+  {
     Serial.print("Motor: ");
     Serial.print(speed);
     Serial.print("/255 (");
     Serial.print((speed * 100) / 255);
     Serial.print("%) - ");
     Serial.println(motorTable[direction].name);
-    
+
     lastSpeed = speed;
     lastDirection = direction;
   }
