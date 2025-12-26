@@ -30,7 +30,8 @@ void IRAM_ATTR clockISR()
   if (bitCount < 52)
   {
     uint8_t bit = digitalRead(DATA_PIN);
-    bitBuffer[bitCount++] = bit;
+    bitBuffer[bitCount] = bit;
+    bitCount = bitCount + 1;
     if (bitCount == 52)
     {
       dataReady = true;
@@ -140,7 +141,7 @@ float performMeasurement()
     // Walidacja wyniku z użyciem stałych z config.h
     if (result >= MEASUREMENT_MIN_VALUE && result <= MEASUREMENT_MAX_VALUE && !isnan(result) && !isinf(result))
     {
-      Serial.print("Pomiar: ");
+      Serial.print(">Pomiar:");
       Serial.print(result, 3);
       Serial.println(" mm");
       return result;
@@ -297,18 +298,18 @@ void loop()
 
     // Add battery voltage data
     sensorData.batteryVoltage = readBatteryVoltage();
-    myAcc.getRawValues(&raw);
-    myAcc.getGValues(&g);
+    //myAcc.getRawValues(&raw);
+    //myAcc.getGValues(&g);
     myAcc.getAngles(&angle);
-    myAcc.getCorrAngles(&corrAngle);
+    //myAcc.getCorrAngles(&corrAngle);
     /* Angles use the corrected raws. Angles are simply calculated by
     angle = arcsin(g Value) */
-    Serial.print("Angle x  = ");
-    Serial.print(angle.x);
-    Serial.print("  |  Angle y  = ");
-    Serial.print(angle.y);
-    Serial.print("  |  Angle z  = ");
-    Serial.println(angle.z);
+    Serial.print(">Angle X:");
+    Serial.println(angle.x);
+    // Serial.print("  |  Angle y  = ");
+    // Serial.print(angle.y);
+    // Serial.print("  |  Angle z  = ");
+    // Serial.println(angle.z);
 
     esp_err_t sendResult = esp_now_send(masterAddress, (uint8_t *)&sensorData, sizeof(sensorData));
     if (sendResult == ESP_OK)
@@ -361,23 +362,23 @@ void loop()
       esp_err_t sendResult = esp_now_send(masterAddress, (uint8_t *)&sensorData, sizeof(sensorData));
       if (sendResult == ESP_OK)
       {
-        Serial.print("Status: Napięcie baterii=");
+        Serial.print(">Status: Napięcie baterii:");
         Serial.print(sensorData.batteryVoltage);
-        Serial.println("mV");
+        Serial.println(" mV");
       }
 
-      myAcc.getRawValues(&raw);
-      myAcc.getGValues(&g);
+      //myAcc.getRawValues(&raw);
+      //myAcc.getGValues(&g);
       myAcc.getAngles(&angle);
-      myAcc.getCorrAngles(&corrAngle);
+      //myAcc.getCorrAngles(&corrAngle);
       /* Angles use the corrected raws. Angles are simply calculated by
       angle = arcsin(g Value) */
-      Serial.print("Angle x  = ");
-      Serial.print(angle.x);
-      Serial.print("  |  Angle y  = ");
-      Serial.print(angle.y);
-      Serial.print("  |  Angle z  = ");
-      Serial.println(angle.z);
+      Serial.print(">Angle X:");
+      Serial.println(angle.x);
+      // Serial.print("  |  Angle y  = ");
+      // Serial.print(angle.y);
+      // Serial.print("  |  Angle z  = ");
+      // Serial.println(angle.z);
     }
   }
 }

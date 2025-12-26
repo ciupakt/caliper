@@ -82,7 +82,7 @@ void OnDataRecv(const esp_now_recv_info_t *recv_info, const uint8_t *incomingDat
     Serial.println(lastMeasurement);
     Serial.print("Timestamp: ");
     Serial.println(receivedData.timestamp);
-    Serial.print("Napiecie baterii: ");
+    Serial.print(">Napiecie baterii:");
     Serial.print(receivedData.batteryVoltage);
     Serial.println("mV");
     Serial.println("================================\n");
@@ -91,9 +91,9 @@ void OnDataRecv(const esp_now_recv_info_t *recv_info, const uint8_t *incomingDat
   {
     // Status update
     Serial.println("\n=== AKTUALIZACJA STATUSU ===");
-    Serial.print("Napiecie baterii: ");
+    Serial.print(">Napiecie baterii:");
     Serial.print(receivedData.batteryVoltage);
-    Serial.println("mV");
+    Serial.println(" mV");
     lastBatteryVoltage = String(receivedData.batteryVoltage) + " mV";
     systemStatus.batteryVoltage = receivedData.batteryVoltage;
     Serial.println("==============================\n");
