@@ -334,9 +334,9 @@ graph LR
     
     Clock --> GPIO18
     Data --> GPIO19
-    Trigger <-- GPIO5
-    IN1 <-- GPIO13
-    IN2 <-- GPIO12
+    GPIO5 --> Trigger
+    GPIO13 --> IN1
+    GPIO12 --> IN2
     Batt --> GPIO34
     SDA --> ADXL
     SCL --> ADXL
