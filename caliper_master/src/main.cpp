@@ -4,6 +4,7 @@
 #include <LittleFS.h>
 #include "config.h"
 #include <shared_common.h>
+#include <MacroDebugger.h>
 #include "communication.h"
 
 // Slave device MAC address (defined in config.h)

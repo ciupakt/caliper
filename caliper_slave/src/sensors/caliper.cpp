@@ -103,7 +103,7 @@ float CaliperInterface::performMeasurement()
 
         if (result >= MEASUREMENT_MIN_VALUE && result <= MEASUREMENT_MAX_VALUE && !isnan(result) && !isinf(result))
         {
-            DEBUG_I(">Pomiar: %.3f mm", result);
+            DEBUG_I("Pomiar: %.3f mm", result);
             return result;
         }
         else
