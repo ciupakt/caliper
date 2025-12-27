@@ -300,6 +300,7 @@ void loop()
     //myAcc.getCorrAngles(&corrAngle);
     /* Angles use the corrected raws. Angles are simply calculated by
     angle = arcsin(g Value) */
+    sensorData.angleX = angle.x;
     Serial.print(">Angle X:");
     Serial.println(angle.x);
     // Serial.print("  |  Angle y  = ");
@@ -355,6 +356,14 @@ void loop()
       sensorData.valid = true;
       sensorData.timestamp = millis();
 
+      //myAcc.getRawValues(&raw);
+      //myAcc.getGValues(&g);
+      myAcc.getAngles(&angle);
+      //myAcc.getCorrAngles(&corrAngle);
+      /* Angles use the corrected raws. Angles are simply calculated by
+      angle = arcsin(g Value) */
+      sensorData.angleX = angle.x;
+
       esp_err_t sendResult = esp_now_send(masterAddress, (uint8_t *)&sensorData, sizeof(sensorData));
       if (sendResult == ESP_OK)
       {
@@ -363,12 +372,6 @@ void loop()
         Serial.println(" mV");
       }
 
-      //myAcc.getRawValues(&raw);
-      //myAcc.getGValues(&g);
-      myAcc.getAngles(&angle);
-      //myAcc.getCorrAngles(&corrAngle);
-      /* Angles use the corrected raws. Angles are simply calculated by
-      angle = arcsin(g Value) */
       Serial.print(">Angle X:");
       Serial.println(angle.x);
       // Serial.print("  |  Angle y  = ");

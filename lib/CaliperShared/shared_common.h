@@ -65,6 +65,7 @@ struct Message
   uint32_t timestamp;      /**< Timestamp from system start (ms) */
   CommandType command;     /**< Command type */
   uint16_t batteryVoltage; /**< Battery voltage in millivolts */
+  float angleX;            /**< Angle X from accelerometer ADXL345 */
 };
 
 #ifdef CALIPER_MASTER

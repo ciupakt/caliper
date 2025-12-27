@@ -86,6 +86,8 @@ void OnDataRecv(const esp_now_recv_info_t *recv_info, const uint8_t *incomingDat
     Serial.print(">Napiecie baterii:");
     Serial.print(receivedData.batteryVoltage);
     Serial.println("mV");
+    Serial.print(">Angle X:");
+    Serial.println(receivedData.angleX);
     Serial.println("================================\n");
   }
   else if (receivedData.command == CMD_UPDATE)
@@ -95,6 +97,8 @@ void OnDataRecv(const esp_now_recv_info_t *recv_info, const uint8_t *incomingDat
     Serial.print(">Napiecie baterii:");
     Serial.print(receivedData.batteryVoltage);
     Serial.println(" mV");
+    Serial.print(">Angle X:");
+    Serial.println(receivedData.angleX);
     lastBatteryVoltage = String(receivedData.batteryVoltage) + " mV";
     systemStatus.batteryVoltage = receivedData.batteryVoltage;
     Serial.println("==============================\n");
@@ -223,6 +227,7 @@ void handleAPI()
   json += "\"timestamp\":" + String(receivedData.timestamp) + ",";
   json += "\"valid\":" + String(receivedData.valid ? "true" : "false") + ",";
   json += "\"batteryVoltage\":" + String(receivedData.batteryVoltage) + ",";
+  json += "\"angleX\":" + String(receivedData.angleX, 2) + ",";
   json += "\"command\":\"" + String(receivedData.command) + "\"";
   json += "}";
   server.send(200, "application/json", json);

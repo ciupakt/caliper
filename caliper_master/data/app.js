@@ -96,15 +96,19 @@ function measureSession() {
 
 function refreshSession() {
     document.getElementById('status').textContent = 'Pobieranie danych...';
-    fetch('/read')
+    
+    // Pobierz dane z API
+    fetch('/api')
     .then(response => {
         if (!response.ok) {
             throw new Error('Błąd serwera: ' + response.status);
         }
-        return response.text();
+        return response.json();
     })
     .then(data => {
-        document.getElementById('measurement-value').textContent = data;
+        document.getElementById('measurement-value').textContent = data.measurement;
+        document.getElementById('battery').textContent = data.batteryVoltage + ' mV';
+        document.getElementById('angle-x').textContent = data.angleX.toFixed(2);
         document.getElementById('status').textContent = 'Zaktualizowano: ' + new Date().toLocaleTimeString();
     })
     .catch(error => {

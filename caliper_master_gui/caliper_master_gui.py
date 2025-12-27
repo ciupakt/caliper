@@ -238,6 +238,12 @@ def process_measurement_data(data):
                         app.csv_writer.writerow([measurement_str])
             else:
                 log_rx(f"BLAD: Wartosc poza zakresem: {val}")
+        elif data.startswith(">Angle X:"):
+            angle_str = data.split(":")[1]
+            log_rx(f"[ANGLE X] {angle_str}°")
+        elif data.startswith(">Napiecie baterii:"):
+            voltage_str = data.split(":")[1]
+            log_rx(f"[BATERIA] {voltage_str}")
         elif "SILNIK" in data.upper() or "blad silnika" in data.lower():
             log_rx(f"[SILNIK] {data}")
     except ValueError as val_err:
@@ -255,6 +261,8 @@ def read_serial():
                     
                     # Process measurement data
                     if data.startswith("VAL_1:") or data.startswith("CAL_OFFSET:") or data.startswith("CAL_ERROR:") or data.startswith("MEAS_SESSION:"):
+                        process_measurement_data(data)
+                    elif data.startswith(">Angle X:") or data.startswith(">Napiecie baterii:"):
                         process_measurement_data(data)
                     elif "SILNIK" in data.upper() or "blad silnika" in data.lower():
                         log_rx(f"[SILNIK] {data}")
