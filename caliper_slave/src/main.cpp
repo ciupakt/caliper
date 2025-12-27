@@ -4,6 +4,8 @@
 #include "config.h"
 #include <shared_common.h>
 
+#include <MacroDebugger.h>
+
 // Module includes
 #include "sensors/caliper.h"
 #include "sensors/accelerometer.h"
@@ -28,57 +30,62 @@ void OnDataRecv(const esp_now_recv_info_t *recv_info, const uint8_t *incomingDat
   if (len == 1)
   {
     char command = (char)incomingData[0];
-    Serial.print("Otrzymano komendę: ");
-    Serial.println(command);
+    DEBUG_I("Otrzymano komendę: %c", command);
 
     switch (command)
     {
     case CMD_MEASURE: // Measurement request
       measurementRequested = true;
-      Serial.println("→ Zadanie pomiaru");
+      DEBUG_I("→ Zadanie pomiaru");
       break;
     case CMD_FORWARD: // Motor forward
       setMotorSpeed(110, MOTOR_FORWARD);
-      Serial.println("→ Silnik: Forward");
+      DEBUG_I("→ Silnik: Forward");
       break;
     case CMD_REVERSE: // Motor reverse
       setMotorSpeed(150, MOTOR_REVERSE);
-      Serial.println("→ Silnik: Reverse");
+      DEBUG_I("→ Silnik: Reverse");
       break;
     case CMD_STOP: // Motor stop
       setMotorSpeed(0, MOTOR_STOP);
-      Serial.println("→ Silnik: Stop");
+      DEBUG_I("→ Silnik: Stop");
       break;
     default:
-      Serial.println("→ Nieznana komenda");
+      DEBUG_W("→ Nieznana komenda: %c", command);
       break;
     }
   }
   else
   {
-    Serial.println("BLAD: Nieprawidlowe dane ESP-NOW");
+    DEBUG_E("BŁĄD: Nieprawidłowe dane ESP-NOW (len=%d)", len);
   }
 }
 
 void OnDataSent(const wifi_tx_info_t *info, esp_now_send_status_t status)
 {
-  Serial.print("Status wysyłki: ");
-  Serial.println(status == ESP_NOW_SEND_SUCCESS ? "Sukces" : "Błąd");
+  if (status == ESP_NOW_SEND_SUCCESS)
+  {
+    DEBUG_I("Status wysyłki: Sukces");
+  }
+  else
+  {
+    DEBUG_W("Status wysyłki: Błąd");
+  }
 }
 
 void setup()
 {
-  Serial.begin(115200);
+  DEBUG_BEGIN();
   delay(1000);
-  Serial.println("\n=== ESP32 SLAVE - Suwmiarka + ESP-NOW ===");
+  DEBUG_I("=== ESP32 SLAVE - Suwmiarka + ESP-NOW ===");
 
   // Initialize sensors
   caliper.begin();
-  
+
   Wire.begin();
   if (!accelerometer.begin())
   {
-    Serial.println("ADXL345 not connected!");
+    DEBUG_W("Akcelerometr (ADXL345) nie został zainicjalizowany");
   }
 
   WiFi.mode(WIFI_STA);
@@ -93,12 +100,11 @@ void setup()
 
   if (attempts < 10)
   {
-    Serial.print("MAC Address Slave: ");
-    Serial.println(WiFi.macAddress());
+    DEBUG_I("MAC Address Slave: %s", WiFi.macAddress().c_str());
   }
   else
   {
-    Serial.println("BŁĄD: WiFi nie może się zainicjalizować!");
+    DEBUG_E("BŁĄD: WiFi nie może się zainicjalizować!");
     return;
   }
 
@@ -106,10 +112,10 @@ void setup()
 
   if (esp_now_init() != ESP_OK)
   {
-    Serial.println("BŁĄD ESP-NOW");
+    DEBUG_E("BŁĄD ESP-NOW");
     return;
   }
-  Serial.println("ESP-NOW OK");
+  DEBUG_I("ESP-NOW OK");
 
   esp_now_register_recv_cb(OnDataRecv);
   esp_now_register_send_cb(OnDataSent);
@@ -121,28 +127,27 @@ void setup()
   int peerTries = 0;
   while (esp_now_add_peer(&peerInfo) != ESP_OK && peerTries < 10)
   {
-    Serial.print("Próba dodania Master... ");
-    Serial.println(peerTries + 1);
+    DEBUG_I("Próba dodania Master... %d", peerTries + 1);
     delay(100);
     peerTries++;
   }
 
   if (peerTries < 10)
   {
-    Serial.println("Master dodany jako peer!");
+    DEBUG_I("Master dodany jako peer!");
   }
   else
   {
-    Serial.println("BŁĄD dodania Master! Sprawdź MAC, kanał, zasięg...");
+    DEBUG_E("BŁĄD dodania Master! Sprawdź MAC, kanał, zasięg...");
     return;
   }
 
-  Serial.println("Oczekiwanie na żądania pomiaru...\n");
+  DEBUG_I("Oczekiwanie na żądania pomiaru...");
 
   // Initialize motor controller
-  Serial.println("Inicjalizacja sterownika silnika...");
+  DEBUG_I("Inicjalizacja sterownika silnika...");
   initializeMotorController();
-  Serial.println("Sterownik silnika gotowy!\n");
+  DEBUG_I("Sterownik silnika gotowy!\n");
 }
 
 void loop()
@@ -158,41 +163,36 @@ void loop()
 
     // Add battery voltage data
     sensorData.batteryVoltage = battery.readVoltage();
-    
+
     // Update accelerometer
     accelerometer.update();
     sensorData.angleX = accelerometer.getAngleX();
-    Serial.print(">Angle X:");
-    Serial.println(accelerometer.getAngleX());
 
     esp_err_t sendResult = esp_now_send(masterAddress, (uint8_t *)&sensorData, sizeof(sensorData));
     if (sendResult == ESP_OK)
     {
-      Serial.println("Wynik wyslany do Mastera");
-      Serial.print("  → Pomiar: ");
-      Serial.print(result, 3);
-      Serial.print(" mm, Napięcie baterii: ");
-      Serial.print(sensorData.batteryVoltage);
-      Serial.println("mV");
+      DEBUG_I("Wynik wysłany do Mastera");
+      DEBUG_PLOT("measurement:%.3f", (unsigned)sensorData.measurement);
+      DEBUG_PLOT("timestamp:%u", (unsigned)sensorData.timestamp);
+      DEBUG_PLOT("batteryVoltage:%u", (unsigned)sensorData.batteryVoltage);
+      DEBUG_PLOT("angleX:%u", (unsigned)sensorData.angleX);
     }
     else
     {
-      Serial.print("BLAD wysylania wyniku: ");
-      Serial.println(sendResult);
+      DEBUG_E("BŁĄD wysyłania wyniku: %d", (int)sendResult);
 
       // Próba ponownego wysłania po krótkiej przerwie
       delay(ESPNOW_RETRY_DELAY_MS);
       sendResult = esp_now_send(masterAddress, (uint8_t *)&sensorData, sizeof(sensorData));
       if (sendResult == ESP_OK)
       {
-        Serial.println("Ponowne wyslanie wyniku udane");
+        DEBUG_I("Ponowne wysłanie wyniku udane");
       }
       else
       {
-        Serial.println("Ponowne wyslanie wyniku nieudane");
+        DEBUG_E("Ponowne wysłanie wyniku nieudane: %d", (int)sendResult);
       }
     }
-    Serial.println("-------------------------------\n");
   }
 
   // Zamiast delay(10) - lepsza responsywność
@@ -218,15 +218,13 @@ void loop()
       sensorData.angleX = accelerometer.getAngleX();
 
       esp_err_t sendResult = esp_now_send(masterAddress, (uint8_t *)&sensorData, sizeof(sensorData));
-      if (sendResult == ESP_OK)
+      if (sendResult != ESP_OK)
       {
-        Serial.print(">Status: Napięcie baterii:");
-        Serial.print(sensorData.batteryVoltage);
-        Serial.println(" mV");
+        DEBUG_E("sendResult: %d", sendResult);
       }
 
-      Serial.print(">Angle X:");
-      Serial.println(accelerometer.getAngleX());
+      DEBUG_PLOT("batteryVoltage:%u", (unsigned)sensorData.batteryVoltage);
+      DEBUG_PLOT("angleX:%u", (unsigned)sensorData.angleX);
     }
   }
 }

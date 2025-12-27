@@ -8,6 +8,8 @@
 
 #include "caliper.h"
 
+#include <MacroDebugger.h>
+
 // Static member initialization
 volatile uint8_t CaliperInterface::bitBuffer[52] = {0};
 volatile int CaliperInterface::bitCount = 0;
@@ -77,7 +79,7 @@ void CaliperInterface::begin()
 
 float CaliperInterface::performMeasurement()
 {
-    Serial.println("Wyzwalam pomiar TRIG...");
+    DEBUG_I("Wyzwalam pomiar TRIG...");
     digitalWrite(TRIG_PIN, LOW);
 
     bitCount = 0;
@@ -101,20 +103,18 @@ float CaliperInterface::performMeasurement()
 
         if (result >= MEASUREMENT_MIN_VALUE && result <= MEASUREMENT_MAX_VALUE && !isnan(result) && !isinf(result))
         {
-            Serial.print(">Pomiar:");
-            Serial.print(result, 3);
-            Serial.println(" mm");
+            DEBUG_I(">Pomiar: %.3f mm", result);
             return result;
         }
         else
         {
-            Serial.println("BLAD: Nieprawidlowa wartosc pomiaru!");
+            DEBUG_E("BŁĄD: Nieprawidłowa wartość pomiaru!");
             return INVALID_MEASUREMENT_VALUE;
         }
     }
     else
     {
-        Serial.println("BŁĄD: Timeout!");
+        DEBUG_E("BŁĄD: Timeout!");
         return INVALID_MEASUREMENT_VALUE;
     }
 }

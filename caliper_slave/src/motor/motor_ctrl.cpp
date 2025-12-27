@@ -12,13 +12,15 @@
 
 #include "motor_ctrl.h"
 
+#include <MacroDebugger.h>
+
 //==============================================================================
 // Public Function Implementations
 //==============================================================================
 
 void initializeMotorController(void)
 {
-    Serial.println("Initializing MP6550GG-Z Motor Controller...");
+    DEBUG_I("Initializing MP6550GG-Z Motor Controller...");
 
     // Configure pins as outputs/inputs
     pinMode(MOTOR_IN1_PIN, OUTPUT);
@@ -44,7 +46,7 @@ void setMotorSpeed(uint8_t speed, MotorState direction)
 
     if (direction > MOTOR_BRAKE)
     {
-        Serial.println("Error: Invalid motor direction");
+        DEBUG_E("Error: Invalid motor direction");
         digitalWrite(MOTOR_IN1_PIN, LOW);
         digitalWrite(MOTOR_IN2_PIN, LOW);
         return;
@@ -74,12 +76,7 @@ void setMotorSpeed(uint8_t speed, MotorState direction)
 
     if (abs(speed - lastSpeed) > 10 || direction != lastDirection)
     {
-        Serial.print("Motor: ");
-        Serial.print(speed);
-        Serial.print("/255 (");
-        Serial.print((speed * 100) / 255);
-        Serial.print("%) - ");
-        Serial.println(motorTable[direction].name);
+        DEBUG_I("Motor: %u/255 (%u%%) - %s", (unsigned)speed, (unsigned)((speed * 100U) / 255U), motorTable[direction].name);
 
         lastSpeed = speed;
         lastDirection = direction;

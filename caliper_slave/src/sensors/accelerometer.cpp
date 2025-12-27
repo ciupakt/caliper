@@ -8,6 +8,8 @@
 
 #include "accelerometer.h"
 
+#include <MacroDebugger.h>
+
 #define ADXL345_I2CADDR 0x53 // 0x1D if SDO = HIGH
 
 bool AccelerometerInterface::begin()
@@ -16,14 +18,14 @@ bool AccelerometerInterface::begin()
     
     if (!myAcc.init())
     {
-        Serial.println("ADXL345 not connected!");
+        DEBUG_E("ADXL345 not connected!");
         return false;
     }
 
     myAcc.setDataRate(ADXL345_DATA_RATE_50);
     myAcc.setRange(ADXL345_RANGE_2G);
     
-    Serial.println("ADXL345 initialized successfully");
+    DEBUG_I("ADXL345 initialized successfully");
     return true;
 }
 
