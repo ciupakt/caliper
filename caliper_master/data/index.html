@@ -1,0 +1,53 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ESP32 System Pomiarowy</title>
+    <link rel="stylesheet" href="/style.css">
+</head>
+<body>
+    <div class="container">
+        <!-- Widok Menu -->
+        <div id="menu-view" class="view">
+            <h1>System Pomiarowy ESP32</h1>
+            <button onclick="showView('calibration')">Kalibracja</button>
+            <button onclick="showView('session-name')">Nowa sesja pomiarowa</button>
+        </div>
+
+        <!-- Widok Kalibracja -->
+        <div id="calibration-view" class="view hidden">
+            <h1>Kalibracja</h1>
+            <input type="number" id="offset-input" min="74" max="165" placeholder="Offset (74-165)">
+            <button onclick="calibrate()">Kalibruj</button>
+            <button onclick="showView('menu')">Menu</button>
+            <div id="calibration-result" class="result"></div>
+        </div>
+
+        <!-- Widok Nazwa Sesji -->
+        <div id="session-name-view" class="view hidden">
+            <h1>Nowa Sesja Pomiarowa</h1>
+            <input type="text" id="session-name-input" placeholder="Nazwa sesji" autocomplete="off" autofocus>
+            <button onclick="startSession()">Start</button>
+            <button onclick="showView('menu')">Menu</button>
+        </div>
+
+        <!-- Widok Pomiarów -->
+        <div id="measurement-view" class="view hidden">
+            <h1>Sesja: <span id="session-name-display"></span></h1>
+            <div class="measurement" id="measurement-value">Brak pomiaru</div>
+            <div style="text-align: center; font-size: 18px; color: #666; margin: 10px 0;">
+                Napięcie baterii: <span id="battery">Brak danych</span>
+            </div>
+            <button onclick="measureSession()">Wykonaj pomiar</button>
+            <button onclick="refreshSession()">Odśwież wynik</button>
+            <button class="motor forward" onclick="motorForward()">Forward</button>
+            <button class="motor reverse" onclick="motorReverse()">Reverse</button>
+            <button class="motor stop" onclick="motorStop()">Stop</button>
+            <button onclick="showView('menu')">Menu</button>
+            <div class="status" id="status"></div>
+        </div>
+    </div>
+    <script src="/app.js"></script>
+</body>
+</html>

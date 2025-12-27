@@ -1,6 +1,7 @@
 #include <esp_now.h>
 #include <WiFi.h>
 #include <WebServer.h>
+#include <LittleFS.h>
 #include "config.h"
 #include <shared_common.h>
 #include "communication.h"
@@ -167,246 +168,41 @@ void sendMotorStop()
   sendCommand(CMD_STOP, "Zatrzymaj silnik");
 }
 
+// Serve static files from LittleFS
 void handleRoot()
 {
-  String html = "<!DOCTYPE html><html><head>";
-  html += "<meta charset='UTF-8'>";
-  html += "<meta name='viewport' content='width=device-width, initial-scale=1.0'>";
-  html += "<title>ESP32 System Pomiarowy</title>";
-  html += "<style>";
-  html += "body { font-family: Arial; max-width: 600px; margin: 50px auto; padding: 20px; background: #f0f0f0; }";
-  html += ".container { background: white; padding: 30px; border-radius: 10px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }";
-  html += "h1 { color: #333; text-align: center; }";
-  html += ".view { display: block; }";
-  html += ".hidden { display: none; }";
-  html += ".measurement { font-size: 48px; text-align: center; color: #007bff; margin: 30px 0; padding: 20px; background: #e7f3ff; border-radius: 5px; }";
-  html += "button { width: 100%; padding: 15px; font-size: 18px; background: #007bff; color: white; border: none; border-radius: 5px; cursor: pointer; margin: 10px 0; }";
-  html += "button:hover { background: #0056b3; }";
-  html += "button.motor { width: 48%; float: left; margin: 1%; font-size: 14px; padding: 10px; }";
-  html += "button.motor.forward { background: #28a745; }";
-  html += "button.motor.forward:hover { background: #218838; }";
-  html += "button.motor.reverse { background: #ffc107; color: black; }";
-  html += "button.motor.reverse:hover { background: #e0a800; }";
-  html += "button.motor.stop { background: #dc3545; }";
-  html += "button.motor.stop:hover { background: #c82333; }";
-  html += ".status { text-align: center; color: #666; margin-top: 20px; font-size: 14px; }";
-  html += "input { width: 100%; padding: 15px; font-size: 18px; border: 1px solid #ddd; border-radius: 5px; margin: 10px 0; box-sizing: border-box; outline: none; }";
-  html += "input:focus { border-color: #007bff; box-shadow: 0 0 5px rgba(0,123,255,0.5); }";
-  html += ".result { text-align: center; font-size: 16px; color: #333; margin: 15px 0; padding: 10px; background: #f8f9fa; border-radius: 5px; }";
-  html += "</style></head><body>";
-  html += "<div class='container'>";
+  File file = LittleFS.open("/index.html", "r");
+  if (!file)
+  {
+    server.send(500, "text/plain", "Failed to open index.html");
+    return;
+  }
+  server.streamFile(file, "text/html");
+  file.close();
+}
 
-  // Widok Menu
-  html += "<div id='menu-view' class='view'>";
-  html += "<h1>System Pomiarowy ESP32</h1>";
-  html += "<button onclick='showView(\"calibration\")'>Kalibracja</button>";
-  html += "<button onclick='showView(\"session-name\")'>Nowa sesja pomiarowa</button>";
-  html += "</div>";
+void handleCSS()
+{
+  File file = LittleFS.open("/style.css", "r");
+  if (!file)
+  {
+    server.send(404, "text/plain", "CSS file not found");
+    return;
+  }
+  server.streamFile(file, "text/css");
+  file.close();
+}
 
-  // Widok Kalibracja
-  html += "<div id='calibration-view' class='view hidden'>";
-  html += "<h1>Kalibracja</h1>";
-  html += "<input type='number' id='offset-input' min='74' max='165' placeholder='Offset (74-165)'>";
-  html += "<button onclick='calibrate()'>Kalibruj</button>";
-  html += "<button onclick='showView(\"menu\")'>Menu</button>";
-  html += "<div id='calibration-result' class='result'></div>";
-  html += "</div>";
-
-  // Widok Nazwa Sesji
-  html += "<div id='session-name-view' class='view hidden'>";
-  html += "<h1>Nowa Sesja Pomiarowa</h1>";
-  html += "<input type='text' id='session-name-input' placeholder='Nazwa sesji' autocomplete='off' autofocus>";
-  html += "<button onclick='startSession()'>Start</button>";
-  html += "<button onclick='showView(\"menu\")'>Menu</button>";
-  html += "</div>";
-
-  // Widok Pomiarów
-  html += "<div id='measurement-view' class='view hidden'>";
-  html += "<h1>Sesja: <span id='session-name-display'></span></h1>";
-  html += "<div class='measurement' id='measurement-value'>" + lastMeasurement + "</div>";
-  html += "<div style='text-align: center; font-size: 18px; color: #666; margin: 10px 0;'>Napięcie baterii: <span id='battery'>" + lastBatteryVoltage + "</span></div>";
-  html += "<button onclick='measureSession()'>Wykonaj pomiar</button>";
-  html += "<button onclick='refreshSession()'>Odśwież wynik</button>";
-  html += "<button class='motor forward' onclick='motorForward()'>Forward</button>";
-  html += "<button class='motor reverse' onclick='motorReverse()'>Reverse</button>";
-  html += "<button class='motor stop' onclick='motorStop()'>Stop</button>";
-  html += "<button onclick='showView(\"menu\")'>Menu</button>";
-  html += "<div class='status' id='status'></div>";
-  html += "</div>";
-
-  html += "</div>";
-  html += "<script>";
-
-  // Funkcje zarządzania widokami
-  html += "function showView(viewId) {";
-  html += "  document.querySelectorAll('.view').forEach(view => {";
-  html += "    view.classList.add('hidden');";
-  html += "  });";
-  html += "  document.getElementById(viewId + '-view').classList.remove('hidden');";
-  html += "}";
-
-  // Funkcje kalibracji
-  html += "function calibrate() {";
-  html += "  const offset = document.getElementById('offset-input').value;";
-  html += "  if (offset < 74 || offset > 165) {";
-  html += "    alert('Offset musi być w zakresie 74-165');";
-  html += "    return;";
-  html += "  }";
-  html += "  document.getElementById('status').textContent = 'Wykonywanie kalibracji...';";
-  html += "  fetch('/calibrate', {";
-  html += "    method: 'POST',";
-  html += "    headers: {'Content-Type': 'application/x-www-form-urlencoded'},";
-  html += "    body: 'offset=' + offset";
-  html += "  })";
-  html += "    .then(response => {";
-  html += "      if (!response.ok) {";
-  html += "        return response.json().then(err => { throw new Error(err.error || 'Błąd serwera'); });";
-  html += "      }";
-  html += "      return response.json();";
-  html += "    })";
-  html += "    .then(data => {";
-  html += "      if (data.error && !data.offset) {";
-  html += "        document.getElementById('status').textContent = 'Błąd: ' + data.error;";
-  html += "      } else {";
-  html += "        document.getElementById('calibration-result').innerHTML = 'Offset: ' + data.offset + '<br>Błąd: ' + data.error + ' mm';";
-  html += "        document.getElementById('status').textContent = 'Kalibracja zakończona';";
-  html += "      }";
-  html += "    })";
-  html += "    .catch(error => {";
-  html += "      document.getElementById('status').textContent = 'Błąd: ' + error.message;";
-  html += "    });";
-  html += "}";
-
-  // Funkcje sesji pomiarowej
-  html += "function startSession() {";
-  html += "  const sessionName = document.getElementById('session-name-input').value;";
-  html += "  if (!sessionName) {";
-  html += "    alert('Podaj nazwę sesji');";
-  html += "    return;";
-  html += "  }";
-  html += "  fetch('/start_session', {";
-  html += "    method: 'POST',";
-  html += "    headers: {'Content-Type': 'application/x-www-form-urlencoded'},";
-  html += "    body: 'sessionName=' + encodeURIComponent(sessionName)";
-  html += "  })";
-  html += "    .then(response => {";
-  html += "      if (!response.ok) {";
-  html += "        return response.json().then(err => { throw new Error(err.error || 'Błąd serwera'); });";
-  html += "      }";
-  html += "      return response.json();";
-  html += "    })";
-  html += "    .then(data => {";
-  html += "      if (data.error) {";
-  html += "        document.getElementById('status').textContent = 'Błąd: ' + data.error;";
-  html += "      } else {";
-  html += "        document.getElementById('session-name-display').textContent = sessionName;";
-  html += "        showView('measurement');";
-  html += "      }";
-  html += "    })";
-  html += "    .catch(error => {";
-  html += "      document.getElementById('status').textContent = 'Błąd: ' + error.message;";
-  html += "    });";
-  html += "}";
-
-  html += "function measureSession() {";
-  html += "  document.getElementById('status').textContent = 'Wysyłanie zadania...';";
-  html += "  fetch('/measure_session', {";
-  html += "    method: 'POST'";
-  html += "  })";
-  html += "    .then(response => {";
-  html += "      if (!response.ok) {";
-  html += "        return response.json().then(err => { throw new Error(err.error || 'Błąd serwera'); });";
-  html += "      }";
-  html += "      return response.json();";
-  html += "    })";
-  html += "    .then(data => {";
-  html += "      if (data.error) {";
-  html += "        document.getElementById('status').textContent = 'Błąd: ' + data.error;";
-  html += "      } else {";
-  html += "        document.getElementById('measurement-value').textContent = data.measurement;";
-  html += "        document.getElementById('status').textContent = 'Zadanie wysłane! Odczekaj chwile i odśwież.';";
-  html += "        setTimeout(refreshSession, 1500);";
-  html += "      }";
-  html += "    })";
-  html += "    .catch(error => {";
-  html += "      document.getElementById('status').textContent = 'Błąd: ' + error.message;";
-  html += "    });";
-  html += "}";
-
-  html += "function refreshSession() {";
-  html += "  document.getElementById('status').textContent = 'Pobieranie danych...';";
-  html += "  fetch('/read')";
-  html += "    .then(response => {";
-  html += "      if (!response.ok) {";
-  html += "        throw new Error('Błąd serwera: ' + response.status);";
-  html += "      }";
-  html += "      return response.text();";
-  html += "    })";
-  html += "    .then(data => {";
-  html += "      document.getElementById('measurement-value').textContent = data;";
-  html += "      document.getElementById('status').textContent = 'Zaktualizowano: ' + new Date().toLocaleTimeString();";
-  html += "    })";
-  html += "    .catch(error => {";
-  html += "      document.getElementById('status').textContent = 'Błąd: ' + error.message;";
-  html += "    });";
-  html += "}";
-
-  // Funkcje sterowania silnikiem
-  html += "function motorForward() {";
-  html += "  document.getElementById('status').textContent = 'Wysyłanie komendy Forward...';";
-  html += "  fetch('/forward')";
-  html += "    .then(response => {";
-  html += "      if (!response.ok) {";
-  html += "        throw new Error('Błąd serwera: ' + response.status);";
-  html += "      }";
-  html += "      return response.text();";
-  html += "    })";
-  html += "    .then(data => {";
-  html += "      document.getElementById('status').textContent = 'Forward: ' + data;";
-  html += "    })";
-  html += "    .catch(error => {";
-  html += "      document.getElementById('status').textContent = 'Błąd: ' + error.message;";
-  html += "    });";
-  html += "}";
-
-  html += "function motorReverse() {";
-  html += "  document.getElementById('status').textContent = 'Wysyłanie komendy Reverse...';";
-  html += "  fetch('/reverse')";
-  html += "    .then(response => {";
-  html += "      if (!response.ok) {";
-  html += "        throw new Error('Błąd serwera: ' + response.status);";
-  html += "      }";
-  html += "      return response.text();";
-  html += "    })";
-  html += "    .then(data => {";
-  html += "      document.getElementById('status').textContent = 'Reverse: ' + data;";
-  html += "    })";
-  html += "    .catch(error => {";
-  html += "      document.getElementById('status').textContent = 'Błąd: ' + error.message;";
-  html += "    });";
-  html += "}";
-
-  html += "function motorStop() {";
-  html += "  document.getElementById('status').textContent = 'Wysyłanie komendy Stop...';";
-  html += "  fetch('/stop')";
-  html += "    .then(response => {";
-  html += "      if (!response.ok) {";
-  html += "        throw new Error('Błąd serwera: ' + response.status);";
-  html += "      }";
-  html += "      return response.text();";
-  html += "    })";
-  html += "    .then(data => {";
-  html += "      document.getElementById('status').textContent = 'Stop: ' + data;";
-  html += "    })";
-  html += "    .catch(error => {";
-  html += "      document.getElementById('status').textContent = 'Błąd: ' + error.message;";
-  html += "    });";
-  html += "}";
-
-  html += "</script>";
-  html += "</body></html>";
-
-  server.send(200, "text/html", html);
+void handleJS()
+{
+  File file = LittleFS.open("/app.js", "r");
+  if (!file)
+  {
+    server.send(404, "text/plain", "JS file not found");
+    return;
+  }
+  server.streamFile(file, "application/javascript");
+  file.close();
 }
 
 void handleMeasure()
@@ -550,6 +346,14 @@ void setup()
   memset(&systemStatus, 0, sizeof(systemStatus));
   systemStatus.motorDirection = MOTOR_STOP;
 
+  // Initialize LittleFS
+  if (!LittleFS.begin())
+  {
+    Serial.println("LittleFS Mount Failed!");
+    return;
+  }
+  Serial.println("LittleFS mounted successfully");
+
   // Setup WiFi
   WiFi.mode(WIFI_AP_STA);
   WiFi.softAP(WIFI_SSID, WIFI_PASSWORD);
@@ -577,8 +381,12 @@ void setup()
   commManager.setReceiveCallback(OnDataRecv);
   commManager.setSendCallback(OnDataSent);
 
-  // Setup web server routes
+  // Setup web server routes - static files
   server.on("/", handleRoot);
+  server.on("/style.css", handleCSS);
+  server.on("/app.js", handleJS);
+
+  // Setup web server routes - API endpoints
   server.on("/measure", handleMeasure);
   server.on("/read", handleRead);
   server.on("/api", handleAPI);

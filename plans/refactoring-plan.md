@@ -6,7 +6,9 @@
 |------|--------|------|
 | Faza 1: Współdzielona biblioteka | ✅ Ukończona | 2025-12-26 |
 | Faza 1.1: Usunięcie wrapperów common.h | ✅ Ukończona | 2025-12-26 |
-| Faza 2: Refaktoryzacja Master | ⏳ Oczekuje | - |
+| Faza 1.2: Przeniesienie adresów MAC | ✅ Ukończona | 2025-12-26 |
+| Faza 2: Refaktoryzacja Master | ✅ Ukończona | 2025-12-26 |
+| Faza 2.1: Wydzielenie HTML/CSS/JS do LittleFS | ✅ Ukończona | 2025-12-26 |
 | Faza 3: Modularyzacja Slave | ⏳ Oczekuje | - |
 | Faza 4: Aplikacja Python | ✅ requirements.txt utworzony | 2025-12-26 |
 | Faza 5: Dokumentacja | ⏳ Oczekuje | - |
@@ -208,16 +210,29 @@ build_flags = -DCALIPER_MASTER  ; lub -DCALIPER_SLAVE
 
 ---
 
-### 1.2 Przeniesienie adresów MAC do konfiguracji
+### 1.2 Przeniesienie adresów MAC do konfiguracji ✅ UKOŃCZONE
 
-**Problem:** Adresy MAC są hardkodowane w [`main.cpp`](../caliper_master/src/main.cpp:9) i [`main.cpp`](../caliper_slave/src/main.cpp:14).
+**Problem:** Adresy MAC były hardkodowane w plikach głównych.
 
 **Rozwiązanie:** Przeniesienie do plików `config.h`.
+
+**Status:** ✅ Zakończone (2025-12-26)
+- Dodano `SLAVE_MAC_ADDR` do [`caliper_master/src/config.h`](../caliper_master/src/config.h:28)
+- Dodano `MASTER_MAC_ADDR` do [`caliper_slave/src/config.h`](../caliper_slave/src/config.h:28)
+- Zaktualizowano [`caliper_master/src/main.cpp`](../caliper_master/src/main.cpp:9) - używa makra z config.h
+- Zaktualizowano [`caliper_slave/src/main.cpp`](../caliper_slave/src/main.cpp:10) - używa makra z config.h
+- ✅ Kompilacja obu projektów zakończona pomyślnie
 
 #### Zmiany w `caliper_master/src/config.h`:
 ```cpp
 // Device MAC Addresses
 #define SLAVE_MAC_ADDR {0xA0, 0xB7, 0x65, 0x21, 0x77, 0x5C}
+```
+
+#### Użycie w `caliper_master/src/main.cpp`:
+```cpp
+// Slave device MAC address (defined in config.h)
+uint8_t slaveAddress[] = SLAVE_MAC_ADDR;
 ```
 
 #### Zmiany w `caliper_slave/src/config.h`:
@@ -226,72 +241,65 @@ build_flags = -DCALIPER_MASTER  ; lub -DCALIPER_SLAVE
 #define MASTER_MAC_ADDR {0xA0, 0xB7, 0x65, 0x20, 0xC0, 0x8C}
 ```
 
+#### Użycie w `caliper_slave/src/main.cpp`:
+```cpp
+// Master device MAC address (defined in config.h)
+uint8_t masterAddress[] = MASTER_MAC_ADDR;
+```
+
 ---
 
 ## Faza 2: Refaktoryzacja Master
 
-### 2.1 Wydzielenie HTML/CSS/JS
+### 2.1 Wydzielenie HTML/CSS/JS do LittleFS ✅ UKOŃCZONE
 
-**Problem:** Plik [`main.cpp`](../caliper_master/src/main.cpp:170-410) zawiera 240 linii kodu HTML/CSS/JS inline.
+**Problem:** Plik [`main.cpp`](../caliper_master/src/main.cpp) zawierał 240 linii kodu HTML/CSS/JS inline (linie 170-410).
 
-**Rozwiązanie A - Pliki nagłówkowe:**
-```cpp
-// web_content.h
-const char HTML_HEADER[] PROGMEM = R"rawliteral(
-<!DOCTYPE html><html>...
-)rawliteral";
+**Rozwiązanie:** Użycie LittleFS do przechowywania plików statycznych.
 
-const char HTML_STYLES[] PROGMEM = R"rawliteral(
-<style>body { font-family: Arial; }...</style>
-)rawliteral";
+**Status:** ✅ Zakończone (2025-12-26)
+- Utworzono [`caliper_master/data/index.html`](../caliper_master/data/index.html) - Główny interfejs użytkownika
+- Utworzono [`caliper_master/data/style.css`](../caliper_master/data/style.css) - Style CSS (128 linii)
+- Utworzono [`caliper_master/data/app.js`](../caliper_master/data/app.js) - Logika JavaScript (172 linie)
+- Zaktualizowano [`caliper_master/platformio.ini`](../caliper_master/platformio.ini) - dodano `board_build.filesystem = littlefs`
+- Zrefaktoryzowano [`caliper_master/src/main.cpp`](../caliper_master/src/main.cpp):
+  - Dodano `#include <LittleFS.h>`
+  - Zastąpiono funkcję `handleRoot()` (240 linii) prostą funkcją serwującą pliki z LittleFS
+  - Dodano funkcje `handleCSS()` i `handleJS()` do serwowania plików statycznych
+  - Dodano inicjalizację LittleFS w `setup()`
+- ✅ Kompilacja zakończona pomyślnie (RAM: 14.0%, Flash: 77.3%)
 
-const char HTML_SCRIPTS[] PROGMEM = R"rawliteral(
-<script>function showView(viewId) {...}</script>
-)rawliteral";
-```
+#### Rezultat:
+**Przed refaktoryzacją:**
+- [`main.cpp`](../caliper_master/src/main.cpp): 650 linii (240 linii HTML/CSS/JS inline)
 
-**Rozwiązanie B - LittleFS (zalecane):**
+**Po refaktoryzacji:**
+- [`main.cpp`](../caliper_master/src/main.cpp): ~435 linii (redukcja o 215 linii)
+- [`index.html`](../caliper_master/data/index.html): 54 linie
+- [`style.css`](../caliper_master/data/style.css): 128 linii
+- [`app.js`](../caliper_master/data/app.js): 172 linie
+
+**Korzyści:**
+- Lepsza separacja warstw (HTML/CSS/JS oddzielone od logiki C++)
+- Łatwiejsza edycja interfejsu bez przekompilowywania firmware
+- Czytelniejszy kod
+- Możliwość użycia zewnętrznych narzędzi do edycji i walidacji HTML/CSS/JS
 
 #### Struktura plików:
 ```
 caliper_master/
 ├── data/                    # Folder dla LittleFS
-│   ├── index.html
-│   ├── style.css
-│   └── app.js
+│   ├── index.html          # Główny interfejs
+│   ├── style.css           # Style CSS
+│   └── app.js              # Logika JavaScript
 ├── src/
-│   └── main.cpp
+│   └── main.cpp            # Zredukowany o 215 linii
 ```
 
-#### Konfiguracja w `platformio.ini`:
-```ini
-[env:esp32doit-devkit-v1]
-board_build.filesystem = littlefs
-```
-
-#### Przykład `data/index.html`:
-```html
-<!DOCTYPE html>
-<html>
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>ESP32 System Pomiarowy</title>
-    <link rel="stylesheet" href="/style.css">
-</head>
-<body>
-    <div class="container">
-        <!-- Widok Menu -->
-        <div id="menu-view" class="view">
-            <h1>System Pomiarowy ESP32</h1>
-            <button onclick="showView('calibration')">Kalibracja</button>
-            <button onclick="showView('session-name')">Nowa sesja pomiarowa</button>
-        </div>
-        <!-- ... pozostałe widoki ... -->
-    </div>
-    <script src="/app.js"></script>
-</body>
-</html>
+#### Wgranie plików na ESP32:
+```bash
+cd caliper_master
+C:\Users\tiim\.platformio\penv\Scripts\platformio.exe run --target uploadfs --environment esp32doit-devkit-v1
 ```
 
 ### 2.2 Reorganizacja modułów Master
@@ -440,8 +448,8 @@ Dodanie informacji o nowej strukturze i instrukcji kompilacji.
 |--------|-------|-----|----------|--------|
 | Duplikacja kodu | 2 kopie common.h | 1 współdzielony plik w lib/ | Łatwiejsze utrzymanie | ✅ Ukończone |
 | Wrappery common.h | 2 pliki wrapper | Bezpośrednie include | Prostszy kod | ✅ Ukończone |
-| HTML w C++ | 240 linii inline | Osobne pliki CSS/JS/HTML | Czytelność, możliwość edycji | ⏳ Oczekuje |
-| Adresy MAC | Hardkodowane | W config.h | Łatwa konfiguracja | ⏳ Oczekuje |
+| HTML w C++ | 240 linii inline | Osobne pliki CSS/JS/HTML w LittleFS | Czytelność, możliwość edycji | ✅ Ukończone |
+| Adresy MAC | Hardkodowane | W config.h | Łatwa konfiguracja | ✅ Ukończone |
 | Struktura folderów | Płaska | Modułowa | Skalowalność | ⏳ Oczekuje |
 | Python deps | Brak | requirements.txt | Łatwa instalacja | ✅ Ukończone |
 
