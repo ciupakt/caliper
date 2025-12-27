@@ -1,8 +1,9 @@
-/** @file    caliper_slave_motor_ctrl.h
- * @brief   Minimalist MP6550GG-Z DC Motor Controller Header for ESP32
- * @author  Generated from caliper_slave_motor_ctrl.ino
- * @date    2025-11-11
- * @version 2.0
+/**
+ * @file motor_ctrl.h
+ * @brief MP6550GG-Z DC Motor Controller Header for ESP32
+ * @author System Generated
+ * @date 2025-12-27
+ * @version 1.0
  *
  * @details
  * Minimalist header file for MP6550GG-Z single H-Bridge DC motor driver.
@@ -13,8 +14,8 @@
  * - Simple forward/reverse/stop/brake control
  */
 
-#ifndef CALIPER_SLAVE_MOTOR_CTRL_H
-#define CALIPER_SLAVE_MOTOR_CTRL_H
+#ifndef MOTOR_CTRL_H
+#define MOTOR_CTRL_H
 
 #include <Arduino.h>
 #include <shared_common.h>
@@ -49,4 +50,4 @@ extern "C"
 }
 #endif
 
-#endif /* CALIPER_SLAVE_MOTOR_CTRL_H */
+#endif /* MOTOR_CTRL_H */

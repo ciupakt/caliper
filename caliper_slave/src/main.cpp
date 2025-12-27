@@ -1,159 +1,27 @@
 #include <esp_now.h>
 #include <WiFi.h>
 #include <Wire.h>
-#include <ADXL345_WE.h>
-#include "caliper_slave_motor_ctrl.h"
 #include "config.h"
 #include <shared_common.h>
+
+// Module includes
+#include "sensors/caliper.h"
+#include "sensors/accelerometer.h"
+#include "power/battery.h"
+#include "motor/motor_ctrl.h"
 
 // Master device MAC address (defined in config.h)
 uint8_t masterAddress[] = MASTER_MAC_ADDR;
 
-volatile uint8_t bitBuffer[52];
-volatile int bitCount = 0;
-volatile bool dataReady = false;
 volatile bool measurementRequested = false;
 
 Message sensorData;
 esp_now_peer_info_t peerInfo;
 
-#define ADXL345_I2CADDR 0x53 // 0x1D if SDO = HIGH
-xyzFloat raw, g, angle, corrAngle;
-ADXL345_WE myAcc = ADXL345_WE(ADXL345_I2CADDR);
-
-void IRAM_ATTR clockISR()
-{
-  if (bitCount < 52)
-  {
-    uint8_t bit = digitalRead(DATA_PIN);
-    bitBuffer[bitCount] = bit;
-    bitCount = bitCount + 1;
-    if (bitCount == 52)
-    {
-      dataReady = true;
-    }
-  }
-}
-
-void reverseBits()
-{
-  for (int i = 0; i < 26; i++)
-  {
-    uint8_t temp = bitBuffer[i];
-    bitBuffer[i] = bitBuffer[51 - i];
-    bitBuffer[51 - i] = temp;
-  }
-}
-
-float decodeCaliper()
-{
-  uint8_t shifted[52];
-  for (int i = 0; i < 52; i++)
-  {
-    if (i + 8 < 52)
-      shifted[i] = bitBuffer[i + 8];
-    else
-      shifted[i] = 0;
-  }
-  uint8_t nibbles[13];
-  for (int i = 0; i < 13; i++)
-  {
-    nibbles[i] = 0;
-    for (int j = 0; j < 4; j++)
-      nibbles[i] |= (shifted[i * 4 + (3 - j)] << j);
-  }
-  long value = 0;
-  for (int i = 0; i < 5; i++)
-    value += nibbles[i] * pow(10, i);
-  bool negative = nibbles[6] & 0x08;
-  bool inchMode = nibbles[6] & 0x04;
-  float measurement = value / 1000.0;
-  if (negative)
-    measurement = -measurement;
-  if (inchMode)
-    measurement *= 25.4;
-  return measurement;
-}
-
-// Battery voltage reading with caching and averaging
-uint16_t readBatteryVoltage()
-{
-  static uint16_t cachedVoltage = 0;
-  static uint32_t lastReadTime = 0;
-
-  uint32_t currentTime = millis();
-
-  // Return cached value if read interval hasn't passed
-  if (cachedVoltage != 0 && (currentTime - lastReadTime) < BATTERY_UPDATE_INTERVAL_MS)
-  {
-    return cachedVoltage;
-  }
-
-  // Read and average multiple samples for better accuracy
-  uint32_t adcSum = 0;
-
-  for (int i = 0; i < ADC_SAMPLES; i++)
-  {
-    adcSum += analogRead(BATTERY_VOLTAGE_PIN);
-    delay(1); // Small delay between samples
-  }
-
-  int adcAverage = adcSum / ADC_SAMPLES;
-
-  // Convert ADC value to millivolts using constants from config.h
-  uint16_t voltage_mV = (uint16_t)((adcAverage * ADC_REFERENCE_VOLTAGE_MV) / ADC_RESOLUTION);
-
-  // Update cache
-  cachedVoltage = voltage_mV;
-  lastReadTime = currentTime;
-
-  return voltage_mV;
-}
-
-float performMeasurement()
-{
-  Serial.println("Wyzwalam pomiar TRIG...");
-  digitalWrite(TRIG_PIN, LOW);
-
-  bitCount = 0;
-  dataReady = false;
-
-  attachInterrupt(digitalPinToInterrupt(CLOCK_PIN), clockISR, FALLING);
-
-  unsigned long startTime = millis();
-  while (!dataReady && (millis() - startTime < MEASUREMENT_TIMEOUT_MS))
-  {
-    delayMicroseconds(100); // Krótsze opóźnienie dla lepszej responsywności
-  }
-
-  detachInterrupt(digitalPinToInterrupt(CLOCK_PIN));
-  digitalWrite(TRIG_PIN, HIGH);
-
-  if (dataReady)
-  {
-    reverseBits();
-    float result = decodeCaliper();
-
-    // Walidacja wyniku z użyciem stałych z config.h
-    if (result >= MEASUREMENT_MIN_VALUE && result <= MEASUREMENT_MAX_VALUE && !isnan(result) && !isinf(result))
-    {
-      Serial.print(">Pomiar:");
-      Serial.print(result, 3);
-      Serial.println(" mm");
-      return result;
-    }
-    else
-    {
-      Serial.println("BLAD: Nieprawidlowa wartosc pomiaru!");
-      return INVALID_MEASUREMENT_VALUE;
-    }
-  }
-  else
-  {
-    Serial.println("BŁĄD: Timeout!");
-    return INVALID_MEASUREMENT_VALUE;
-  }
-}
+// Sensor instances
+CaliperInterface caliper;
+AccelerometerInterface accelerometer;
+BatteryMonitor battery;
 
 void OnDataRecv(const esp_now_recv_info_t *recv_info, const uint8_t *incomingData, int len)
 {
@@ -203,19 +71,15 @@ void setup()
   Serial.begin(115200);
   delay(1000);
   Serial.println("\n=== ESP32 SLAVE - Suwmiarka + ESP-NOW ===");
-  pinMode(DATA_PIN, INPUT_PULLUP);
-  pinMode(CLOCK_PIN, INPUT_PULLUP);
-  pinMode(TRIG_PIN, OUTPUT);
-  digitalWrite(TRIG_PIN, HIGH);
 
+  // Initialize sensors
+  caliper.begin();
+  
   Wire.begin();
-  if (!myAcc.init())
+  if (!accelerometer.begin())
   {
     Serial.println("ADXL345 not connected!");
   }
-
-  myAcc.setDataRate(ADXL345_DATA_RATE_50);
-  myAcc.setRange(ADXL345_RANGE_2G);
 
   WiFi.mode(WIFI_STA);
   delay(100);
@@ -286,27 +150,20 @@ void loop()
   if (measurementRequested)
   {
     measurementRequested = false;
-    float result = performMeasurement();
+    float result = caliper.performMeasurement();
     sensorData.measurement = result;
     sensorData.valid = (result != INVALID_MEASUREMENT_VALUE);
     sensorData.timestamp = millis();
     sensorData.command = CMD_MEASURE;
 
     // Add battery voltage data
-    sensorData.batteryVoltage = readBatteryVoltage();
-    //myAcc.getRawValues(&raw);
-    //myAcc.getGValues(&g);
-    myAcc.getAngles(&angle);
-    //myAcc.getCorrAngles(&corrAngle);
-    /* Angles use the corrected raws. Angles are simply calculated by
-    angle = arcsin(g Value) */
-    sensorData.angleX = angle.x;
+    sensorData.batteryVoltage = battery.readVoltage();
+    
+    // Update accelerometer
+    accelerometer.update();
+    sensorData.angleX = accelerometer.getAngleX();
     Serial.print(">Angle X:");
-    Serial.println(angle.x);
-    // Serial.print("  |  Angle y  = ");
-    // Serial.print(angle.y);
-    // Serial.print("  |  Angle z  = ");
-    // Serial.println(angle.z);
+    Serial.println(accelerometer.getAngleX());
 
     esp_err_t sendResult = esp_now_send(masterAddress, (uint8_t *)&sensorData, sizeof(sensorData));
     if (sendResult == ESP_OK)
@@ -351,18 +208,14 @@ void loop()
 
       // Send status update with battery voltage
       sensorData.command = CMD_UPDATE; // Update
-      sensorData.batteryVoltage = readBatteryVoltage();
+      sensorData.batteryVoltage = battery.readVoltage();
       sensorData.measurement = 0.0;
       sensorData.valid = true;
       sensorData.timestamp = millis();
 
-      //myAcc.getRawValues(&raw);
-      //myAcc.getGValues(&g);
-      myAcc.getAngles(&angle);
-      //myAcc.getCorrAngles(&corrAngle);
-      /* Angles use the corrected raws. Angles are simply calculated by
-      angle = arcsin(g Value) */
-      sensorData.angleX = angle.x;
+      // Update accelerometer
+      accelerometer.update();
+      sensorData.angleX = accelerometer.getAngleX();
 
       esp_err_t sendResult = esp_now_send(masterAddress, (uint8_t *)&sensorData, sizeof(sensorData));
       if (sendResult == ESP_OK)
@@ -373,11 +226,7 @@ void loop()
       }
 
       Serial.print(">Angle X:");
-      Serial.println(angle.x);
-      // Serial.print("  |  Angle y  = ");
-      // Serial.print(angle.y);
-      // Serial.print("  |  Angle z  = ");
-      // Serial.println(angle.z);
+      Serial.println(accelerometer.getAngleX());
     }
   }
 }
