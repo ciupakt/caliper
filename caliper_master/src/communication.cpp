@@ -50,7 +50,7 @@ ErrorCode CommunicationManager::initialize(const uint8_t *slaveAddr)
   return lastError;
 }
 
-ErrorCode CommunicationManager::sendMessage(const Message &message, int retryCount)
+ErrorCode CommunicationManager::sendMessage(const MessageMaster &message, int retryCount)
 {
   if (!initialized)
   {

@@ -34,11 +34,11 @@ public:
 
   /**
    * @brief Send message to slave device
-   * @param message Message to send
+   * @param message MessageMaster payload to send
    * @param retryCount Number of retries (default: ESPNOW_MAX_RETRIES)
    * @return ERR_NONE if successful, error code otherwise
    */
-  ErrorCode sendMessage(const Message &message, int retryCount = ESPNOW_MAX_RETRIES);
+  ErrorCode sendMessage(const MessageMaster &message, int retryCount = ESPNOW_MAX_RETRIES);
 
   /**
    * @brief Check if communication is initialized
