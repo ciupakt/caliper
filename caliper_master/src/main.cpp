@@ -14,7 +14,7 @@ uint8_t slaveAddress[] = SLAVE_MAC_ADDR;
 WebServer server(WEB_SERVER_PORT);
 CommunicationManager commManager;
 SystemStatus systemStatus;
-Message receivedData;
+Message msg;
 
 // Global variables
 String lastMeasurement = "Brak pomiaru";
@@ -27,19 +27,11 @@ bool sessionActive = false;
 int calibrationOffset = 0;
 float calibrationError = 0.0;
 
-String macToString(const uint8_t *mac)
-{
-  char buf[18];
-  sprintf(buf, "%02X,%02X,%02X,%02X,%02X,%02X",
-          mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
-  return String(buf);
-}
-
 void OnDataRecv(const esp_now_recv_info_t *recv_info, const uint8_t *incomingData, int len)
 {
   if (len != sizeof(receivedData))
   {
-    Serial.println("BLAD: Nieprawidlowa dlugosc pakietu ESP-NOW");
+    DEBUG_E("BLAD: Nieprawidlowa dlugosc pakietu ESP-NOW");
     return;
   }
 
@@ -55,7 +47,7 @@ void OnDataRecv(const esp_now_recv_info_t *recv_info, const uint8_t *incomingDat
     // Validate measurement range
     if (receivedData.valid && (receivedData.measurement < MEASUREMENT_MIN_VALUE || receivedData.measurement > MEASUREMENT_MAX_VALUE))
     {
-      Serial.println("BLAD: Wartosc pomiaru poza zakresem!");
+      DEBUG_E("BLAD: Wartosc pomiaru poza zakresem!");
       lastMeasurement = "BLAD: Wartosc poza zakresem";
       measurementReady = true;
       systemStatus.measurementValid = false;
@@ -65,8 +57,7 @@ void OnDataRecv(const esp_now_recv_info_t *recv_info, const uint8_t *incomingDat
     if (receivedData.valid)
     {
       lastMeasurement = String(receivedData.measurement, 3) + " mm";
-      Serial.print("VAL_1:");
-      Serial.println(receivedData.measurement, 3);
+      DEBUG_PLOT("VAL_1:%.3f", (double)receivedData.measurement);
       systemStatus.lastMeasurement = receivedData.measurement;
       systemStatus.measurementValid = true;
     }
@@ -79,30 +70,22 @@ void OnDataRecv(const esp_now_recv_info_t *recv_info, const uint8_t *incomingDat
     systemStatus.batteryVoltage = receivedData.batteryVoltage;
     measurementReady = true;
 
-    Serial.println("\n=== OTRZYMANO WYNIK POMIARU ===");
-    Serial.print("Wartosc: ");
-    Serial.println(lastMeasurement);
-    Serial.print("Timestamp: ");
-    Serial.println(receivedData.timestamp);
-    Serial.print(">Napiecie baterii:");
-    Serial.print(receivedData.batteryVoltage);
-    Serial.println("mV");
-    Serial.print(">Angle X:");
-    Serial.println(receivedData.angleX);
-    Serial.println("================================\n");
+    DEBUG_I("\n=== OTRZYMANO WYNIK POMIARU ===");
+    DEBUG_I("Wartosc: %s", lastMeasurement.c_str());
+    DEBUG_I("Timestamp: %lu", (unsigned long)receivedData.timestamp);
+    DEBUG_PLOT("Napiecie baterii:%u mV", (unsigned int)receivedData.batteryVoltage);
+    DEBUG_PLOT("Angle X:%.2f", (double)receivedData.angleX);
+    DEBUG_I("================================\n");
   }
   else if (receivedData.command == CMD_UPDATE)
   {
     // Status update
-    Serial.println("\n=== AKTUALIZACJA STATUSU ===");
-    Serial.print(">Napiecie baterii:");
-    Serial.print(receivedData.batteryVoltage);
-    Serial.println(" mV");
-    Serial.print(">Angle X:");
-    Serial.println(receivedData.angleX);
+    DEBUG_I("\n=== AKTUALIZACJA STATUSU ===");
+    DEBUG_PLOT("Napiecie baterii:%u mV", (unsigned int)receivedData.batteryVoltage);
+    DEBUG_PLOT("Angle X:%.2f", (double)receivedData.angleX);
     lastBatteryVoltage = String(receivedData.batteryVoltage) + " mV";
     systemStatus.batteryVoltage = receivedData.batteryVoltage;
-    Serial.println("==============================\n");
+    DEBUG_I("==============================\n");
   }
 }
 
@@ -110,7 +93,7 @@ void OnDataSent(const wifi_tx_info_t *info, esp_now_send_status_t status)
 {
   if (status != ESP_NOW_SEND_SUCCESS)
   {
-    Serial.println("ERR: Wyslanie nie powiodlo sie!");
+    DEBUG_E("ERR: Wyslanie nie powiodlo sie!");
     systemStatus.communicationActive = false;
   }
   else
@@ -129,8 +112,7 @@ ErrorCode sendCommand(CommandType command, const char *commandName)
 
   if (result == ERR_NONE)
   {
-    Serial.print("Wyslano komendę: ");
-    Serial.println(commandName);
+    DEBUG_I("Wyslano komendę: %s", commandName);
     lastMeasurement = String("Komenda: ") + commandName;
 
     // Update motor status if it's a motor command
@@ -138,15 +120,12 @@ ErrorCode sendCommand(CommandType command, const char *commandName)
     {
       systemStatus.motorRunning = (command != CMD_STOP);
       systemStatus.motorDirection = (command == CMD_FORWARD) ? MOTOR_FORWARD : (command == CMD_REVERSE) ? MOTOR_REVERSE
-                                                                                                        : MOTOR_STOP;
+                                                                                                         : MOTOR_STOP;
     }
   }
   else
   {
-    Serial.print("BLAD wysylania komendy ");
-    Serial.print(commandName);
-    Serial.print(": ");
-    Serial.println(result);
+    DEBUG_E("BLAD wysylania komendy %s: %d", commandName, (int)result);
     lastMeasurement = "BLAD: Nie można wysłać komendy";
   }
 
@@ -265,8 +244,7 @@ void handleCalibrate()
 
   // Zapisz offset i wyślij przez Serial
   calibrationOffset = offsetValue;
-  Serial.print("CAL_OFFSET:");
-  Serial.println(offsetValue);
+  DEBUG_PLOT("CAL_OFFSET:%d", calibrationOffset);
 
   // Wykonaj pomiar
   requestMeasurement();
@@ -278,8 +256,7 @@ void handleCalibrate()
   if (systemStatus.measurementValid)
   {
     calibrationError = systemStatus.lastMeasurement;
-    Serial.print("CAL_ERROR:");
-    Serial.println(calibrationError, 3);
+    DEBUG_PLOT("CAL_ERROR:%.3f", (double)calibrationError);
   }
 
   String response = "{\"offset\":" + offset + ",\"error\":" +
@@ -321,10 +298,7 @@ void handleMeasureSession()
   if (systemStatus.measurementValid)
   {
     // Wyślij przez Serial
-    Serial.print("MEAS_SESSION:");
-    Serial.print(currentSessionName);
-    Serial.print(" ");
-    Serial.println(systemStatus.lastMeasurement, 3);
+    DEBUG_PLOT("MEAS_SESSION:%s %.3f", currentSessionName.c_str(), (double)systemStatus.lastMeasurement);
   }
 
   String response = "{\"sessionName\":\"" + currentSessionName +
@@ -334,19 +308,19 @@ void handleMeasureSession()
 
 void printSerialHelp()
 {
-  Serial.println("\n=== DOSTĘPNE KOMENDY SERIAL ===");
-  Serial.println("M/m - Wykonaj pomiar");
-  Serial.println("F/f - Silnik do przodu (Forward)");
-  Serial.println("R/r - Silnik do tyłu (Reverse)");
-  Serial.println("S/s - Zatrzymaj silnik (Stop)");
-  Serial.println("H/h/? - Wyświetl tę pomoc");
-  Serial.println("===============================\n");
+  DEBUG_I("\n=== DOSTĘPNE KOMENDY SERIAL ===\n"
+          "M/m - Wykonaj pomiar\n"
+          "F/f - Silnik do przodu (Forward)\n"
+          "R/r - Silnik do tyłu (Reverse)\n"
+          "S/s - Zatrzymaj silnik (Stop)\n"
+          "H/h/? - Wyświetl tę pomoc\n"
+          "===============================\n");
 }
 
 void setup()
 {
-  Serial.begin(115200);
-  delay(1000);
+  DEBUG_BEGIN();
+  DEBUG_I("=== ESP32 MASTER - Suwmiarka + ESP-NOW ===");
 
   // Initialize system status
   memset(&systemStatus, 0, sizeof(systemStatus));
@@ -355,31 +329,28 @@ void setup()
   // Initialize LittleFS
   if (!LittleFS.begin())
   {
-    Serial.println("LittleFS Mount Failed!");
+    DEBUG_E("LittleFS Mount Failed!");
     return;
   }
-  Serial.println("LittleFS mounted successfully");
+  DEBUG_I("LittleFS mounted successfully");
 
   // Setup WiFi
   WiFi.mode(WIFI_AP_STA);
   WiFi.softAP(WIFI_SSID, WIFI_PASSWORD);
 
-  Serial.println("\n=== Access Point uruchomiony ===");
-  Serial.print("SSID: ");
-  Serial.println(WIFI_SSID);
-  Serial.print("IP: ");
-  Serial.println(WiFi.softAPIP());
-  Serial.println("================================\n");
-  Serial.print("MAC Address Master: ");
-  Serial.println(WiFi.macAddress());
-  Serial.println();
+  DEBUG_I("\n=== Access Point uruchomiony ===");
+  DEBUG_I("SSID: %s", WIFI_SSID);
+  DEBUG_I("IP: %s", WiFi.softAPIP().toString().c_str());
+  DEBUG_I("================================\n");
+  DEBUG_I("MAC Address Master: %s", WiFi.macAddress().c_str());
+  DEBUG_I("");
 
   WiFi.setChannel(ESPNOW_WIFI_CHANNEL);
 
   // Initialize communication manager
   if (commManager.initialize(slaveAddress) != ERR_NONE)
   {
-    Serial.println("ESP-NOW init failed!");
+    DEBUG_E("ESP-NOW init failed!");
     return;
   }
 
@@ -413,9 +384,9 @@ void setup()
     } });
 
   server.begin();
-  Serial.println("Serwer HTTP uruchomiony na porcie " + String(WEB_SERVER_PORT));
-  Serial.println("Polacz sie z WiFi: " + String(WIFI_SSID));
-  Serial.println("Otworz: http://" + WiFi.softAPIP().toString());
+  DEBUG_I("Serwer HTTP uruchomiony na porcie %d", (int)WEB_SERVER_PORT);
+  DEBUG_I("Polacz sie z WiFi: %s", WIFI_SSID);
+  DEBUG_I("Otworz: http://%s", WiFi.softAPIP().toString().c_str());
 }
 
 void loop()
@@ -449,7 +420,7 @@ void loop()
       printSerialHelp();
       break;
     default:
-      Serial.println("Nieznana komenda. Wpisz 'H' lub '?' aby zobaczyć dostępne komendy.");
+      DEBUG_W("Nieznana komenda. Wpisz 'H' lub '?' aby zobaczyć dostępne komendy.");
       break;
     }
   }

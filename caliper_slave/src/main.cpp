@@ -14,54 +14,59 @@
 
 // Master device MAC address (defined in config.h)
 uint8_t masterAddress[] = MASTER_MAC_ADDR;
-Message sensorData;
 esp_now_peer_info_t peerInfo;
 
 // Sensor instances
 CaliperInterface caliper;
 AccelerometerInterface accelerometer;
 BatteryMonitor battery;
+Message msg;
 
-bool measReq(void *);
-bool updateStatus(void *);
-
-auto timerUpdateStatus = timer_create_default();
-auto timerMeasReq = timer_create_default();
+bool runMeasReq(void *arg);
+auto timerWorker = timer_create_default();
 
 void OnDataRecv(const esp_now_recv_info_t *recv_info, const uint8_t *incomingData, int len)
 {
-  if (len == 1)
+  if (len != sizeof(msg))
   {
-    char command = (char)incomingData[0];
-    DEBUG_I("Otrzymano komendę: %c", command);
-
-    switch (command)
-    {
-    case CMD_MEASURE: // Measurement request
-      DEBUG_I("Zadanie pomiaru");
-      timerMeasReq.cancel();
-      timerMeasReq.in(1, measReq);
-      break;
-    case CMD_FORWARD: // Motor forward
-      DEBUG_I("Silnik: Forward");
-      setMotorSpeed(110, MOTOR_FORWARD);
-      break;
-    case CMD_REVERSE: // Motor reverse
-      DEBUG_I("Silnik: Reverse");
-      setMotorSpeed(150, MOTOR_REVERSE);
-      break;
-    case CMD_STOP: // Motor stop
-      DEBUG_I("Silnik: Stop");
-      setMotorSpeed(0, MOTOR_STOP);
-      break;
-    default:
-      DEBUG_W("Nieznana komenda: %c", command);
-      break;
-    }
+    DEBUG_E("BLAD: Nieprawidlowa dlugosc pakietu ESP-NOW");
+    return;
   }
-  else
+
+  memcpy(&msg, incomingData, sizeof(msg));
+  // CMD_MEASURE = 'M', /**< Request measurement from slave */
+  // CMD_UPDATE = 'U',  /**< Request update status from slave */
+  // CMD_FORWARD = 'F', /**< Motor forward command */
+  // CMD_REVERSE = 'R', /**< Motor reverse command */
+  // CMD_STOP = 'S',    /**< Motor stop command */
+
+  switch (msg.command)
   {
-    DEBUG_E("BŁĄD: Nieprawidłowe dane ESP-NOW (len=%d)", len);
+  case CMD_MEASURE: // Measurement request
+    DEBUG_I("Zadanie pomiaru");
+    timerWorker.cancel();
+    timerWorker.in(1, runMeasReq);
+    break;
+  case CMD_UPDATE: // Status update request
+    DEBUG_I("Aktualizacja statusu");
+    timerWorker.cancel();
+    timerWorker.in(1, runMeasReq);
+    break;
+  case CMD_FORWARD: // Motor forward
+    DEBUG_I("Silnik: Forward");
+    motorCtrlRun(msg.motorSpeed, msg.motorTorque, MOTOR_FORWARD);
+    break;
+  case CMD_REVERSE: // Motor reverse
+    DEBUG_I("Silnik: Reverse");
+    motorCtrlRun(msg.motorSpeed, msg.motorTorque, MOTOR_REVERSE);
+    break;
+  case CMD_STOP: // Motor stop
+    DEBUG_I("Silnik: Stop");
+    motorCtrlRun(0, 0, MOTOR_STOP);
+    break;
+  default:
+    DEBUG_W("Nieznana komenda: %c", msg.command);
+    break;
   }
 }
 
@@ -78,29 +83,31 @@ void OnDataSent(const wifi_tx_info_t *info, esp_now_send_status_t status)
 }
 
 // callback evry measurement request
-bool measReq(void *)
+bool runMeasReq(void *arg)
 {
-  float result = caliper.performMeasurement();
-  sensorData.measurement = result;
-  sensorData.valid = (result != INVALID_MEASUREMENT_VALUE);
-  sensorData.timestamp = millis();
-  sensorData.command = CMD_MEASURE;
-
-  // Add battery voltage data
-  sensorData.batteryVoltage = battery.readVoltage();
-
-  // Update accelerometer
   accelerometer.update();
-  sensorData.angleX = accelerometer.getAngleX();
+  msg.measurement = caliper.performMeasurement();
+  msg.angleX = accelerometer.getAngleX();
+  msg.batteryVoltage = battery.readVoltage();
+  msg.timestamp = millis();
 
-  esp_err_t sendResult = esp_now_send(masterAddress, (uint8_t *)&sensorData, sizeof(sensorData));
+  (void)msg.command;     // Already known;
+  (void)msg.motorSpeed;  // Not used in measurement response
+  (void)msg.motorTorque; // Not used in measurement response
+
+  DEBUG_I("command:%c", msg.command);
+  DEBUG_I("motorSpeed:%u", (unsigned)msg.motorSpeed);
+  DEBUG_I("motorTorque:%u", (unsigned)msg.motorTorque);
+
+  DEBUG_PLOT("timestamp:%u", (unsigned)msg.timestamp);
+  DEBUG_PLOT("measurement:%.3f", (unsigned)msg.measurement);
+  DEBUG_PLOT("angleX:%u", (unsigned)msg.angleX);
+  DEBUG_PLOT("batteryVoltage:%u", (unsigned)msg.batteryVoltage);
+
+  esp_err_t sendResult = esp_now_send(masterAddress, (uint8_t *)&msg, sizeof(msg));
   if (sendResult == ESP_OK)
   {
     DEBUG_I("Wynik wysłany do Mastera");
-    DEBUG_PLOT("measurement:%.3f", (unsigned)sensorData.measurement);
-    DEBUG_PLOT("timestamp:%u", (unsigned)sensorData.timestamp);
-    DEBUG_PLOT("batteryVoltage:%u", (unsigned)sensorData.batteryVoltage);
-    DEBUG_PLOT("angleX:%u", (unsigned)sensorData.angleX);
   }
   else
   {
@@ -108,7 +115,7 @@ bool measReq(void *)
 
     // Próba ponownego wysłania po krótkiej przerwie
     delay(ESPNOW_RETRY_DELAY_MS);
-    sendResult = esp_now_send(masterAddress, (uint8_t *)&sensorData, sizeof(sensorData));
+    sendResult = esp_now_send(masterAddress, (uint8_t *)&msg, sizeof(msg));
     if (sendResult == ESP_OK)
     {
       DEBUG_I("Ponowne wysłanie wyniku udane");
@@ -122,36 +129,10 @@ bool measReq(void *)
   return false; // do not repeat this task
 }
 
-// callback every status update interval
-bool updateStatus(void *)
-{
-  // Send status update with battery voltage
-  sensorData.command = CMD_UPDATE; // Update
-  sensorData.batteryVoltage = battery.readVoltage();
-  sensorData.measurement = 0.0;
-  sensorData.valid = true;
-  sensorData.timestamp = millis();
-
-  // Update accelerometer
-  accelerometer.update();
-  sensorData.angleX = accelerometer.getAngleX();
-
-  esp_err_t sendResult = esp_now_send(masterAddress, (uint8_t *)&sensorData, sizeof(sensorData));
-  if (sendResult != ESP_OK)
-  {
-    DEBUG_E("sendResult: %d", sendResult);
-  }
-
-  DEBUG_PLOT("batteryVoltage:%u", (unsigned)sensorData.batteryVoltage);
-  DEBUG_PLOT("angleX:%u", (unsigned)sensorData.angleX);
-
-  return true; // repeat this task
-}
 
 void setup()
 {
   DEBUG_BEGIN();
-  delay(1000);
   DEBUG_I("=== ESP32 SLAVE - Suwmiarka + ESP-NOW ===");
 
   // Initialize sensors
@@ -219,13 +200,11 @@ void setup()
 
   // Initialize motor controller
   DEBUG_I("Inicjalizacja sterownika silnika...");
-  initializeMotorController();
+  motorCtrlInit();
   DEBUG_I("Oczekiwanie na żądania pomiaru...");
-  timerUpdateStatus.every(1000, updateStatus);
 }
 
 void loop()
 {
-  timerUpdateStatus.tick();
-  timerMeasReq.tick();
+  timerWorker.tick();
 }

@@ -18,7 +18,7 @@
 // Public Function Implementations
 //==============================================================================
 
-void initializeMotorController(void)
+void motorCtrlInit(void)
 {
     DEBUG_I("Initializing MP6550GG-Z Motor Controller...");
 
@@ -27,10 +27,13 @@ void initializeMotorController(void)
     pinMode(MOTOR_IN2_PIN, OUTPUT);
 }
 
-void setMotorSpeed(uint8_t speed, MotorState direction)
+void motorCtrlRun(uint8_t speed, uint8_t torque, MotorState direction)
 {
     // Clamp speed to valid range
     speed = constrain(speed, 0, 255);
+
+    // TODO: Currently torque parameter is unused, as MP6550GG-Z does not support torque control directly
+    torque = constrain(torque, 0, 255);
 
     // Optimized lookup table for motor control
     static const struct

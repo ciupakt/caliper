@@ -22,10 +22,10 @@
 enum CommandType : char
 {
   CMD_MEASURE = 'M', /**< Request measurement from slave */
+  CMD_UPDATE = 'U',  /**< Request update status from slave */
   CMD_FORWARD = 'F', /**< Motor forward command */
   CMD_REVERSE = 'R', /**< Motor reverse command */
   CMD_STOP = 'S',    /**< Motor stop command */
-  CMD_UPDATE = 'U'   /**< Status update */
 };
 
 /**
@@ -60,12 +60,13 @@ enum ErrorCode : uint8_t
  */
 struct Message
 {
-  float measurement;       /**< Measurement value in mm */
-  bool valid;              /**< Whether measurement is valid */
-  uint32_t timestamp;      /**< Timestamp from system start (ms) */
   CommandType command;     /**< Command type */
-  uint16_t batteryVoltage; /**< Battery voltage in millivolts */
-  float angleX;            /**< Angle X from accelerometer ADXL345 */
+  uint8_t angleX;            /**< Angle X from accelerometer ADXL345 */
+  uint8_t motorSpeed;    /**< Motor speed (PWM value 0-255) */
+  uint8_t motorTorque;   /**< Motor torque (PWM value 0-255) */
+  uint32_t timestamp;      /**< Timestamp from system start (ms) */
+  float measurement;       /**< Measurement value in mm */
+  float batteryVoltage;    /**< Battery voltage in voltage */
 };
 
 #ifdef CALIPER_MASTER

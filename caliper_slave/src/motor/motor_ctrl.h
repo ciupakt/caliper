@@ -35,7 +35,7 @@ extern "C"
      * Configures motor pins for PWM control.
      * This function must be called before using any other motor control functions.
      */
-    void initializeMotorController(void);
+    void motorCtrlInit(void);
 
     /**
      * @brief Set motor speed and direction
@@ -44,7 +44,7 @@ extern "C"
      * @details
      * Sets PWM-controlled motor speed. Speed 0 stops the motor, 255 is maximum speed.
      */
-    void setMotorSpeed(uint8_t speed, MotorState direction);
+    void motorCtrlRun(uint8_t speed, uint8_t torque, MotorState direction);
 
 #ifdef __cplusplus
 }
