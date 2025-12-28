@@ -8,9 +8,9 @@ function showView(viewId) {
 
 // Funkcje kalibracji
 function calibrate() {
-    const offset = document.getElementById('offset-input').value;
-    if (offset < 74 || offset > 165) {
-        alert('Offset musi być w zakresie 74-165');
+    const offset = Number(document.getElementById('offset-input').value);
+    if (!Number.isFinite(offset) || offset < -14.999 || offset > 14.999) {
+        alert('Offset musi być w zakresie -14.999 .. 14.999');
         return;
     }
     document.getElementById('status').textContent = 'Wykonywanie kalibracji...';
@@ -125,54 +125,38 @@ function refreshSession() {
     });
 }
 
-// Funkcje sterowania silnikiem
-function motorForward() {
-    document.getElementById('status').textContent = 'Wysyłanie komendy Forward...';
-    fetch('/forward')
+// Funkcje sterowania silnikiem (jeden endpoint /motor → CMD_MOTORTEST)
+function motorSend() {
+    const state = document.getElementById('motor-state').value;
+    const speed = document.getElementById('motor-speed').value;
+    const torque = document.getElementById('motor-torque').value;
+
+    document.getElementById('status').textContent = 'Wysyłanie komendy silnika...';
+
+    fetch('/motor', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/x-www-form-urlencoded'},
+        body: 'state=' + encodeURIComponent(state) +
+              '&speed=' + encodeURIComponent(speed) +
+              '&torque=' + encodeURIComponent(torque)
+    })
     .then(response => {
         if (!response.ok) {
-            throw new Error('Błąd serwera: ' + response.status);
+            return response.json().then(err => { throw new Error(err.error || 'Błąd serwera'); });
         }
-        return response.text();
+        return response.json();
     })
     .then(data => {
-        document.getElementById('status').textContent = 'Forward: ' + data;
+        document.getElementById('status').textContent =
+            'Motor: state=' + data.state + ' speed=' + data.speed + ' torque=' + data.torque;
     })
     .catch(error => {
         document.getElementById('status').textContent = 'Błąd: ' + error.message;
     });
 }
 
-function motorReverse() {
-    document.getElementById('status').textContent = 'Wysyłanie komendy Reverse...';
-    fetch('/reverse')
-    .then(response => {
-        if (!response.ok) {
-            throw new Error('Błąd serwera: ' + response.status);
-        }
-        return response.text();
-    })
-    .then(data => {
-        document.getElementById('status').textContent = 'Reverse: ' + data;
-    })
-    .catch(error => {
-        document.getElementById('status').textContent = 'Błąd: ' + error.message;
-    });
-}
-
-function motorStop() {
-    document.getElementById('status').textContent = 'Wysyłanie komendy Stop...';
-    fetch('/stop')
-    .then(response => {
-        if (!response.ok) {
-            throw new Error('Błąd serwera: ' + response.status);
-        }
-        return response.text();
-    })
-    .then(data => {
-        document.getElementById('status').textContent = 'Stop: ' + data;
-    })
-    .catch(error => {
-        document.getElementById('status').textContent = 'Błąd: ' + error.message;
-    });
+function motorStopQuick() {
+    document.getElementById('motor-state').value = '0';
+    document.getElementById('motor-speed').value = '0';
+    motorSend();
 }

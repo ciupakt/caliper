@@ -60,30 +60,6 @@ button.motor {
     padding: 10px;
 }
 
-button.motor.forward {
-    background: #28a745;
-}
-
-button.motor.forward:hover {
-    background: #218838;
-}
-
-button.motor.reverse {
-    background: #ffc107;
-    color: black;
-}
-
-button.motor.reverse:hover {
-    background: #e0a800;
-}
-
-button.motor.stop {
-    background: #dc3545;
-}
-
-button.motor.stop:hover {
-    background: #c82333;
-}
 
 .status {
     text-align: center;

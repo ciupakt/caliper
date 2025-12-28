@@ -17,25 +17,14 @@
 #include "../config.h"
 
 class BatteryMonitor {
-private:
-    uint16_t cachedVoltage;
-    uint32_t lastReadTime;
-    
+
 public:
     /**
      * @brief Initialize battery monitor
      * @details Sets up ADC pin for voltage reading
      */
-    BatteryMonitor() : cachedVoltage(0), lastReadTime(0) {}
-    
-    /**
-     * @brief Read battery voltage
-     * @return Voltage in millivolts
-     * @details Returns cached value if read interval hasn't passed,
-     * otherwise performs new measurement with averaging
-     */
-    uint16_t readVoltage();
-    
+    BatteryMonitor(){}
+
     /**
      * @brief Force a new voltage reading
      * @return Voltage in millivolts

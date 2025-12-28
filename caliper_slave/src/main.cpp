@@ -33,36 +33,27 @@ void OnDataRecv(const esp_now_recv_info_t *recv_info, const uint8_t *incomingDat
   }
 
   memcpy(&msg, incomingData, sizeof(msg));
-  // CMD_MEASURE = 'M', /**< Request measurement from slave */
-  // CMD_UPDATE = 'U',  /**< Request update status from slave */
-  // CMD_FORWARD = 'F', /**< Motor forward command */
-  // CMD_REVERSE = 'R', /**< Motor reverse command */
-  // CMD_STOP = 'S',    /**< Motor stop command */
 
   switch (msg.command)
   {
   case CMD_MEASURE: // Measurement request
-    DEBUG_I("Zadanie pomiaru");
+    DEBUG_I("CMD_MEASURE");
     timerWorker.cancel();
     timerWorker.in(1, runMeasReq);
     break;
+
   case CMD_UPDATE: // Status update request
-    DEBUG_I("Aktualizacja statusu");
+    DEBUG_I("CMD_UPDATE");
     timerWorker.cancel();
     timerWorker.in(1, runMeasReq);
     break;
-  case CMD_FORWARD: // Motor forward
-    DEBUG_I("Silnik: Forward");
-    motorCtrlRun(msg.motorSpeed, msg.motorTorque, MOTOR_FORWARD);
+
+  // Motor control (generic)
+  case CMD_MOTORTEST:
+    DEBUG_I("CMD_MOTORTEST");
+    motorCtrlRun(msg.motorSpeed, msg.motorTorque, msg.motorState);
     break;
-  case CMD_REVERSE: // Motor reverse
-    DEBUG_I("Silnik: Reverse");
-    motorCtrlRun(msg.motorSpeed, msg.motorTorque, MOTOR_REVERSE);
-    break;
-  case CMD_STOP: // Motor stop
-    DEBUG_I("Silnik: Stop");
-    motorCtrlRun(0, 0, MOTOR_STOP);
-    break;
+
   default:
     DEBUG_W("Nieznana komenda: %c", msg.command);
     break;
@@ -87,21 +78,25 @@ bool runMeasReq(void *arg)
   accelerometer.update();
   msg.measurement = caliper.performMeasurement();
   msg.angleX = accelerometer.getAngleX();
-  msg.batteryVoltage = battery.readVoltage();
+  msg.batteryVoltage = battery.readVoltageNow();
   msg.timestamp = millis();
 
   (void)msg.command;     // Already known;
+  (void)msg.timeout;     // Not used in measurement response
+  (void)msg.motorState;  // Not used in measurement response
   (void)msg.motorSpeed;  // Not used in measurement response
   (void)msg.motorTorque; // Not used in measurement response
 
   DEBUG_I("command:%c", msg.command);
-  DEBUG_I("motorSpeed:%u", (unsigned)msg.motorSpeed);
-  DEBUG_I("motorTorque:%u", (unsigned)msg.motorTorque);
+  DEBUG_I("timeout:%u", msg.timeout);
+  DEBUG_I("motorState:%u", msg.motorState);
+  DEBUG_I("motorSpeed:%u", msg.motorSpeed);
+  DEBUG_I("motorTorque:%u", msg.motorTorque);
 
-  DEBUG_PLOT("timestamp:%u", (unsigned)msg.timestamp);
-  DEBUG_PLOT("measurement:%.3f", (unsigned)msg.measurement);
-  DEBUG_PLOT("angleX:%u", (unsigned)msg.angleX);
-  DEBUG_PLOT("batteryVoltage:%u", (unsigned)msg.batteryVoltage);
+  DEBUG_PLOT("timestamp:%u", msg.timestamp);
+  DEBUG_PLOT("measurement:%.3f", msg.measurement);
+  DEBUG_PLOT("angleX:%u", msg.angleX);
+  DEBUG_PLOT("batteryVoltage:%.3f", msg.batteryVoltage);
 
   esp_err_t sendResult = esp_now_send(masterAddress, (uint8_t *)&msg, sizeof(msg));
   if (sendResult == ESP_OK)

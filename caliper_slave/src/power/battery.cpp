@@ -8,18 +8,6 @@
 
 #include "battery.h"
 
-uint16_t BatteryMonitor::readVoltage()
-{
-    uint32_t currentTime = millis();
-
-    // Return cached value if read interval hasn't passed
-    if (cachedVoltage != 0 && (currentTime - lastReadTime) < BATTERY_UPDATE_INTERVAL_MS)
-    {
-        return cachedVoltage;
-    }
-
-    return readVoltageNow();
-}
 
 uint16_t BatteryMonitor::readVoltageNow()
 {
@@ -36,10 +24,6 @@ uint16_t BatteryMonitor::readVoltageNow()
 
     // Convert ADC value to millivolts using constants from config.h
     uint16_t voltage_mV = (uint16_t)((adcAverage * ADC_REFERENCE_VOLTAGE_MV) / ADC_RESOLUTION);
-
-    // Update cache
-    cachedVoltage = voltage_mV;
-    lastReadTime = millis();
 
     return voltage_mV;
 }

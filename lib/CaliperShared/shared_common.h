@@ -21,11 +21,9 @@
  */
 enum CommandType : char
 {
-  CMD_MEASURE = 'M', /**< Request measurement from slave */
-  CMD_UPDATE = 'U',  /**< Request update status from slave */
-  CMD_FORWARD = 'F', /**< Motor forward command */
-  CMD_REVERSE = 'R', /**< Motor reverse command */
-  CMD_STOP = 'S',    /**< Motor stop command */
+  CMD_MEASURE = 'M',   /**< Request measurement from slave */
+  CMD_UPDATE = 'U',    /**< Request update status from slave */
+  CMD_MOTORTEST = 'T', /**< Generic motor control command (uses motorState/motorSpeed/motorTorque) */
 };
 
 /**
@@ -60,13 +58,16 @@ enum ErrorCode : uint8_t
  */
 struct Message
 {
-  CommandType command;     /**< Command type */
-  uint8_t angleX;            /**< Angle X from accelerometer ADXL345 */
-  uint8_t motorSpeed;    /**< Motor speed (PWM value 0-255) */
-  uint8_t motorTorque;   /**< Motor torque (PWM value 0-255) */
   uint32_t timestamp;      /**< Timestamp from system start (ms) */
+  uint32_t timeout;      /**< Timeout for run motor while measure (ms) */
   float measurement;       /**< Measurement value in mm */
   float batteryVoltage;    /**< Battery voltage in voltage */
+  CommandType command;     /**< Command type */
+  uint8_t angleX;            /**< Angle X from accelerometer ADXL345 */
+  MotorState motorState;  /**< Current motor state */
+  uint8_t motorSpeed;    /**< Motor speed (PWM value 0-255) */
+  uint8_t motorTorque;   /**< Motor torque (PWM value 0-255) */
+
 };
 
 #ifdef CALIPER_MASTER
@@ -77,7 +78,8 @@ struct Message
  */
 struct SystemStatus
 {
-  Message lastMessage;
+  Message rxMessage;
+  Message txMessage;
   float calibrationOffset;
   float deviation;
 };

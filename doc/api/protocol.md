@@ -38,9 +38,7 @@ Zgodnie z [`enum CommandType`](lib/CaliperShared/shared_common.h:22):
 |---------|-----|----------|------|
 | CMD_MEASURE | 'M' | Master → Slave | Żądanie pomiaru suwmiarki |
 | CMD_UPDATE  | 'U' | Master → Slave | Żądanie odświeżenia/statusu (używane także jako „kalibracja” w Master) |
-| CMD_FORWARD | 'F' | Master → Slave | Silnik do przodu |
-| CMD_REVERSE | 'R' | Master → Slave | Silnik do tyłu |
-| CMD_STOP    | 'S' | Master → Slave | Zatrzymaj silnik |
+| CMD_MOTORTEST | 'T' | Master → Slave | Generyczne sterowanie silnikiem (używa pól `motorState/motorSpeed/motorTorque`) |
 
 ### Przepływ Komunikacji
 
@@ -64,18 +62,20 @@ Master                                   Slave
 
 #### 2. Sterowanie Silnikiem
 
+Sterowanie silnikiem realizowane jest wyłącznie komendą generyczną `CMD_MOTORTEST`.
+
 ```
-Master                                                     Slave
-  │                                                          │
-  ├── Message{command=CMD_FORWARD, motorSpeed=255} ─────────>│
-  │                                                          ├─ Silnik do przodu (PWM = motorSpeed)
-  │                                                          │
-  ├── Message{command=CMD_REVERSE, motorSpeed=255} ─────────>│
-  │                                                          ├─ Silnik do tyłu (PWM = motorSpeed)
-  │                                                          │
-  ├── Message{command=CMD_STOP} ────────────────────────────>│
-  │                                                          ├─ Zatrzymaj silnik
-  │                                                          │
+Master                                                                     Slave
+  │                                                                          │
+  ├── Message{command=CMD_MOTORTEST, motorState=1, motorSpeed=255} ─────────>│
+  │                                                                          ├─ Silnik do przodu (PWM = motorSpeed)
+  │                                                                          │
+  ├── Message{command=CMD_MOTORTEST, motorState=2, motorSpeed=255} ─────────>│
+  │                                                                          ├─ Silnik do tyłu (PWM = motorSpeed)
+  │                                                                          │
+  ├── Message{command=CMD_MOTORTEST, motorState=0, motorSpeed=0} ───────────>│
+  │                                                                          ├─ Stop
+  │                                                                          │
 ```
 
 #### 3. Aktualizacja Statusu (okresowa)
@@ -263,36 +263,31 @@ Wyzwala pomiar suwmiarki.
 }
 ```
 
-#### POST /api/motor
+#### POST /motor
 
-Steruje silnikiem.
+Steruje silnikiem wyłącznie przez `CMD_MOTORTEST`.
 
-**Żądanie:**
-```json
-{
-  "command": "forward" | "reverse" | "stop"
-}
-```
+**Parametry (application/x-www-form-urlencoded):**
+- `state` – 0..3 (STOP/FORWARD/REVERSE/BRAKE)
+- `speed` – 0..255
+- `torque` – 0..255
 
 **Odpowiedź JSON:**
 ```json
 {
-  "success": true
+  "state": 1,
+  "speed": 255,
+  "torque": 0
 }
 ```
 
 ### Przykłady Użycia
 
-#### Wyzwolenie Pomiaru (curl)
-```bash
-curl -X POST http://192.168.4.1/api/measure
-```
-
 #### Sterowanie Silnikiem (curl)
 ```bash
-curl -X POST http://192.168.4.1/api/motor \
-  -H "Content-Type: application/json" \
-  -d '{"command": "forward"}'
+curl -X POST http://192.168.4.1/motor \
+  -H "Content-Type: application/x-www-form-urlencoded" \
+  -d "state=1&speed=255&torque=0"
 ```
 
 #### Pobranie Statusu (curl)

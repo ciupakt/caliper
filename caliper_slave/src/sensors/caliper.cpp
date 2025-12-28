@@ -90,7 +90,7 @@ float CaliperInterface::performMeasurement()
     unsigned long startTime = millis();
     while (!dataReady && (millis() - startTime < MEASUREMENT_TIMEOUT_MS))
     {
-        delayMicroseconds(100);
+        delay(1);
     }
 
     detachInterrupt(digitalPinToInterrupt(CLOCK_PIN));

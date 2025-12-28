@@ -14,8 +14,9 @@ uint8_t slaveAddress[] = SLAVE_MAC_ADDR;
 WebServer server(WEB_SERVER_PORT);
 CommunicationManager commManager;
 SystemStatus systemStatus;
-Message msg;
 bool serialCommandParser(void *arg);
+static bool parseIntStrict(const String &s, long &out);
+static bool parseFloatStrict(const String &s, float &out);
 
 auto timerWorker = timer_create_default();
 
@@ -31,11 +32,13 @@ float lastDeviationValue = 0.0f;
 // Session management variables
 String currentSessionName = "";
 bool sessionActive = false;
-int calibrationOffset = 0;
-float calibrationError = 0.0;
+float calibrationOffset = 0.0f; // offset w mm, stosowany po stronie Master
+float calibrationError = 0.0f;
 
 void OnDataRecv(const esp_now_recv_info_t *recv_info, const uint8_t *incomingData, int len)
 {
+  Message msg;
+  
   if (len != sizeof(msg))
   {
     DEBUG_E("BLAD: Nieprawidlowa dlugosc pakietu ESP-NOW");
@@ -46,12 +49,12 @@ void OnDataRecv(const esp_now_recv_info_t *recv_info, const uint8_t *incomingDat
   measurementReady = true;
 
   // Synchronizuj offset z aktualnym ustawieniem (np. z GUI/Serial)
-  systemStatus.calibrationOffset = (float)calibrationOffset;
+  systemStatus.calibrationOffset = calibrationOffset;
 
-  systemStatus.lastMessage = msg;
-  systemStatus.deviation = systemStatus.lastMessage.measurement + systemStatus.calibrationOffset;
+  systemStatus.rxMessage = msg;
+  systemStatus.deviation = systemStatus.rxMessage.measurement + systemStatus.calibrationOffset;
 
-  lastMeasurementValue = systemStatus.lastMessage.measurement;
+  lastMeasurementValue = systemStatus.rxMessage.measurement;
   lastDeviationValue = systemStatus.deviation;
 
   DEBUG_I("command:%c", msg.command);
@@ -85,12 +88,19 @@ void OnDataSent(const wifi_tx_info_t *info, esp_now_send_status_t status)
 // Ujednolicona wysyłka: Master → Slave zawsze wysyła pełną strukturę Message
 static constexpr uint8_t DEFAULT_MOTOR_SPEED = 255;
 static constexpr uint8_t DEFAULT_MOTOR_TORQUE = 0;
+static constexpr MotorState DEFAULT_MOTOR_STATE = MOTOR_STOP;
+static constexpr uint32_t DEFAULT_TIMEOUT_MS = 0;
 
-ErrorCode sendMessageToSlave(CommandType command,
-                            const char *commandName,
-                            uint8_t motorSpeed,
-                            uint8_t motorTorque,
-                            bool expectResponse)
+static void initDefaultTxMessage()
+{
+  memset(&systemStatus.txMessage, 0, sizeof(systemStatus.txMessage));
+  systemStatus.txMessage.motorSpeed = DEFAULT_MOTOR_SPEED;
+  systemStatus.txMessage.motorTorque = DEFAULT_MOTOR_TORQUE;
+  systemStatus.txMessage.motorState = DEFAULT_MOTOR_STATE;
+  systemStatus.txMessage.timeout = DEFAULT_TIMEOUT_MS;
+}
+
+ErrorCode sendTxToSlave(CommandType command, const char *commandName, bool expectResponse)
 {
   if (expectResponse)
   {
@@ -98,13 +108,10 @@ ErrorCode sendMessageToSlave(CommandType command,
     lastMeasurement = "Oczekiwanie na odpowiedź...";
   }
 
-  Message tx{};
-  tx.command = command;
-  tx.motorSpeed = motorSpeed;
-  tx.motorTorque = motorTorque;
-  tx.timestamp = millis();
+  systemStatus.txMessage.command = command;
+  systemStatus.txMessage.timestamp = millis();
 
-  ErrorCode result = commManager.sendMessage(tx);
+  ErrorCode result = commManager.sendMessage(systemStatus.txMessage);
 
   if (result == ERR_NONE)
   {
@@ -122,28 +129,23 @@ ErrorCode sendMessageToSlave(CommandType command,
 
 void requestMeasurement()
 {
-  (void)sendMessageToSlave(CMD_MEASURE, "Pomiar", 0, 0, true);
+  (void)sendTxToSlave(CMD_MEASURE, "Pomiar", true);
+}
+
+void requestUpdate()
+{
+  (void)sendTxToSlave(CMD_UPDATE, "Status", true);
 }
 
 void requestCalibration()
 {
-  DEBUG_I("Rozpoczynanie kalibracji z offsetem: %d", calibrationOffset);
-  (void)sendMessageToSlave(CMD_UPDATE, "Kalibracja", 0, 0, true);
+  DEBUG_I("Rozpoczynanie kalibracji z offsetem: %.3f", (double)calibrationOffset);
+  (void)sendTxToSlave(CMD_UPDATE, "Kalibracja", true);
 }
 
-void sendMotorForward()
+void sendMotorTest()
 {
-  (void)sendMessageToSlave(CMD_FORWARD, "Silnik do przodu", DEFAULT_MOTOR_SPEED, DEFAULT_MOTOR_TORQUE, false);
-}
-
-void sendMotorReverse()
-{
-  (void)sendMessageToSlave(CMD_REVERSE, "Silnik do tyłu", DEFAULT_MOTOR_SPEED, DEFAULT_MOTOR_TORQUE, false);
-}
-
-void sendMotorStop()
-{
-  (void)sendMessageToSlave(CMD_STOP, "Zatrzymaj silnik", 0, 0, false);
+  (void)sendTxToSlave(CMD_MOTORTEST, "Motor run", false);
 }
 
 // Serve static files from LittleFS
@@ -196,53 +198,78 @@ void handleRead()
 
 void handleAPI()
 {
+  const Message &m = systemStatus.rxMessage;
+
   String json = "{";
   json += "\"measurement\":\"" + lastMeasurement + "\",";
-  json += "\"timestamp\":" + String(msg.timestamp) + ",";
+  json += "\"timestamp\":" + String((unsigned)m.timestamp) + ",";
 
-  // Pole `valid` nie jest już częścią struktury `Message` – raportujemy je na podstawie tego,
+  // Pole `valid` nie jest częścią struktury `Message` – raportujemy je na podstawie tego,
   // czy mamy świeżą odpowiedź z ESP-NOW.
   json += "\"valid\":" + String(measurementReady ? "true" : "false") + ",";
 
-  json += "\"batteryVoltage\":" + String(msg.batteryVoltage, 3) + ",";
-  json += "\"angleX\":" + String((unsigned)msg.angleX) + ",";
-  json += "\"command\":\"" + String(msg.command) + "\"";
+  json += "\"batteryVoltage\":" + String(m.batteryVoltage, 3) + ",";
+  json += "\"angleX\":" + String((unsigned)m.angleX) + ",";
+  json += "\"command\":\"" + String((char)m.command) + "\"";
   json += "}";
+
   server.send(200, "application/json", json);
 }
 
-void handleMotorForward()
+void handleMotor()
 {
-  sendMotorForward();
-  server.send(200, "text/plain", "Silnik: Forward");
-}
+  long stateVal = 0;
+  long speedVal = 0;
+  long torqueVal = 0;
 
-void handleMotorReverse()
-{
-  sendMotorReverse();
-  server.send(200, "text/plain", "Silnik: Reverse");
-}
+  if (!parseIntStrict(server.arg("state"), stateVal) || stateVal < 0 || stateVal > 3)
+  {
+    server.send(400, "application/json", "{\"error\":\"Niepoprawny parametr state (0-3)\"}");
+    return;
+  }
 
-void handleMotorStop()
-{
-  sendMotorStop();
-  server.send(200, "text/plain", "Silnik: Stop");
+  if (!parseIntStrict(server.arg("speed"), speedVal) || speedVal < 0 || speedVal > 255)
+  {
+    server.send(400, "application/json", "{\"error\":\"Niepoprawny parametr speed (0-255)\"}");
+    return;
+  }
+
+  if (!parseIntStrict(server.arg("torque"), torqueVal) || torqueVal < 0 || torqueVal > 255)
+  {
+    server.send(400, "application/json", "{\"error\":\"Niepoprawny parametr torque (0-255)\"}");
+    return;
+  }
+
+  systemStatus.txMessage.motorState = (MotorState)stateVal;
+  systemStatus.txMessage.motorSpeed = (uint8_t)speedVal;
+  systemStatus.txMessage.motorTorque = (uint8_t)torqueVal;
+
+  sendMotorTest();
+
+  String response = "{\"state\":" + String((int)stateVal) + ",\"speed\":" + String((int)speedVal) + ",\"torque\":" + String((int)torqueVal) + "}";
+  server.send(200, "application/json", response);
 }
 
 void handleCalibrate()
 {
-  String offset = server.arg("offset");
-  int offsetValue = offset.toInt();
+  const String offsetStr = server.arg("offset");
+  float offsetValue = 0.0f;
 
-  if (offsetValue < 74 || offsetValue > 165)
+  if (!parseFloatStrict(offsetStr, offsetValue))
   {
-    server.send(400, "application/json", "{\"error\":\"Offset poza zakresem\"}");
+    server.send(400, "application/json", "{\"error\":\"Niepoprawny parametr offset\"}");
     return;
   }
 
-  // Zapisz offset i wyślij przez Serial
+  if (offsetValue < -14.999f || offsetValue > 14.999f)
+  {
+    server.send(400, "application/json", "{\"error\":\"Offset poza zakresem (-14.999..14.999)\"}");
+    return;
+  }
+
+  // Zapisz offset (lokalnie na Master)
   calibrationOffset = offsetValue;
-  DEBUG_PLOT("calibrationOffset:%d", calibrationOffset);
+  DEBUG_PLOT("calibrationOffset:%.3f", (double)calibrationOffset);
 
   // Wykonaj pomiar
   requestMeasurement();
@@ -257,8 +284,8 @@ void handleCalibrate()
     DEBUG_PLOT("calibrationError:%.3f", (double)calibrationError);
   }
 
-  String response = "{\"offset\":" + offset + ",\"error\":" +
-                    String(calibrationError, 3) + "}";
+  String response = "{\"offset\":" + String((double)calibrationOffset, 3) + ",\"error\":" +
+                    String((double)calibrationError, 3) + "}";
   server.send(200, "application/json", response);
 }
 
@@ -306,60 +333,236 @@ void handleMeasureSession()
 
 void printSerialHelp()
 {
-  DEBUG_I("\n=== DOSTĘPNE KOMENDY SERIAL ===\n"
-          "M/m - Wykonaj pomiar\n"
-          "U/u - Sprawdź status\n"
-          "C/c - Skalibruj (offset)\n"
-          "F/f - Silnik do przodu (Forward)\n"
-          "R/r - Silnik do tyłu (Reverse)\n"
-          "S/s - Zatrzymaj silnik (Stop)\n"
-          "H/h/? - Wyświetl tę pomoc\n"
-          "===============================\n");
+  DEBUG_I("\n=== DOSTĘPNE KOMENDY SERIAL (UART) ===\n"
+          "m            - Wyślij do slave: CMD_MEASURE (M)\n"
+          "u            - Wyślij do slave: CMD_UPDATE (U)\n"
+          "o <ms>       - Ustaw txMessage.timeout (timeout)\n"
+          "q <0-255>    - Ustaw txMessage.motorTorque\n"
+          "s <0-255>    - Ustaw txMessage.motorSpeed\n"
+          "r <0-3>      - Ustaw txMessage.motorState i wyślij CMD_MOTORTEST (T)\n"
+          "t            - Wyślij CMD_MOTORTEST (T) z bieżących pól txMessage\n"
+          "c <±14.999>  - Ustaw offset kalibracji w mm (lokalnie na Master)\n"
+          "h/?          - Wyświetl tę pomoc\n"
+          "=====================================\n");
+}
+
+static bool parseIntStrict(const String &s, long &out)
+{
+  const char *p = s.c_str();
+  while (*p == ' ' || *p == '\t')
+  {
+    ++p;
+  }
+
+  if (*p == '\0')
+  {
+    return false;
+  }
+
+  char *end = nullptr;
+  out = strtol(p, &end, 10);
+
+  if (end == p)
+  {
+    return false;
+  }
+
+  while (*end == ' ' || *end == '\t')
+  {
+    ++end;
+  }
+
+  return (*end == '\0');
+}
+
+static bool parseFloatStrict(const String &s, float &out)
+{
+  const char *p = s.c_str();
+  while (*p == ' ' || *p == '\t')
+  {
+    ++p;
+  }
+
+  if (*p == '\0')
+  {
+    return false;
+  }
+
+  char *end = nullptr;
+  out = strtof(p, &end);
+
+  if (end == p)
+  {
+    return false;
+  }
+
+  while (*end == ' ' || *end == '\t')
+  {
+    ++end;
+  }
+
+  return (*end == '\0');
 }
 
 bool serialCommandParser(void *arg)
 {
-  String valStr;
-  Serial.setTimeout(10);
-  char input = Serial.read();
+  (void)arg;
 
-  switch (input)
+  // Parser liniowy: czytamy do '\n' bez blokowania.
+  static String lineBuf;
+
+  while (Serial.available() > 0)
   {
-  case 'M':
-  case 'm':
-    requestMeasurement();
-    break;
-  case 'U':
-  case 'u':
-    requestMeasurement();
-    break;
-  case 'C':
-  case 'c':
-    Serial.setTimeout(5000);
-    valStr = Serial.readStringUntil('\n');
-    calibrationOffset = valStr.toInt();
-    DEBUG_I("calibrationOffset:%d", calibrationOffset);
-    requestCalibration();
-    break;
-  case 'F':
-  case 'f':
-    sendMotorForward();
-    break;
-  case 'R':
-  case 'r':
-    sendMotorReverse();
-    break;
-  case 'S':
-  case 's':
-    sendMotorStop();
-    break;
-  case 'H':
-  case 'h':
-  case '?':
-    printSerialHelp();
-    break;
-  default:
-    break;
+    const char ch = (char)Serial.read();
+
+    if (ch == '\r')
+    {
+      continue;
+    }
+
+    if (ch != '\n')
+    {
+      // Ograniczenie długości linii, żeby nie rozjechać RAM przy śmieciach na Serial.
+      if (lineBuf.length() < 64)
+      {
+        lineBuf += ch;
+      }
+      continue;
+    }
+
+    // Mamy pełną linię
+    String line = lineBuf;
+    lineBuf = "";
+
+    line.trim();
+    if (line.length() == 0)
+    {
+      continue;
+    }
+
+    const char cmd = line.charAt(0);
+    String rest = line.substring(1);
+    rest.trim();
+
+    long val = 0;
+    float fval = 0.0f;
+
+    switch (cmd)
+    {
+    case 'm':
+      requestMeasurement();
+      break;
+
+    case 'o':
+      if (!parseIntStrict(rest, val))
+      {
+        DEBUG_W("Serial: brak/niepoprawny parametr dla 'o' (użyj: o <ms>\\n)");
+        printSerialHelp();
+        break;
+      }
+
+      if (val < 0 || val > 600000)
+      {
+        DEBUG_W("Serial: timeout poza zakresem: %ld (0..600000 ms)", val);
+        break;
+      }
+
+      systemStatus.txMessage.timeout = (uint32_t)val;
+      DEBUG_I("tx.timeout:%u", (unsigned)systemStatus.txMessage.timeout);
+      break;
+
+    case 'u':
+      requestUpdate();
+      break;
+
+    case 'c':
+      if (!parseFloatStrict(rest, fval))
+      {
+        DEBUG_W("Serial: brak/niepoprawny parametr dla 'c' (użyj: c <offset_mm>\\n)");
+        printSerialHelp();
+        break;
+      }
+
+      if (fval < -14.999f || fval > 14.999f)
+      {
+        DEBUG_W("Serial: calibrationOffset poza zakresem: %.3f (-14.999..14.999)", (double)fval);
+        break;
+      }
+
+      calibrationOffset = fval;
+      DEBUG_I("calibrationOffset:%.3f", (double)calibrationOffset);
+      requestCalibration();
+      break;
+
+    case 'q':
+      if (!parseIntStrict(rest, val))
+      {
+        DEBUG_W("Serial: brak/niepoprawny parametr dla 'q' (użyj: q <0-255>\\n)");
+        printSerialHelp();
+        break;
+      }
+
+      if (val < 0 || val > 255)
+      {
+        DEBUG_W("Serial: motorTorque poza zakresem: %ld (0..255)", val);
+        break;
+      }
+
+      systemStatus.txMessage.motorTorque = (uint8_t)val;
+      DEBUG_I("tx.motorTorque:%u", (unsigned)systemStatus.txMessage.motorTorque);
+      break;
+
+    case 's':
+      if (!parseIntStrict(rest, val))
+      {
+        DEBUG_W("Serial: brak/niepoprawny parametr dla 's' (użyj: s <0-255>\\n)");
+        printSerialHelp();
+        break;
+      }
+
+      if (val < 0 || val > 255)
+      {
+        DEBUG_W("Serial: motorSpeed poza zakresem: %ld (0..255)", val);
+        break;
+      }
+
+      systemStatus.txMessage.motorSpeed = (uint8_t)val;
+      DEBUG_I("tx.motorSpeed:%u", (unsigned)systemStatus.txMessage.motorSpeed);
+      break;
+
+    case 'r':
+      if (!parseIntStrict(rest, val))
+      {
+        DEBUG_W("Serial: brak/niepoprawny parametr dla 'r' (użyj: r <0-3>\\n)");
+        printSerialHelp();
+        break;
+      }
+
+      if (val < 0 || val > 3)
+      {
+        DEBUG_W("Serial: motorState poza zakresem: %ld (0..3)", val);
+        break;
+      }
+
+      systemStatus.txMessage.motorState = (MotorState)val;
+      DEBUG_I("tx.motorState:%u", (unsigned)systemStatus.txMessage.motorState);
+      sendMotorTest();
+      break;
+
+    case 't':
+      sendMotorTest();
+      break;
+
+    case 'h':
+    case '?':
+      printSerialHelp();
+      break;
+
+    default:
+      DEBUG_W("Serial: nieznana komenda: '%c' (linia: %s)", cmd, line.c_str());
+      printSerialHelp();
+      break;
+    }
   }
 
   return true;
@@ -372,6 +575,7 @@ void setup()
 
   // Initialize system status
   memset(&systemStatus, 0, sizeof(systemStatus));
+  initDefaultTxMessage();
 
   // Initialize LittleFS
   if (!LittleFS.begin())
@@ -414,9 +618,7 @@ void setup()
   server.on("/measure", handleMeasure);
   server.on("/read", handleRead);
   server.on("/api", handleAPI);
-  server.on("/forward", handleMotorForward);
-  server.on("/reverse", handleMotorReverse);
-  server.on("/stop", handleMotorStop);
+  server.on("/motor", HTTP_POST, handleMotor);
   server.on("/calibrate", HTTP_POST, handleCalibrate);
   server.on("/start_session", HTTP_POST, handleStartSession);
   server.on("/measure_session", HTTP_POST, handleMeasureSession);
