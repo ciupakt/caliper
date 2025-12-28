@@ -33,14 +33,6 @@ public:
   ErrorCode initialize(const uint8_t *slaveAddr);
 
   /**
-   * @brief Send command to slave device
-   * @param command Command to send
-   * @param retryCount Number of retries (default: ESPNOW_MAX_RETRIES)
-   * @return ERR_NONE if successful, error code otherwise
-   */
-  ErrorCode sendCommand(CommandType command, int retryCount = ESPNOW_MAX_RETRIES);
-
-  /**
    * @brief Send message to slave device
    * @param message Message to send
    * @param retryCount Number of retries (default: ESPNOW_MAX_RETRIES)

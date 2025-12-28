@@ -107,8 +107,17 @@ function refreshSession() {
     })
     .then(data => {
         document.getElementById('measurement-value').textContent = data.measurement;
-        document.getElementById('battery').textContent = data.batteryVoltage + ' mV';
-        document.getElementById('angle-x').textContent = data.angleX.toFixed(2);
+
+        const batt = Number(data.batteryVoltage);
+        document.getElementById('battery').textContent = Number.isFinite(batt)
+            ? batt.toFixed(3) + ' V'
+            : (data.batteryVoltage + ' V');
+
+        const angleX = Number(data.angleX);
+        document.getElementById('angle-x').textContent = Number.isFinite(angleX)
+            ? angleX.toFixed(2)
+            : data.angleX;
+
         document.getElementById('status').textContent = 'Zaktualizowano: ' + new Date().toLocaleTimeString();
     })
     .catch(error => {

@@ -13,79 +13,83 @@ Dokumentacja opisuje protokoły komunikacji używane w projekcie Caliper:
 
 ### Struktura Wiadomości
 
+Aktualna struktura jest zdefiniowana wspólnie dla Master i Slave w [`shared_common.h`](lib/CaliperShared/shared_common.h:1):
+
 ```cpp
-struct Message {
-    char command;           // Komenda (1 bajt)
-    float measurement;       // Wartość pomiaru w mm (4 bajty)
-    bool valid;            // Flaga poprawności pomiaru (1 bajt)
-    uint32_t timestamp;    // Timestamp w ms (4 bajty)
-    uint16_t batteryVoltage; // Napięcie baterii w mV (2 bajty)
-    float angleX;           // Kąt X z akcelerometru (4 bajty)
+struct Message
+{
+  CommandType command;     // Komenda (CMD_*)
+  uint8_t angleX;          // Kąt X (0-255) z ADXL345 (skalowanie zależy od implementacji)
+  uint8_t motorSpeed;      // Prędkość silnika (0-255)
+  uint8_t motorTorque;     // „Moment” (0-255) — obecnie nieużywany przez driver
+  uint32_t timestamp;      // Timestamp w ms (millis())
+  float measurement;       // Pomiar w mm
+  float batteryVoltage;    // Napięcie baterii w V
 };
 ```
 
-**Rozmiar struktury:** 16 bajtów
+**Zasada:** komunikacja ESP-NOW zawsze przenosi pełną strukturę `Message` w obie strony. Pola nieużywane w danym typie wiadomości mogą być ignorowane (pozostawione jako 0).
 
 ### Komendy
 
+Zgodnie z [`enum CommandType`](lib/CaliperShared/shared_common.h:22):
+
 | Komenda | Kod | Kierunek | Opis |
-|---------|-------|-----------|-------|
-| CMD_MEASURE | 'm' | Master → Slave | Żądanie pomiaru suwmiarki |
-| CMD_FORWARD | 'f' | Master → Slave | Silnik do przodu |
-| CMD_REVERSE | 'r' | Master → Slave | Silnik do tyłu |
-| CMD_STOP | 's' | Master → Slave | Zatrzymaj silnik |
-| CMD_UPDATE | 'u' | Slave → Master | Aktualizacja statusu (bateria, kąt) |
+|---------|-----|----------|------|
+| CMD_MEASURE | 'M' | Master → Slave | Żądanie pomiaru suwmiarki |
+| CMD_UPDATE  | 'U' | Master → Slave | Żądanie odświeżenia/statusu (używane także jako „kalibracja” w Master) |
+| CMD_FORWARD | 'F' | Master → Slave | Silnik do przodu |
+| CMD_REVERSE | 'R' | Master → Slave | Silnik do tyłu |
+| CMD_STOP    | 'S' | Master → Slave | Zatrzymaj silnik |
 
 ### Przepływ Komunikacji
 
 #### 1. Żądanie Pomiaru
 
 ```
-Master                          Slave
-  │                               │
-  ├── CMD_MEASURE ('m') ────────>│
-  │                               │
-  │                               ├─ Wyzwól TRIG_PIN
-  │                               ├─ Odczytaj dane suwmiarki
-  │                               ├─ Odczytaj akcelerometr
-  │                               ├─ Odczytaj baterię
-  │                               │
-  │<── Message ────────────────────┤
-  │   - measurement: 12.345 mm      │
-  │   - valid: true                 │
-  │   - batteryVoltage: 4200 mV      │
-  │   - angleX: 1.23°             │
+Master                                   Slave
+  │                                        │
+  ├── Message{command=CMD_MEASURE} ───────>│
+  │                                        │
+  │                                        ├─ Wyzwól TRIG_PIN
+  │                                        ├─ Odczytaj dane suwmiarki
+  │                                        ├─ Odczytaj akcelerometr
+  │                                        ├─ Odczytaj baterię
+  │                                        │
+  │<── Message{measurement, batteryVoltage, angleX, timestamp} ──┤
+  │   - measurement: 12.345 mm                                   │
+  │   - batteryVoltage: 4.200 V                                  │
+  │   - angleX: 123 (uint8)                                      │
 ```
 
 #### 2. Sterowanie Silnikiem
 
 ```
-Master                          Slave
-  │                               │
-  ├── CMD_FORWARD ('f') ─────────>│
-  │                               ├─ Silnik do przodu (PWM 110/255)
-  │                               │
-  ├── CMD_REVERSE ('r') ─────────>│
-  │                               ├─ Silnik do tyłu (PWM 150/255)
-  │                               │
-  ├── CMD_STOP ('s') ────────────>│
-  │                               ├─ Zatrzymaj silnik (PWM 0)
-  │                               │
+Master                                                     Slave
+  │                                                          │
+  ├── Message{command=CMD_FORWARD, motorSpeed=255} ─────────>│
+  │                                                          ├─ Silnik do przodu (PWM = motorSpeed)
+  │                                                          │
+  ├── Message{command=CMD_REVERSE, motorSpeed=255} ─────────>│
+  │                                                          ├─ Silnik do tyłu (PWM = motorSpeed)
+  │                                                          │
+  ├── Message{command=CMD_STOP} ────────────────────────────>│
+  │                                                          ├─ Zatrzymaj silnik
+  │                                                          │
 ```
 
 #### 3. Aktualizacja Statusu (okresowa)
 
 ```
-Slave                           Master
-  │                               │
-  │<── Message (CMD_UPDATE) ────────┤
-  │   - measurement: 0.0            │
-  │   - valid: true                 │
-  │   - batteryVoltage: 4180 mV      │
-  │   - angleX: 1.21°              │
+Slave                                         Master
+  │                                             │
+  │<── Message{command=CMD_UPDATE, ...} ─────────┤
+  │   - measurement: 0.0 (opcjonalnie)           │
+  │   - batteryVoltage: 4.180 V                  │
+  │   - angleX: 121 (uint8)                      │
 ```
 
-**Interwał:** Co ~1 sekunda
+**Uwaga:** okresowe wysyłanie `CMD_UPDATE` zależy od implementacji w Slave (w aktualnym kodzie głównie odpowiada on na żądania Master).
 
 ### Parametry Sieci
 

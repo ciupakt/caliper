@@ -24,6 +24,10 @@ String lastMeasurement = "Brak pomiaru";
 String lastBatteryVoltage = "Brak danych";
 bool measurementReady = false;
 
+// Ostatnie wartości liczbowe (ułatwia logowanie / JSON / kalibrację)
+float lastMeasurementValue = 0.0f;
+float lastDeviationValue = 0.0f;
+
 // Session management variables
 String currentSessionName = "";
 bool sessionActive = false;
@@ -39,23 +43,31 @@ void OnDataRecv(const esp_now_recv_info_t *recv_info, const uint8_t *incomingDat
   }
 
   memcpy(&msg, incomingData, sizeof(msg));
+  measurementReady = true;
+
+  // Synchronizuj offset z aktualnym ustawieniem (np. z GUI/Serial)
+  systemStatus.calibrationOffset = (float)calibrationOffset;
+
   systemStatus.lastMessage = msg;
   systemStatus.deviation = systemStatus.lastMessage.measurement + systemStatus.calibrationOffset;
+
+  lastMeasurementValue = systemStatus.lastMessage.measurement;
+  lastDeviationValue = systemStatus.deviation;
 
   DEBUG_I("command:%c", msg.command);
   DEBUG_I("motorSpeed:%u", (unsigned)msg.motorSpeed);
   DEBUG_I("motorTorque:%u", (unsigned)msg.motorTorque);
-  DEBUG_I("measurement:%.3f", (unsigned)msg.measurement);
+  DEBUG_I("measurement:%.3f", (double)msg.measurement);
   DEBUG_I("timestamp:%u", (unsigned)msg.timestamp);
-  DEBUG_I("calibrationOffset:%.3f", (int)systemStatus.calibrationOffset);
-  DEBUG_I("deviation:%.3f", (unsigned)systemStatus.deviation);
+  DEBUG_I("calibrationOffset:%.3f", (double)systemStatus.calibrationOffset);
+  DEBUG_I("deviation:%.3f", (double)systemStatus.deviation);
 
   DEBUG_PLOT("deviation:%.3f", (double)systemStatus.deviation);
   DEBUG_PLOT("angleX:%u", (unsigned)msg.angleX);
   DEBUG_PLOT("batteryVoltage:%.3f", (double)msg.batteryVoltage);
 
   lastMeasurement = String(systemStatus.deviation, 3) + " mm";
-  lastBatteryVoltage = String(msg.batteryVoltage) + " mV";
+  lastBatteryVoltage = String(msg.batteryVoltage, 3) + " V";
 }
 
 void OnDataSent(const wifi_tx_info_t *info, esp_now_send_status_t status)
@@ -70,26 +82,34 @@ void OnDataSent(const wifi_tx_info_t *info, esp_now_send_status_t status)
   }
 }
 
-// Unified command sending function
-ErrorCode sendCommand(CommandType command, const char *commandName)
-{
-  measurementReady = false;
-  lastMeasurement = "Oczekiwanie na odpowiedź...";
+// Ujednolicona wysyłka: Master → Slave zawsze wysyła pełną strukturę Message
+static constexpr uint8_t DEFAULT_MOTOR_SPEED = 255;
+static constexpr uint8_t DEFAULT_MOTOR_TORQUE = 0;
 
-  ErrorCode result = commManager.sendCommand(command);
+ErrorCode sendMessageToSlave(CommandType command,
+                            const char *commandName,
+                            uint8_t motorSpeed,
+                            uint8_t motorTorque,
+                            bool expectResponse)
+{
+  if (expectResponse)
+  {
+    measurementReady = false;
+    lastMeasurement = "Oczekiwanie na odpowiedź...";
+  }
+
+  Message tx{};
+  tx.command = command;
+  tx.motorSpeed = motorSpeed;
+  tx.motorTorque = motorTorque;
+  tx.timestamp = millis();
+
+  ErrorCode result = commManager.sendMessage(tx);
 
   if (result == ERR_NONE)
   {
     DEBUG_I("Wyslano komendę: %s", commandName);
     lastMeasurement = String("Komenda: ") + commandName;
-
-    // Update motor status if it's a motor command
-    if (command == CMD_FORWARD || command == CMD_REVERSE || command == CMD_STOP)
-    {
-      systemStatus.motorRunning = (command != CMD_STOP);
-      systemStatus.motorDirection = (command == CMD_FORWARD) ? MOTOR_FORWARD : (command == CMD_REVERSE) ? MOTOR_REVERSE
-                                                                                                        : MOTOR_STOP;
-    }
   }
   else
   {
@@ -102,28 +122,28 @@ ErrorCode sendCommand(CommandType command, const char *commandName)
 
 void requestMeasurement()
 {
-  sendCommand(CMD_MEASURE, "Pomiar");
+  (void)sendMessageToSlave(CMD_MEASURE, "Pomiar", 0, 0, true);
 }
 
 void requestCalibration()
 {
   DEBUG_I("Rozpoczynanie kalibracji z offsetem: %d", calibrationOffset);
-  sendCommand(CMD_UPDATE, "Kalibracja");
-} 
+  (void)sendMessageToSlave(CMD_UPDATE, "Kalibracja", 0, 0, true);
+}
 
 void sendMotorForward()
 {
-  sendCommand(CMD_FORWARD, "Silnik do przodu");
+  (void)sendMessageToSlave(CMD_FORWARD, "Silnik do przodu", DEFAULT_MOTOR_SPEED, DEFAULT_MOTOR_TORQUE, false);
 }
 
 void sendMotorReverse()
 {
-  sendCommand(CMD_REVERSE, "Silnik do tyłu");
+  (void)sendMessageToSlave(CMD_REVERSE, "Silnik do tyłu", DEFAULT_MOTOR_SPEED, DEFAULT_MOTOR_TORQUE, false);
 }
 
 void sendMotorStop()
 {
-  sendCommand(CMD_STOP, "Zatrzymaj silnik");
+  (void)sendMessageToSlave(CMD_STOP, "Zatrzymaj silnik", 0, 0, false);
 }
 
 // Serve static files from LittleFS
@@ -179,9 +199,13 @@ void handleAPI()
   String json = "{";
   json += "\"measurement\":\"" + lastMeasurement + "\",";
   json += "\"timestamp\":" + String(msg.timestamp) + ",";
-  json += "\"valid\":" + String(msg.valid ? "true" : "false") + ",";
-  json += "\"batteryVoltage\":" + String(msg.batteryVoltage) + ",";
-  json += "\"angleX\":" + String(msg.angleX, 2) + ",";
+
+  // Pole `valid` nie jest już częścią struktury `Message` – raportujemy je na podstawie tego,
+  // czy mamy świeżą odpowiedź z ESP-NOW.
+  json += "\"valid\":" + String(measurementReady ? "true" : "false") + ",";
+
+  json += "\"batteryVoltage\":" + String(msg.batteryVoltage, 3) + ",";
+  json += "\"angleX\":" + String((unsigned)msg.angleX) + ",";
   json += "\"command\":\"" + String(msg.command) + "\"";
   json += "}";
   server.send(200, "application/json", json);
@@ -218,7 +242,7 @@ void handleCalibrate()
 
   // Zapisz offset i wyślij przez Serial
   calibrationOffset = offsetValue;
-  DEBUG_PLOT("CAL_OFFSET:%d", calibrationOffset);
+  DEBUG_PLOT("calibrationOffset:%d", calibrationOffset);
 
   // Wykonaj pomiar
   requestMeasurement();
@@ -227,10 +251,10 @@ void handleCalibrate()
   delay(1000);
 
   // Wyślij błąd przez Serial
-  if (systemStatus.measurementValid)
+  if (measurementReady)
   {
-    calibrationError = systemStatus.lastMeasurement;
-    DEBUG_PLOT("CAL_ERROR:%.3f", (double)calibrationError);
+    calibrationError = lastDeviationValue;
+    DEBUG_PLOT("calibrationError:%.3f", (double)calibrationError);
   }
 
   String response = "{\"offset\":" + offset + ",\"error\":" +
@@ -269,10 +293,10 @@ void handleMeasureSession()
   // Poczekaj na wynik
   delay(1000);
 
-  if (systemStatus.measurementValid)
+  if (measurementReady)
   {
     // Wyślij przez Serial
-    DEBUG_PLOT("MEAS_SESSION:%s %.3f", currentSessionName.c_str(), (double)systemStatus.lastMeasurement);
+    DEBUG_PLOT("measurementReady:%s %.3f", currentSessionName.c_str(), (double)lastDeviationValue);
   }
 
   String response = "{\"sessionName\":\"" + currentSessionName +
@@ -335,7 +359,6 @@ bool serialCommandParser(void *arg)
     printSerialHelp();
     break;
   default:
-    DEBUG_W("Nieznana komenda. Wpisz 'H' lub '?' aby zobaczyć dostępne komendy.");
     break;
   }
 

@@ -28,52 +28,68 @@ class CaliperGUI:
         self.auto_event = threading.Event()
         self.auto_running = False
     
+    @staticmethod
+    def _normalize_debug_plot_line(data: str) -> str:
+        """Normalize `DEBUG_PLOT` output by stripping leading '>' and whitespace."""
+        if not data:
+            return ""
+        data = data.strip()
+        return data[1:].strip() if data.startswith(">") else data
+
     def process_measurement_data(self, data: str):
-        """Process measurement data with validation and storage"""
+        """Process measurement/plot data with validation and storage.
+
+        Parsujemy WYŁĄCZNIE te ramki, które faktycznie wychodzą z `DEBUG_PLOT` w
+        [`caliper_master/src/main.cpp`](caliper_master/src/main.cpp:65).
+
+        NOTE: `DEBUG_PLOT` zawsze prepends '>' (see [`DEBUG_PLOT`](lib/CaliperShared/MacroDebugger.h:113)),
+        więc tu dostajemy już linię znormalizowaną (bez wiodącego '>').
+        """
         try:
-            # Handle calibration data
-            if data.startswith("CAL_OFFSET:"):
-                val_str = data.split(":")[1]
+            # --- Kalibracja (wysyłane przez DEBUG_PLOT w handleCalibrate)
+            if data.startswith("calibrationOffset:"):
+                val_str = data.split(":", 1)[1].strip()
                 self.log_tab.add_log(f"[KALIBRACJA] Offset: {val_str}")
                 return
-            
-            if data.startswith("CAL_ERROR:"):
-                val_str = data.split(":")[1]
+
+            if data.startswith("calibrationError:"):
+                val_str = data.split(":", 1)[1].strip()
                 self.log_tab.add_log(f"[KALIBRACJA] Błąd: {val_str} mm")
                 return
-            
-            # Handle measurement session data
-            if data.startswith("MEAS_SESSION:"):
-                parts = data.split(" ", 2)
-                if len(parts) >= 3:
-                    session_name = parts[1]
-                    val_str = parts[2]
-                    self.log_tab.add_log(f"[SESJA {session_name}] Pomiar: {val_str} mm")
-                    
-                    # Write to CSV with session name
-                    if self.csv_handler.is_open():
-                        ts = datetime.now().isoformat(timespec='seconds')
-                        measurement_str = f"{val_str} mm"
-                        if self.measurement_tab.include_timestamp:
-                            self.csv_handler.write_row([ts, f"[{session_name}] {measurement_str}"])
-                        else:
-                            self.csv_handler.write_row([f"[{session_name}] {measurement_str}"])
+
+            # --- Sesja pomiarowa (wysyłane przez DEBUG_PLOT w handleMeasureSession)
+            # Format: measurementReady:<session_name> <value>
+            if data.startswith("measurementReady:"):
+                rest = data.split(":", 1)[1].strip()
+                if rest:
+                    # sesja może mieć spacje, więc tniemy po OSTATNIEJ spacji (wartość jest na końcu)
+                    if " " in rest:
+                        session_name, val_str = rest.rsplit(" ", 1)
+                        session_name = session_name.strip()
+                        val_str = val_str.strip()
+                        if session_name and val_str:
+                            self.log_tab.add_log(f"[SESJA {session_name}] Pomiar: {val_str} mm")
+
+                            if self.csv_handler.is_open():
+                                ts = datetime.now().isoformat(timespec="seconds")
+                                measurement_str = f"{val_str} mm"
+                                if self.measurement_tab.include_timestamp:
+                                    self.csv_handler.write_row([ts, f"[{session_name}] {measurement_str}"])
+                                else:
+                                    self.csv_handler.write_row([f"[{session_name}] {measurement_str}"])
                 return
-            
-            # Handle VAL_1 measurements
-            if data.startswith("VAL_1:"):
-                val_str = data.split(":")[1]
+
+            # --- Pomiar (wysyłane przez DEBUG_PLOT w OnDataRecv)
+            if data.startswith("deviation:"):
+                val_str = data.split(":", 1)[1].strip()
                 val = float(val_str)
-                
+
                 # Validate range
                 if -1000.0 <= val <= 1000.0:
-                    ts = datetime.now().isoformat(timespec='seconds')
+                    ts = datetime.now().isoformat(timespec="seconds")
                     measurement_str = f"{val_str} mm"
-                    
-                    # Add to measurement tab
                     self.measurement_tab.add_measurement(ts, measurement_str, val)
-                    
-                    # Save to CSV
+
                     if self.csv_handler.is_open():
                         if self.measurement_tab.include_timestamp:
                             self.csv_handler.write_measurement(measurement_str, ts)
@@ -81,38 +97,51 @@ class CaliperGUI:
                             self.csv_handler.write_measurement(measurement_str)
                 else:
                     self.log_tab.add_log(f"BLAD: Wartosc poza zakresem: {val}")
-            
-            # Handle angle data
-            elif data.startswith(">Angle X:"):
-                angle_str = data.split(":")[1]
+                return
+
+            if data.startswith("angleX:"):
+                angle_str = data.split(":", 1)[1].strip()
                 self.log_tab.add_log(f"[ANGLE X] {angle_str}°")
-            
-            # Handle battery data
-            elif data.startswith(">Napiecie baterii:"):
-                voltage_str = data.split(":")[1]
-                self.log_tab.add_log(f"[BATERIA] {voltage_str}")
-            
-            # Handle motor data
-            elif "SILNIK" in data.upper() or "blad silnika" in data.lower():
+                return
+
+            if data.startswith("batteryVoltage:"):
+                voltage_str = data.split(":", 1)[1].strip()
+                self.log_tab.add_log(f"[BATERIA] {voltage_str} V")
+                return
+
+            # Inne (nie-plot) linie zostawiamy jako log (np. SILNIK)
+            if "SILNIK" in data.upper() or "blad silnika" in data.lower():
                 self.log_tab.add_log(f"[SILNIK] {data}")
-        
+
         except ValueError as val_err:
             self.log_tab.add_log(f"BLAD: Nieprawidlowa wartosc - {str(val_err)}")
         except Exception as e:
             self.log_tab.add_log(f"BLAD przetwarzania danych: {str(e)}")
     
     def serial_data_callback(self, data: str):
-        """Callback for received serial data"""
+        """Callback for received serial data."""
         self.log_tab.add_log(f"< {data}")
-        
-        # Process measurement data
-        if (data.startswith("VAL_1:") or data.startswith("CAL_OFFSET:") or 
-            data.startswith("CAL_ERROR:") or data.startswith("MEAS_SESSION:")):
-            self.process_measurement_data(data)
-        elif data.startswith(">Angle X:") or data.startswith(">Napiecie baterii:"):
-            self.process_measurement_data(data)
-        elif "SILNIK" in data.upper() or "blad silnika" in data.lower():
-            self.log_tab.add_log(f"[SILNIK] {data}")
+
+        payload = self._normalize_debug_plot_line(data)
+
+        # Process plot/measurement data (from DEBUG_PLOT)
+        # (tylko klucze faktycznie emitowane przez firmware Master)
+        if payload.startswith(
+            (
+                "deviation:",
+                "angleX:",
+                "batteryVoltage:",
+                "calibrationOffset:",
+                "calibrationError:",
+                "measurementReady:",
+            )
+        ):
+            self.process_measurement_data(payload)
+            return
+
+        # Motor / other status lines
+        if "SILNIK" in payload.upper() or "blad silnika" in payload.lower():
+            self.log_tab.add_log(f"[SILNIK] {payload}")
     
     def auto_task(self):
         """Auto trigger task"""

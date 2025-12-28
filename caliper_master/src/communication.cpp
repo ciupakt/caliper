@@ -50,45 +50,6 @@ ErrorCode CommunicationManager::initialize(const uint8_t *slaveAddr)
   return lastError;
 }
 
-ErrorCode CommunicationManager::sendCommand(CommandType command, int retryCount)
-{
-  if (!initialized)
-  {
-    lastError = ERR_ESPNOW_SEND;
-    return lastError;
-  }
-
-  ErrorCode result = ERR_NONE;
-  int attempts = 0;
-
-  while (attempts < retryCount)
-  {
-    esp_err_t sendResult = esp_now_send(slaveAddress, (uint8_t *)&command, sizeof(command));
-
-    if (sendResult == ESP_OK)
-    {
-      result = ERR_NONE;
-      break;
-    }
-    else
-    {
-      attempts++;
-      if (attempts < retryCount)
-      {
-        delay(ESPNOW_RETRY_DELAY_MS);
-      }
-    }
-  }
-
-  if (attempts >= retryCount)
-  {
-    result = ERR_ESPNOW_SEND;
-  }
-
-  lastError = result;
-  return result;
-}
-
 ErrorCode CommunicationManager::sendMessage(const Message &message, int retryCount)
 {
   if (!initialized)
