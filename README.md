@@ -80,32 +80,32 @@ graph TD
 ```
 caliper/
 ├── README.md                    # Ten plik
-├── caliper_master/              # ESP32 Master - PlatformIO project
-│   ├── platformio.ini           # Konfiguracja PlatformIO
+├── AGENTS.md                    # Instrukcje build/flash dla modeli AI
+├── caliper_master/              # ESP32 Master (PlatformIO)
+│   ├── platformio.ini
 │   ├── src/
-│   │   ├── main.cpp             # Główny plik Master
-│   │   ├── communication.h      # Moduł komunikacji ESP-NOW - nagłówek
-│   │   ├── communication.cpp    # Moduł komunikacji ESP-NOW - implementacja
-│   │   ├── config.h             # Centralna konfiguracja
-│   │   └── common.h             # Wspólne definicje i struktury
-│   ├── include/                 # Dodatkowe nagłówki
-│   └── lib/                     # Biblioteki
-├── caliper_master_gui/          # Aplikacja Python GUI
-│   └── caliper_master_gui.py    # Główny plik aplikacji
-├── caliper_slave/               # ESP32 Slave - PlatformIO project
-│   ├── platformio.ini           # Konfiguracja PlatformIO
+│   │   ├── main.cpp             # AP WiFi + HTTP + ESP-NOW + LittleFS
+│   │   ├── communication.h/.cpp # CommunicationManager (ESP-NOW)
+│   │   └── config.h
+│   └── data/                    # UI web (LittleFS)
+│       ├── index.html
+│       ├── style.css
+│       └── app.js
+├── caliper_slave/               # ESP32 Slave (PlatformIO)
+│   ├── platformio.ini
+│   └── src/
+│       ├── main.cpp
+│       ├── config.h
+│       ├── sensors/             # suwmiarka + akcelerometr
+│       ├── motor/               # sterowanie silnikiem
+│       └── power/               # pomiar baterii
+├── caliper_master_gui/          # Aplikacja GUI (Python/DearPyGUI)
+│   ├── caliper_master_gui.py    # Entry-point
+│   ├── requirements.txt
 │   ├── src/
-│   │   ├── main.cpp             # Główny plik Slave
-│   │   ├── caliper_slave_motor_ctrl.h    # Sterownik silnika - nagłówek
-│   │   ├── caliper_slave_motor_ctrl.cpp  # Sterownik silnika - implementacja
-│   │   ├── config.h             # Centralna konfiguracja
-│   │   └── common.h             # Wspólne definicje i struktury
-│   ├── include/                 # Dodatkowe nagłówki
-│   └── lib/                     # Biblioteki
-└── doc/                         # Dokumentacja sprzętowa
-    ├── ESP32-DevKit-V1-Pinout-Diagram-r0.1-CIRCUITSTATE-Electronics-2-1280x896.png
-    ├── MP6550GG-Z.pdf           # Dokumentacja sterownika silnika
-    └── schematic.png            # Schemat połączeń
+│   └── tests/
+├── lib/CaliperShared/           # Wspólna biblioteka (typy/protokół/debug)
+└── doc/                         # Dokumentacja (w tym doc/api)
 ```
 
 ## Modułowa Architektura
@@ -131,57 +131,60 @@ Centralny plik konfiguracyjny zawierający:
 - Ustawienia ADC
 - Konfigurację serwera web
 
-### Moduł Wspólny (common.h)
+### Moduł Wspólny (`lib/CaliperShared`)
 
-Wspólne definicje i struktury:
-- [`CommandType`](caliper_master/src/common.h:15) - Typy komend ESP-NOW
-- [`MotorState`](caliper_master/src/common.h:24) - Stany silnika
-- [`ErrorCode`](caliper_master/src/common.h:32) - Kody błędów
-- [`Message`](caliper_master/src/common.h:42) - Struktura wiadomości
-- [`SystemStatus`](caliper_master/src/common.h:51) - Struktura statusu systemu
+Wspólne definicje protokołu i struktur danych znajdują się w bibliotece `lib/CaliperShared`:
+- [`CommandType`](lib/CaliperShared/shared_common.h:22) - typy komend ESP-NOW
+- [`MotorState`](lib/CaliperShared/shared_common.h:34) - stany silnika
+- [`ErrorCode`](lib/CaliperShared/shared_common.h:45) - kody błędów
+- [`Message`](lib/CaliperShared/shared_common.h:61) - struktura wiadomości (Slave → Master)
+- [`SystemStatus`](lib/CaliperShared/shared_common.h:77) - status systemu (Master)
+- [`MacroDebugger.h`](lib/CaliperShared/MacroDebugger.h:1) - makra debug/log/plot
 
 ### Moduł Sterowania Silnikiem DC
 
 Moduł sterowania silnikiem DC wykorzystuje sterownik **MP6550GG-Z** w minimalistycznej konfiguracji.
 
 #### Pliki:
-- **[`caliper_slave_motor_ctrl.h`](caliper_slave/src/caliper_slave_motor_ctrl.h:1)** - Plik nagłówkowy z definicjami i deklaracjami funkcji
-- **[`caliper_slave_motor_ctrl.cpp`](caliper_slave/src/caliper_slave_motor_ctrl.cpp:1)** - Plik implementacji C++ z funkcjami sterowania
+- **[`motor_ctrl.h`](caliper_slave/src/motor/motor_ctrl.h:1)** - nagłówek sterownika silnika (MP6550GG-Z)
+- **`motor_ctrl.cpp`** - implementacja (w tym samym katalogu)
 
 #### Dostępne funkcje:
 
 ##### Inicjalizacja:
-- [`initializeMotorController()`](caliper_slave/src/caliper_slave_motor_ctrl.h:36) - Inicjalizacja sterownika i konfiguracja pinów
+- [`initializeMotorController()`](caliper_slave/src/motor/motor_ctrl.h:38) - inicjalizacja sterownika i konfiguracja pinów
 
 ##### Sterowanie silnikiem:
-- [`setMotorSpeed(uint8_t speed, MotorState direction)`](caliper_slave/src/caliper_slave_motor_ctrl.h:45) - Ustawienie prędkości i kierunku silnika (PWM)
-  - `speed=0, direction=MOTOR_STOP` - Zatrzymanie (tryb coast) (IN1=LOW, IN2=LOW)
-  - `speed>0, direction=MOTOR_FORWARD` - Rotacja do przodu z PWM
-  - `speed>0, direction=MOTOR_REVERSE` - Rotacja do tyłu z PWM
-  - `speed>0, direction=MOTOR_BRAKE` - Hamowanie aktywne
+- [`setMotorSpeed(uint8_t speed, MotorState direction)`](caliper_slave/src/motor/motor_ctrl.h:47) - ustawienie prędkości i kierunku (PWM)
+  - `speed=0, direction=MOTOR_STOP` - zatrzymanie (coast)
+  - `speed>0, direction=MOTOR_FORWARD` - rotacja do przodu
+  - `speed>0, direction=MOTOR_REVERSE` - rotacja do tyłu
+  - `speed>0, direction=MOTOR_BRAKE` - hamowanie aktywne
 
 #### Struktury danych:
 
 ```c
-typedef enum {
-  MOTOR_STOP = 0,        // Zatrzymanie/Coast
-  MOTOR_FORWARD = 1,     // Rotacja do przodu
-  MOTOR_REVERSE = 2,     // Rotacja do tyłu
-  MOTOR_BRAKE = 3        // Hamowanie aktywne
-} MotorState;
+enum MotorState : uint8_t {
+  MOTOR_STOP = 0,
+  MOTOR_FORWARD = 1,
+  MOTOR_REVERSE = 2,
+  MOTOR_BRAKE = 3
+};
 ```
 
-#### Użycie w głównym programie:
+#### Użycie w głównym programie (Slave):
 
 ```cpp
-#include "caliper_slave_motor_ctrl.h"
+#include "motor/motor_ctrl.h"
 
-// W setup():
-initializeMotorController();
+void setup() {
+  initializeMotorController();
+}
 
-// W loop():
-setMotorSpeed(128, MOTOR_FORWARD);  // Silnik pracuje do przodu z prędkością 50%
-setMotorSpeed(0, MOTOR_STOP);       // Zatrzymanie silnika
+void loop() {
+  setMotorSpeed(128, MOTOR_FORWARD);
+  setMotorSpeed(0, MOTOR_STOP);
+}
 ```
 
 #### Specyfikacje techniczne:
@@ -355,7 +358,7 @@ graph LR
   - ESP-NOW Communication
 - **Moduły**:
   - [`CommunicationManager`](caliper_master/src/communication.h:17) - zarządzanie ESP-NOW
-  - [`SystemStatus`](caliper_master/src/common.h:51) - śledzenie statusu systemu
+  - [`SystemStatus`](lib/CaliperShared/shared_common.h:77) - śledzenie statusu systemu
 
 ### ESP32 Slave
 - **Funkcje**: Caliper Interface, ESP-NOW Sender, Motor Controller, Battery Monitor, Accelerometer
@@ -378,14 +381,14 @@ graph LR
 ### Aplikacja Python
 - **Framework**: Dear PyGui
 - **Funkcje**:
-  - Serial Communication z Master
-  - Live plotting (matplotlib)
-  - CSV logging
-  - Auto measurement mode
-  - Port management
-  - Zaawansowana walidacja danych
-- **Bezpieczeństwo**: Obsługa wyjątków, walidacja zakresu wartości
-- **Wymagania**: Python 3.7+, dearpygui, pyserial
+  - komunikacja Serial z Master
+  - live plot wbudowany w DearPyGUI (bez `matplotlib`)
+  - zapis do CSV
+  - sterowanie silnikiem z GUI (komendy `f/r/s`)
+  - zarządzanie portami COM
+  - walidacja danych (np. zakres pomiaru)
+- **Bezpieczeństwo**: obsługa wyjątków, walidacja zakresu wartości
+- **Wymagania**: Python 3.x, `dearpygui`, `pyserial`
 
 ## Instalacja i Uruchomienie
 
@@ -565,14 +568,18 @@ uint8_t command = 'S'; // Motor stop
 ```
 
 **Data** (Slave → Master):
+
+W kodzie używana jest struktura [`Message`](lib/CaliperShared/shared_common.h:61), m.in. z napięciem baterii i kątem X z akcelerometru:
+
 ```c
-typedef struct struct_message {
-  float measurement;   // Wartość pomiaru w mm
-  bool valid;         // Czy pomiar jest poprawny
-  uint32_t timestamp; // Czas od startu systemu
-  CommandType command;       // Typ komendy ('M' - measurement, 'U' - update, 'F'/'R'/'S' - motor)
-  uint16_t batteryVoltage; // Napięcie baterii w milliwoltach
-} struct_message;
+typedef struct {
+  float measurement;        // Wartość pomiaru w mm
+  bool valid;               // Czy pomiar jest poprawny
+  uint32_t timestamp;       // Czas od startu systemu (ms)
+  CommandType command;      // 'M' (measurement) / 'U' (update)
+  uint16_t batteryVoltage;  // Napięcie baterii w mV
+  float angleX;             // Kąt X (ADXL345)
+} Message;
 ```
 
 ### Serial Protocol
@@ -616,6 +623,7 @@ typedef struct struct_message {
   "timestamp": 12345,
   "valid": true,
   "batteryVoltage": 3300,
+  "angleX": 12.34,
   "command": "M"
 }
 ```
@@ -678,11 +686,11 @@ System obsługuje 52-bitowy strumień danych z suwarki cyfrowej:
     - Dodatkowe funkcje akcelerometru
 
 3. **Python GUI**:
-    - Advanced plotting (matplotlib)
-    - Statistical analysis
-    - Export to various formats
-    - Network communication
-    - Obsługa sesji pomiarowych
+    - rozbudowa widoków i logiki GUI (DearPyGUI)
+    - statystyki/analiza pomiarów
+    - eksport do różnych formatów
+    - komunikacja sieciowa
+    - obsługa sesji pomiarowych
 
 ### Troubleshooting
 
@@ -717,7 +725,7 @@ Projekt stworzony do celów edukacyjnych i hobbystycznych.
 - ✅ **ARCHITEKTURA**: Modularna struktura z oddzielnymi plikami .cpp/.h
 - ✅ **MODUŁY**: Dodano CommunicationManager do zarządzania ESP-NOW
 - ✅ **KONFIGURACJA**: Centralny plik config.h dla obu urządzeń
-- ✅ **WSPÓLNE**: Plik common.h ze wspólnymi definicjami
+- ✅ **WSPÓLNE**: Biblioteka `lib/CaliperShared` ze wspólnymi definicjami (np. [`shared_common.h`](lib/CaliperShared/shared_common.h:1))
 - ✅ **AKCELEROMETR**: Dodano ADXL345 do pomiaru kątów
 - ✅ **SESJE**: Dodano funkcję sesji pomiarowych z nazwami
 - ✅ **KALIBRACJA**: Dodano funkcję kalibracji z offsetem

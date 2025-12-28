@@ -3,25 +3,29 @@
 ## Przegląd projektu
 
 Projekt Caliper składa się z dwóch podprojektów PlatformIO oraz aplikacji GUI:
-- `caliper_master` - główny sterownik z interfejsem webowym
-- `caliper_slave` - sterownik suwmiarki, akcelerometru i silnika
-- `caliper_master_gui` - aplikacja GUI w Pythonie do sterowania i wizualizacji
-- `lib/CaliperShared` - współdzielona biblioteka dla Master i Slave
+
+- `caliper_master` – główny sterownik (ESP32) z AP WiFi + HTTP + ESP-NOW + LittleFS (UI web w `data/`)
+- `caliper_slave` – sterownik (ESP32) suwmiarki + akcelerometru + silnika + baterii + ESP-NOW
+- `caliper_master_gui` – aplikacja GUI w Pythonie (Dear PyGui) do sterowania i wizualizacji
+- `lib/CaliperShared` – współdzielona biblioteka dla Master i Slave (wspólne typy/stałe + makra debug)
 
 ## Wymagania
 
 - PlatformIO zainstalowane w systemie
 - Ścieżka do skryptów PlatformIO: `C:\Users\tiim\.platformio\penv\Scripts`
+- Python 3.x (dla `caliper_master_gui`)
 
-## Kompilacja projektu
+## Kompilacja projektu (PlatformIO)
 
-### Kompilacja caliper_slave
+Używany environment w obu projektach: `esp32doit-devkit-v1`.
+
+### Kompilacja `caliper_slave`
 
 ```powershell
 cd caliper_slave && C:\Users\tiim\.platformio\penv\Scripts\platformio.exe run --environment esp32doit-devkit-v1
 ```
 
-### Kompilacja caliper_master
+### Kompilacja `caliper_master`
 
 ```powershell
 cd caliper_master && C:\Users\tiim\.platformio\penv\Scripts\platformio.exe run --environment esp32doit-devkit-v1
@@ -29,16 +33,30 @@ cd caliper_master && C:\Users\tiim\.platformio\penv\Scripts\platformio.exe run -
 
 ## Wgrywanie programu na urządzenie
 
-### Wgranie caliper_slave
+Uwaga: porty są domyślnie ustawione w `platformio.ini` przez `monitor_port`:
+- Master: `COM7`
+- Slave: `COM8`
+
+Jeśli port upload jest inny, dodaj `--upload-port COMx`.
+
+### Wgranie `caliper_slave`
 
 ```powershell
 cd caliper_slave && C:\Users\tiim\.platformio\penv\Scripts\platformio.exe run --target upload -s --environment esp32doit-devkit-v1 --upload-port COM8
 ```
 
-### Wgranie caliper_master
+### Wgranie `caliper_master`
 
 ```powershell
 cd caliper_master && C:\Users\tiim\.platformio\penv\Scripts\platformio.exe run --target upload -s --environment esp32doit-devkit-v1 --upload-port COM7
+```
+
+### Wgranie systemu plików LittleFS (UI web) – tylko `caliper_master`
+
+Pliki UI web znajdują się w `caliper_master/data/` i są flashowane do LittleFS.
+
+```powershell
+cd caliper_master && C:\Users\tiim\.platformio\penv\Scripts\platformio.exe run --target uploadfs -s --environment esp32doit-devkit-v1 --upload-port COM7
 ```
 
 ## Czyszczenie plików kompilacji
@@ -48,83 +66,85 @@ cd caliper_slave && C:\Users\tiim\.platformio\penv\Scripts\platformio.exe run --
 cd caliper_master && C:\Users\tiim\.platformio\penv\Scripts\platformio.exe run --target clean --environment esp32doit-devkit-v1
 ```
 
-## Struktura Projektu
+## Struktura projektu
 
-### caliper_master
+### `caliper_master`
+
 ```
 caliper_master/
 ├── src/
-│   ├── main.cpp              # Główna logika aplikacji
-│   ├── config.h              # Konfiguracja specyficzna dla Master
-│   ├── communication/
-│   │   ├── communication.h
-│   │   └── communication.cpp
-│   └── web/
-│       ├── web_server.h
-│       └── web_server.cpp
-├── data/                   # Pliki LittleFS (HTML/CSS/JS)
+│   ├── main.cpp              # Główna logika: AP WiFi + HTTP + ESP-NOW + obsługa LittleFS
+│   ├── config.h              # Konfiguracja specyficzna dla Master (SSID, hasło, MAC, stałe)
+│   ├── communication.h/.cpp  # Menedżer komunikacji ESP-NOW (wysyłanie komend + retry)
+├── data/                     # Pliki LittleFS (HTML/CSS/JS)
 │   ├── index.html
 │   ├── style.css
 │   └── app.js
 └── platformio.ini
 ```
 
-### caliper_slave
+### `caliper_slave`
+
 ```
 caliper_slave/
 ├── src/
-│   ├── main.cpp              # Główna logika aplikacji
-│   ├── config.h              # Konfiguracja specyficzna dla Slave
-│   ├── sensors/              # Moduły sensorów
-│   │   ├── caliper.h/cpp    # Obsługa suwmiarki
-│   │   └── accelerometer.h/cpp # Obsługa ADXL345
-│   ├── motor/                # Moduł sterownika silnika
-│   │   ├── motor_ctrl.h
-│   │   └── motor_ctrl.cpp
-│   └── power/                # Moduł monitorowania baterii
-│       ├── battery.h
-│       └── battery.cpp
+│   ├── main.cpp                 # Główna logika: ESP-NOW + harmonogram (timery) + spinanie modułów
+│   ├── config.h                 # Konfiguracja specyficzna dla Slave (MAC, piny, stałe)
+│   ├── sensors/
+│   │   ├── caliper.h/.cpp       # Obsługa suwmiarki + dekodowanie danych
+│   │   └── accelerometer.h/.cpp # Obsługa ADXL345 (I2C) + wyliczanie kątów
+│   ├── motor/
+│   │   └── motor_ctrl.h/.cpp    # Sterowanie silnikiem (MP6550GG-Z)
+│   └── power/
+│       └── battery.h/.cpp       # Pomiar napięcia baterii (ADC)
 └── platformio.ini
 ```
 
-### caliper_master_gui
+### `caliper_master_gui`
+
+Uwaga: plik wejściowy aplikacji to `caliper_master_gui.py` (modularna wersja), która importuje kod z katalogu `src/`.
+
 ```
 caliper_master_gui/
-├── caliper_master_gui.py    # Oryginalny plik (do zastąpienia)
-├── caliper_master_gui_new.py # Nowa modularna wersja
+├── caliper_master_gui.py      # Entry-point GUI (Dear PyGui)
 ├── requirements.txt
 ├── src/
 │   ├── __init__.py
-│   ├── app.py               # Klasa CaliperApp
-│   ├── serial_handler.py     # Obsługa portu szeregowego
+│   ├── app.py                 # Klasa stanu aplikacji (CaliperApp)
+│   ├── serial_handler.py      # Obsługa portu szeregowego
 │   ├── gui/
 │   │   ├── __init__.py
 │   │   ├── measurement_tab.py # Zakładka pomiarów
-│   │   └── log_tab.py      # Zakładka logów
+│   │   └── log_tab.py         # Zakładka logów
 │   └── utils/
 │       ├── __init__.py
-│       └── csv_handler.py   # Obsługa CSV
+│       └── csv_handler.py     # Obsługa CSV
 └── tests/
-    └── test_serial.py        # Testy jednostkowe
+    └── test_serial.py         # Testy jednostkowe
 ```
 
-### lib/CaliperShared
+### `lib/CaliperShared`
+
 ```
 lib/CaliperShared/
-├── shared_common.h    # Wspólne definicje typów i struktur
-└── shared_config.h    # Wspólna konfiguracja (piny, stałe)
+├── shared_common.h    # Wspólne definicje typów/struktur/protokołu (np. Message, CommandType)
+├── shared_config.h    # Wspólna konfiguracja (piny, stałe)
+└── MacroDebugger.h    # Makra debug/log/plot (używane w Master i Slave)
 ```
 
 ## Informacje o sprzęcie
 
-### caliper_slave
-- Platforma: Espressif 32 (ESP32 DOIT DEVKIT V1)
-- Mikrokontroler: ESP32 240MHz, 320KB RAM, 4MB Flash
-- Biblioteki: ADXL345_WE, WiFi, Wire
+### `caliper_slave`
 
-### caliper_master
 - Platforma: Espressif 32 (ESP32 DOIT DEVKIT V1)
 - Mikrokontroler: ESP32 240MHz, 320KB RAM, 4MB Flash
+- Biblioteki: `ADXL345_WE`, `arduino-timer`
+
+### `caliper_master`
+
+- Platforma: Espressif 32 (ESP32 DOIT DEVKIT V1)
+- Mikrokontroler: ESP32 240MHz, 320KB RAM, 4MB Flash
+- LittleFS: UI web jest serwowane z pamięci flash (folder `data/`)
 
 ## Uruchamianie aplikacji Python GUI
 
@@ -139,7 +159,7 @@ pip install -r requirements.txt
 
 ```powershell
 cd caliper_master_gui
-python caliper_master_gui_new.py
+python caliper_master_gui.py
 ```
 
 ### Testy jednostkowe
@@ -151,8 +171,7 @@ python -m pytest tests/
 
 ## Uwagi
 
-- Kompilacja może generować ostrzeżenia, które nie przerywają procesu
-- Pliki firmware są generowane w katalogu `.pio\build\[board]\firmware.bin`
-- Aby włączyć tryb szczegółowy, dodaj opcję `-v` lub `--verbose`
-- Nowa wersja GUI (`caliper_master_gui_new.py`) używa modułowej struktury
-- Oryginalna wersja GUI (`caliper_master_gui.py`) jest zachowana dla kompatybilności
+- Kompilacja może generować ostrzeżenia, które nie przerywają procesu.
+- Pliki firmware są generowane w katalogu `.pio\build\[board]\firmware.bin`.
+- Aby włączyć tryb szczegółowy PlatformIO, dodaj opcję `-v` / `--verbose`.
+- `caliper_master` wymaga jednorazowego wgrania LittleFS (`uploadfs`) po zmianach w `caliper_master/data/`.
