@@ -34,9 +34,14 @@ String currentSessionName = "";
 bool sessionActive = false;
 float calibrationError = 0.0f;
 // Offset kalibracji (mm) jest utrzymywany w systemStatus.localCalibrationOffset
+// Offset kalibracji (mm) jest utrzymywany w systemStatus.localCalibrationOffset
 
 void OnDataRecv(const esp_now_recv_info_t *recv_info, const uint8_t *incomingData, int len)
 {
+  (void)recv_info;
+
+  MessageSlave msg{};
+
   (void)recv_info;
 
   MessageSlave msg{};
@@ -52,20 +57,29 @@ void OnDataRecv(const esp_now_recv_info_t *recv_info, const uint8_t *incomingDat
 
   systemStatus.rxMsg = msg;
   systemStatus.localDeviation = systemStatus.rxMsg.measurement + systemStatus.localCalibrationOffset;
+  systemStatus.rxMsg = msg;
+  systemStatus.localDeviation = systemStatus.rxMsg.measurement + systemStatus.localCalibrationOffset;
 
   lastMeasurementValue = systemStatus.rxMsg.measurement;
   lastDeviationValue = systemStatus.localDeviation;
+  lastMeasurementValue = systemStatus.rxMsg.measurement;
+  lastDeviationValue = systemStatus.localDeviation;
 
+  DEBUG_I("command:%c", (char)msg.command);
   DEBUG_I("command:%c", (char)msg.command);
   DEBUG_I("measurement:%.3f", (double)msg.measurement);
   DEBUG_I("timestamp:%u", (unsigned)msg.timestamp);
   DEBUG_I("localCalibrationOffset:%.3f", (double)systemStatus.localCalibrationOffset);
   DEBUG_I("localDeviation:%.3f", (double)systemStatus.localDeviation);
+  DEBUG_I("localCalibrationOffset:%.3f", (double)systemStatus.localCalibrationOffset);
+  DEBUG_I("localDeviation:%.3f", (double)systemStatus.localDeviation);
 
+  DEBUG_PLOT("localDeviation:%.3f", (double)systemStatus.localDeviation);
   DEBUG_PLOT("localDeviation:%.3f", (double)systemStatus.localDeviation);
   DEBUG_PLOT("angleX:%u", (unsigned)msg.angleX);
   DEBUG_PLOT("batteryVoltage:%.3f", (double)msg.batteryVoltage);
 
+  lastMeasurement = String(systemStatus.localDeviation, 3) + " mm";
   lastMeasurement = String(systemStatus.localDeviation, 3) + " mm";
   lastBatteryVoltage = String(msg.batteryVoltage, 3) + " V";
 }
@@ -83,6 +97,7 @@ void OnDataSent(const wifi_tx_info_t *info, esp_now_send_status_t status)
 }
 
 // Ujednolicona wysyłka: Master → Slave zawsze wysyła pełną strukturę MessageMaster
+// Ujednolicona wysyłka: Master → Slave zawsze wysyła pełną strukturę MessageMaster
 static constexpr uint8_t DEFAULT_MOTOR_SPEED = 255;
 static constexpr uint8_t DEFAULT_MOTOR_TORQUE = 0;
 static constexpr MotorState DEFAULT_MOTOR_STATE = MOTOR_STOP;
@@ -90,6 +105,11 @@ static constexpr uint32_t DEFAULT_TIMEOUT_MS = 0;
 
 static void initDefaultTxMessage()
 {
+  memset(&systemStatus.txMsg, 0, sizeof(systemStatus.txMsg));
+  systemStatus.txMsg.motorSpeed = DEFAULT_MOTOR_SPEED;
+  systemStatus.txMsg.motorTorque = DEFAULT_MOTOR_TORQUE;
+  systemStatus.txMsg.motorState = DEFAULT_MOTOR_STATE;
+  systemStatus.txMsg.timeout = DEFAULT_TIMEOUT_MS;
   memset(&systemStatus.txMsg, 0, sizeof(systemStatus.txMsg));
   systemStatus.txMsg.motorSpeed = DEFAULT_MOTOR_SPEED;
   systemStatus.txMsg.motorTorque = DEFAULT_MOTOR_TORQUE;
@@ -107,7 +127,10 @@ ErrorCode sendTxToSlave(CommandType command, const char *commandName, bool expec
 
   systemStatus.txMsg.command = command;
   systemStatus.txMsg.timestamp = millis();
+  systemStatus.txMsg.command = command;
+  systemStatus.txMsg.timestamp = millis();
 
+  ErrorCode result = commManager.sendMessage(systemStatus.txMsg);
   ErrorCode result = commManager.sendMessage(systemStatus.txMsg);
 
   if (result == ERR_NONE)
@@ -136,6 +159,7 @@ void requestUpdate()
 
 void requestCalibration()
 {
+  DEBUG_I("Rozpoczynanie kalibracji z offsetem: %.3f", (double)systemStatus.localCalibrationOffset);
   DEBUG_I("Rozpoczynanie kalibracji z offsetem: %.3f", (double)systemStatus.localCalibrationOffset);
   (void)sendTxToSlave(CMD_UPDATE, "Kalibracja", true);
 }
@@ -214,6 +238,8 @@ void handleCalibrate()
   // Zapisz offset (lokalnie na Master)
   systemStatus.localCalibrationOffset = offsetValue;
   DEBUG_PLOT("calibrationOffset:%.3f", (double)systemStatus.localCalibrationOffset);
+  systemStatus.localCalibrationOffset = offsetValue;
+  DEBUG_PLOT("calibrationOffset:%.3f", (double)systemStatus.localCalibrationOffset);
 
   // Wykonaj pomiar
   requestMeasurement();
@@ -228,6 +254,7 @@ void handleCalibrate()
     DEBUG_PLOT("calibrationError:%.3f", (double)calibrationError);
   }
 
+  String response = "{\"offset\":" + String((double)systemStatus.localCalibrationOffset, 3) + ",\"error\":" +
   String response = "{\"offset\":" + String((double)systemStatus.localCalibrationOffset, 3) + ",\"error\":" +
                     String((double)calibrationError, 3) + "}";
   server.send(200, "application/json", response);
@@ -289,6 +316,11 @@ void printSerialHelp()
   DEBUG_I("\n=== DOSTĘPNE KOMENDY SERIAL (UART) ===\n"
           "m            - Wyślij do slave: CMD_MEASURE (M)\n"
           "u            - Wyślij do slave: CMD_UPDATE (U)\n"
+          "o <ms>       - Ustaw txMsg.timeout (timeout)\n"
+          "q <0-255>    - Ustaw txMsg.motorTorque\n"
+          "s <0-255>    - Ustaw txMsg.motorSpeed\n"
+          "r <0-3>      - Ustaw txMsg.motorState i wyślij CMD_MOTORTEST (T)\n"
+          "t            - Wyślij CMD_MOTORTEST (T) z bieżących pól txMsg\n"
           "o <ms>       - Ustaw txMsg.timeout (timeout)\n"
           "q <0-255>    - Ustaw txMsg.motorTorque\n"
           "s <0-255>    - Ustaw txMsg.motorSpeed\n"
@@ -422,6 +454,8 @@ bool serialCommandParser(void *arg)
 
       systemStatus.txMsg.timeout = (uint32_t)val;
       DEBUG_I("tx.timeout:%u", (unsigned)systemStatus.txMsg.timeout);
+      systemStatus.txMsg.timeout = (uint32_t)val;
+      DEBUG_I("tx.timeout:%u", (unsigned)systemStatus.txMsg.timeout);
       break;
 
     case 'u':
@@ -444,6 +478,8 @@ bool serialCommandParser(void *arg)
 
       systemStatus.localCalibrationOffset = fval;
       DEBUG_I("localCalibrationOffset:%.3f", (double)systemStatus.localCalibrationOffset);
+      systemStatus.localCalibrationOffset = fval;
+      DEBUG_I("localCalibrationOffset:%.3f", (double)systemStatus.localCalibrationOffset);
       requestCalibration();
       break;
 
@@ -461,6 +497,8 @@ bool serialCommandParser(void *arg)
         break;
       }
 
+      systemStatus.txMsg.motorTorque = (uint8_t)val;
+      DEBUG_I("tx.motorTorque:%u", (unsigned)systemStatus.txMsg.motorTorque);
       systemStatus.txMsg.motorTorque = (uint8_t)val;
       DEBUG_I("tx.motorTorque:%u", (unsigned)systemStatus.txMsg.motorTorque);
       break;
@@ -481,6 +519,8 @@ bool serialCommandParser(void *arg)
 
       systemStatus.txMsg.motorSpeed = (uint8_t)val;
       DEBUG_I("tx.motorSpeed:%u", (unsigned)systemStatus.txMsg.motorSpeed);
+      systemStatus.txMsg.motorSpeed = (uint8_t)val;
+      DEBUG_I("tx.motorSpeed:%u", (unsigned)systemStatus.txMsg.motorSpeed);
       break;
 
     case 'r':
@@ -497,6 +537,8 @@ bool serialCommandParser(void *arg)
         break;
       }
 
+      systemStatus.txMsg.motorState = (MotorState)val;
+      DEBUG_I("tx.motorState:%u", (unsigned)systemStatus.txMsg.motorState);
       systemStatus.txMsg.motorState = (MotorState)val;
       DEBUG_I("tx.motorState:%u", (unsigned)systemStatus.txMsg.motorState);
       sendMotorTest();
