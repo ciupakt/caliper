@@ -5,16 +5,19 @@
 #include "config.h"
 #include <shared_common.h>
 #include <MacroDebugger.h>
+#include <arduino-timer.h>
 #include "communication.h"
 
 // Slave device MAC address (defined in config.h)
 uint8_t slaveAddress[] = SLAVE_MAC_ADDR;
-
-// Global objects
+// TODO: Wypisz MAC Address Mastera
 WebServer server(WEB_SERVER_PORT);
 CommunicationManager commManager;
 SystemStatus systemStatus;
 Message msg;
+bool serialCommandParser(void *arg);
+
+auto timerWorker = timer_create_default();
 
 // Global variables
 String lastMeasurement = "Brak pomiaru";
@@ -29,76 +32,41 @@ float calibrationError = 0.0;
 
 void OnDataRecv(const esp_now_recv_info_t *recv_info, const uint8_t *incomingData, int len)
 {
-  if (len != sizeof(receivedData))
+  if (len != sizeof(msg))
   {
     DEBUG_E("BLAD: Nieprawidlowa dlugosc pakietu ESP-NOW");
     return;
   }
 
-  memcpy(&receivedData, incomingData, sizeof(receivedData));
+  memcpy(&msg, incomingData, sizeof(msg));
+  systemStatus.lastMessage = msg;
+  systemStatus.deviation = systemStatus.lastMessage.measurement + systemStatus.calibrationOffset;
 
-  // Update system status
-  systemStatus.lastUpdate = millis();
-  systemStatus.communicationActive = true;
+  DEBUG_I("command:%c", msg.command);
+  DEBUG_I("motorSpeed:%u", (unsigned)msg.motorSpeed);
+  DEBUG_I("motorTorque:%u", (unsigned)msg.motorTorque);
+  DEBUG_I("measurement:%.3f", (unsigned)msg.measurement);
+  DEBUG_I("timestamp:%u", (unsigned)msg.timestamp);
+  DEBUG_I("calibrationOffset:%.3f", (int)systemStatus.calibrationOffset);
+  DEBUG_I("deviation:%.3f", (unsigned)systemStatus.deviation);
 
-  // Handle different command types
-  if (receivedData.command == CMD_MEASURE)
-  {
-    // Validate measurement range
-    if (receivedData.valid && (receivedData.measurement < MEASUREMENT_MIN_VALUE || receivedData.measurement > MEASUREMENT_MAX_VALUE))
-    {
-      DEBUG_E("BLAD: Wartosc pomiaru poza zakresem!");
-      lastMeasurement = "BLAD: Wartosc poza zakresem";
-      measurementReady = true;
-      systemStatus.measurementValid = false;
-      return;
-    }
+  DEBUG_PLOT("deviation:%.3f", (double)systemStatus.deviation);
+  DEBUG_PLOT("angleX:%u", (unsigned)msg.angleX);
+  DEBUG_PLOT("batteryVoltage:%.3f", (double)msg.batteryVoltage);
 
-    if (receivedData.valid)
-    {
-      lastMeasurement = String(receivedData.measurement, 3) + " mm";
-      DEBUG_PLOT("VAL_1:%.3f", (double)receivedData.measurement);
-      systemStatus.lastMeasurement = receivedData.measurement;
-      systemStatus.measurementValid = true;
-    }
-    else
-    {
-      lastMeasurement = "BLAD POMIARU";
-      systemStatus.measurementValid = false;
-    }
-    lastBatteryVoltage = String(receivedData.batteryVoltage) + " mV";
-    systemStatus.batteryVoltage = receivedData.batteryVoltage;
-    measurementReady = true;
-
-    DEBUG_I("\n=== OTRZYMANO WYNIK POMIARU ===");
-    DEBUG_I("Wartosc: %s", lastMeasurement.c_str());
-    DEBUG_I("Timestamp: %lu", (unsigned long)receivedData.timestamp);
-    DEBUG_PLOT("Napiecie baterii:%u mV", (unsigned int)receivedData.batteryVoltage);
-    DEBUG_PLOT("Angle X:%.2f", (double)receivedData.angleX);
-    DEBUG_I("================================\n");
-  }
-  else if (receivedData.command == CMD_UPDATE)
-  {
-    // Status update
-    DEBUG_I("\n=== AKTUALIZACJA STATUSU ===");
-    DEBUG_PLOT("Napiecie baterii:%u mV", (unsigned int)receivedData.batteryVoltage);
-    DEBUG_PLOT("Angle X:%.2f", (double)receivedData.angleX);
-    lastBatteryVoltage = String(receivedData.batteryVoltage) + " mV";
-    systemStatus.batteryVoltage = receivedData.batteryVoltage;
-    DEBUG_I("==============================\n");
-  }
+  lastMeasurement = String(systemStatus.deviation, 3) + " mm";
+  lastBatteryVoltage = String(msg.batteryVoltage) + " mV";
 }
 
 void OnDataSent(const wifi_tx_info_t *info, esp_now_send_status_t status)
 {
-  if (status != ESP_NOW_SEND_SUCCESS)
+  if (status == ESP_NOW_SEND_SUCCESS)
   {
-    DEBUG_E("ERR: Wyslanie nie powiodlo sie!");
-    systemStatus.communicationActive = false;
+    DEBUG_I("Status wysyłki: Sukces");
   }
   else
   {
-    systemStatus.communicationActive = true;
+    DEBUG_W("Status wysyłki: Błąd");
   }
 }
 
@@ -120,7 +88,7 @@ ErrorCode sendCommand(CommandType command, const char *commandName)
     {
       systemStatus.motorRunning = (command != CMD_STOP);
       systemStatus.motorDirection = (command == CMD_FORWARD) ? MOTOR_FORWARD : (command == CMD_REVERSE) ? MOTOR_REVERSE
-                                                                                                         : MOTOR_STOP;
+                                                                                                        : MOTOR_STOP;
     }
   }
   else
@@ -136,6 +104,12 @@ void requestMeasurement()
 {
   sendCommand(CMD_MEASURE, "Pomiar");
 }
+
+void requestCalibration()
+{
+  DEBUG_I("Rozpoczynanie kalibracji z offsetem: %d", calibrationOffset);
+  sendCommand(CMD_UPDATE, "Kalibracja");
+} 
 
 void sendMotorForward()
 {
@@ -204,11 +178,11 @@ void handleAPI()
 {
   String json = "{";
   json += "\"measurement\":\"" + lastMeasurement + "\",";
-  json += "\"timestamp\":" + String(receivedData.timestamp) + ",";
-  json += "\"valid\":" + String(receivedData.valid ? "true" : "false") + ",";
-  json += "\"batteryVoltage\":" + String(receivedData.batteryVoltage) + ",";
-  json += "\"angleX\":" + String(receivedData.angleX, 2) + ",";
-  json += "\"command\":\"" + String(receivedData.command) + "\"";
+  json += "\"timestamp\":" + String(msg.timestamp) + ",";
+  json += "\"valid\":" + String(msg.valid ? "true" : "false") + ",";
+  json += "\"batteryVoltage\":" + String(msg.batteryVoltage) + ",";
+  json += "\"angleX\":" + String(msg.angleX, 2) + ",";
+  json += "\"command\":\"" + String(msg.command) + "\"";
   json += "}";
   server.send(200, "application/json", json);
 }
@@ -310,11 +284,62 @@ void printSerialHelp()
 {
   DEBUG_I("\n=== DOSTĘPNE KOMENDY SERIAL ===\n"
           "M/m - Wykonaj pomiar\n"
+          "U/u - Sprawdź status\n"
+          "C/c - Skalibruj (offset)\n"
           "F/f - Silnik do przodu (Forward)\n"
           "R/r - Silnik do tyłu (Reverse)\n"
           "S/s - Zatrzymaj silnik (Stop)\n"
           "H/h/? - Wyświetl tę pomoc\n"
           "===============================\n");
+}
+
+bool serialCommandParser(void *arg)
+{
+  String valStr;
+  Serial.setTimeout(10);
+  char input = Serial.read();
+
+  switch (input)
+  {
+  case 'M':
+  case 'm':
+    requestMeasurement();
+    break;
+  case 'U':
+  case 'u':
+    requestMeasurement();
+    break;
+  case 'C':
+  case 'c':
+    Serial.setTimeout(5000);
+    valStr = Serial.readStringUntil('\n');
+    calibrationOffset = valStr.toInt();
+    DEBUG_I("calibrationOffset:%d", calibrationOffset);
+    requestCalibration();
+    break;
+  case 'F':
+  case 'f':
+    sendMotorForward();
+    break;
+  case 'R':
+  case 'r':
+    sendMotorReverse();
+    break;
+  case 'S':
+  case 's':
+    sendMotorStop();
+    break;
+  case 'H':
+  case 'h':
+  case '?':
+    printSerialHelp();
+    break;
+  default:
+    DEBUG_W("Nieznana komenda. Wpisz 'H' lub '?' aby zobaczyć dostępne komendy.");
+    break;
+  }
+
+  return true;
 }
 
 void setup()
@@ -324,7 +349,6 @@ void setup()
 
   // Initialize system status
   memset(&systemStatus, 0, sizeof(systemStatus));
-  systemStatus.motorDirection = MOTOR_STOP;
 
   // Initialize LittleFS
   if (!LittleFS.begin())
@@ -387,49 +411,12 @@ void setup()
   DEBUG_I("Serwer HTTP uruchomiony na porcie %d", (int)WEB_SERVER_PORT);
   DEBUG_I("Polacz sie z WiFi: %s", WIFI_SSID);
   DEBUG_I("Otworz: http://%s", WiFi.softAPIP().toString().c_str());
+
+  timerWorker.every(200, serialCommandParser);
 }
 
 void loop()
 {
   server.handleClient();
-
-  if (Serial.available())
-  {
-    char input = Serial.read();
-    switch (input)
-    {
-    case 'M':
-    case 'm':
-      requestMeasurement();
-      break;
-    case 'F':
-    case 'f':
-      sendMotorForward();
-      break;
-    case 'R':
-    case 'r':
-      sendMotorReverse();
-      break;
-    case 'S':
-    case 's':
-      sendMotorStop();
-      break;
-    case 'H':
-    case 'h':
-    case '?':
-      printSerialHelp();
-      break;
-    default:
-      DEBUG_W("Nieznana komenda. Wpisz 'H' lub '?' aby zobaczyć dostępne komendy.");
-      break;
-    }
-  }
-
-  // Zamiast delay(10) - lepsza responsywność
-  static unsigned long lastCheck = 0;
-  if (millis() - lastCheck >= 10)
-  {
-    lastCheck = millis();
-    // Możliwość dodania innych zadań
-  }
+  timerWorker.tick();
 }

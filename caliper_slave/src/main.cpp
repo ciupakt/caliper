@@ -14,9 +14,8 @@
 
 // Master device MAC address (defined in config.h)
 uint8_t masterAddress[] = MASTER_MAC_ADDR;
+//TODO: Wypisz MAC Address Mastera
 esp_now_peer_info_t peerInfo;
-
-// Sensor instances
 CaliperInterface caliper;
 AccelerometerInterface accelerometer;
 BatteryMonitor battery;

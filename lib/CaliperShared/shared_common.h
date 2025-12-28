@@ -77,14 +77,11 @@ struct Message
  */
 struct SystemStatus
 {
-  float lastMeasurement;     /**< Last valid measurement */
-  uint16_t batteryVoltage;   /**< Current battery voltage */
-  bool motorRunning;         /**< Whether motor is running */
-  MotorState motorDirection; /**< Current motor direction */
-  uint32_t lastUpdate;       /**< Last update timestamp */
-  bool measurementValid;     /**< Whether last measurement is valid */
-  bool communicationActive;  /**< Whether ESP-NOW communication is active */
+  Message lastMessage;
+  float calibrationOffset;
+  float deviation;
 };
+
 #endif // CALIPER_MASTER
 
 #endif // SHARED_COMMON_H
