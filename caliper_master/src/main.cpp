@@ -34,16 +34,10 @@ String currentSessionName = "";
 bool sessionActive = false;
 float calibrationError = 0.0f;
 // Offset kalibracji (mm) jest utrzymywany w systemStatus.localCalibrationOffset
-// Offset kalibracji (mm) jest utrzymywany w systemStatus.localCalibrationOffset
 
 void OnDataRecv(const esp_now_recv_info_t *recv_info, const uint8_t *incomingData, int len)
 {
   (void)recv_info;
-
-  MessageSlave msg{};
-
-  (void)recv_info;
-
   MessageSlave msg{};
 
   if (len != sizeof(msg))
@@ -57,29 +51,18 @@ void OnDataRecv(const esp_now_recv_info_t *recv_info, const uint8_t *incomingDat
 
   systemStatus.rxMsg = msg;
   systemStatus.localDeviation = systemStatus.rxMsg.measurement + systemStatus.localCalibrationOffset;
-  systemStatus.rxMsg = msg;
-  systemStatus.localDeviation = systemStatus.rxMsg.measurement + systemStatus.localCalibrationOffset;
 
   lastMeasurementValue = systemStatus.rxMsg.measurement;
   lastDeviationValue = systemStatus.localDeviation;
-  lastMeasurementValue = systemStatus.rxMsg.measurement;
-  lastDeviationValue = systemStatus.localDeviation;
 
-  DEBUG_I("command:%c", (char)msg.command);
   DEBUG_I("command:%c", (char)msg.command);
   DEBUG_I("measurement:%.3f", (double)msg.measurement);
   DEBUG_I("timestamp:%u", (unsigned)msg.timestamp);
-  DEBUG_I("localCalibrationOffset:%.3f", (double)systemStatus.localCalibrationOffset);
-  DEBUG_I("localDeviation:%.3f", (double)systemStatus.localDeviation);
-  DEBUG_I("localCalibrationOffset:%.3f", (double)systemStatus.localCalibrationOffset);
-  DEBUG_I("localDeviation:%.3f", (double)systemStatus.localDeviation);
 
-  DEBUG_PLOT("localDeviation:%.3f", (double)systemStatus.localDeviation);
   DEBUG_PLOT("localDeviation:%.3f", (double)systemStatus.localDeviation);
   DEBUG_PLOT("angleX:%u", (unsigned)msg.angleX);
   DEBUG_PLOT("batteryVoltage:%.3f", (double)msg.batteryVoltage);
 
-  lastMeasurement = String(systemStatus.localDeviation, 3) + " mm";
   lastMeasurement = String(systemStatus.localDeviation, 3) + " mm";
   lastBatteryVoltage = String(msg.batteryVoltage, 3) + " V";
 }
@@ -97,7 +80,6 @@ void OnDataSent(const wifi_tx_info_t *info, esp_now_send_status_t status)
 }
 
 // Ujednolicona wysyłka: Master → Slave zawsze wysyła pełną strukturę MessageMaster
-// Ujednolicona wysyłka: Master → Slave zawsze wysyła pełną strukturę MessageMaster
 static constexpr uint8_t DEFAULT_MOTOR_SPEED = 255;
 static constexpr uint8_t DEFAULT_MOTOR_TORQUE = 0;
 static constexpr MotorState DEFAULT_MOTOR_STATE = MOTOR_STOP;
@@ -105,11 +87,6 @@ static constexpr uint32_t DEFAULT_TIMEOUT_MS = 0;
 
 static void initDefaultTxMessage()
 {
-  memset(&systemStatus.txMsg, 0, sizeof(systemStatus.txMsg));
-  systemStatus.txMsg.motorSpeed = DEFAULT_MOTOR_SPEED;
-  systemStatus.txMsg.motorTorque = DEFAULT_MOTOR_TORQUE;
-  systemStatus.txMsg.motorState = DEFAULT_MOTOR_STATE;
-  systemStatus.txMsg.timeout = DEFAULT_TIMEOUT_MS;
   memset(&systemStatus.txMsg, 0, sizeof(systemStatus.txMsg));
   systemStatus.txMsg.motorSpeed = DEFAULT_MOTOR_SPEED;
   systemStatus.txMsg.motorTorque = DEFAULT_MOTOR_TORQUE;
@@ -127,10 +104,7 @@ ErrorCode sendTxToSlave(CommandType command, const char *commandName, bool expec
 
   systemStatus.txMsg.command = command;
   systemStatus.txMsg.timestamp = millis();
-  systemStatus.txMsg.command = command;
-  systemStatus.txMsg.timestamp = millis();
 
-  ErrorCode result = commManager.sendMessage(systemStatus.txMsg);
   ErrorCode result = commManager.sendMessage(systemStatus.txMsg);
 
   if (result == ERR_NONE)
@@ -254,7 +228,6 @@ void handleCalibrate()
     DEBUG_PLOT("calibrationError:%.3f", (double)calibrationError);
   }
 
-  String response = "{\"offset\":" + String((double)systemStatus.localCalibrationOffset, 3) + ",\"error\":" +
   String response = "{\"offset\":" + String((double)systemStatus.localCalibrationOffset, 3) + ",\"error\":" +
                     String((double)calibrationError, 3) + "}";
   server.send(200, "application/json", response);
