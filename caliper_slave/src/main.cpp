@@ -19,22 +19,23 @@ esp_now_peer_info_t peerInfo;
 CaliperInterface caliper;
 AccelerometerInterface accelerometer;
 BatteryMonitor battery;
-Message msg;
+MessageMaster rxMsg;
+MessageSlave txMsg;
 
 bool runMeasReq(void *arg);
 auto timerWorker = timer_create_default();
 
 void OnDataRecv(const esp_now_recv_info_t *recv_info, const uint8_t *incomingData, int len)
 {
-  if (len != sizeof(msg))
+  if (len != sizeof(rxMsg))
   {
     DEBUG_E("BLAD: Nieprawidlowa dlugosc pakietu ESP-NOW");
     return;
   }
 
-  memcpy(&msg, incomingData, sizeof(msg));
+  memcpy(&rxMsg, incomingData, sizeof(rxMsg));
 
-  switch (msg.command)
+  switch (rxMsg.command)
   {
   case CMD_MEASURE: // Measurement request
     DEBUG_I("CMD_MEASURE");
@@ -51,11 +52,11 @@ void OnDataRecv(const esp_now_recv_info_t *recv_info, const uint8_t *incomingDat
   // Motor control (generic)
   case CMD_MOTORTEST:
     DEBUG_I("CMD_MOTORTEST");
-    motorCtrlRun(msg.motorSpeed, msg.motorTorque, msg.motorState);
+    motorCtrlRun(rxMsg.motorSpeed, rxMsg.motorTorque, rxMsg.motorState);
     break;
 
   default:
-    DEBUG_W("Nieznana komenda: %c", msg.command);
+    DEBUG_W("Nieznana komenda: %c", rxMsg.command);
     break;
   }
 }
@@ -76,29 +77,20 @@ void OnDataSent(const wifi_tx_info_t *info, esp_now_send_status_t status)
 bool runMeasReq(void *arg)
 {
   accelerometer.update();
-  msg.measurement = caliper.performMeasurement();
-  msg.angleX = accelerometer.getAngleX();
-  msg.batteryVoltage = battery.readVoltageNow();
-  msg.timestamp = millis();
+  txMsg.measurement = caliper.performMeasurement();
+  txMsg.angleX = accelerometer.getAngleX();
+  txMsg.batteryVoltage = battery.readVoltageNow();
+  txMsg.timestamp = millis();
+  txMsg.command = rxMsg.command;
 
-  (void)msg.command;     // Already known;
-  (void)msg.timeout;     // Not used in measurement response
-  (void)msg.motorState;  // Not used in measurement response
-  (void)msg.motorSpeed;  // Not used in measurement response
-  (void)msg.motorTorque; // Not used in measurement response
+  DEBUG_I("command:%c", txMsg.command);
 
-  DEBUG_I("command:%c", msg.command);
-  DEBUG_I("timeout:%u", msg.timeout);
-  DEBUG_I("motorState:%u", msg.motorState);
-  DEBUG_I("motorSpeed:%u", msg.motorSpeed);
-  DEBUG_I("motorTorque:%u", msg.motorTorque);
+  DEBUG_PLOT("timestamp:%u", txMsg.timestamp);
+  DEBUG_PLOT("measurement:%.3f", txMsg.measurement);
+  DEBUG_PLOT("angleX:%u", txMsg.angleX);
+  DEBUG_PLOT("batteryVoltage:%.3f", txMsg.batteryVoltage);
 
-  DEBUG_PLOT("timestamp:%u", msg.timestamp);
-  DEBUG_PLOT("measurement:%.3f", msg.measurement);
-  DEBUG_PLOT("angleX:%u", msg.angleX);
-  DEBUG_PLOT("batteryVoltage:%.3f", msg.batteryVoltage);
-
-  esp_err_t sendResult = esp_now_send(masterAddress, (uint8_t *)&msg, sizeof(msg));
+  esp_err_t sendResult = esp_now_send(masterAddress, (uint8_t *)&txMsg, sizeof(txMsg));
   if (sendResult == ESP_OK)
   {
     DEBUG_I("Wynik wysłany do Mastera");
@@ -109,7 +101,7 @@ bool runMeasReq(void *arg)
 
     // Próba ponownego wysłania po krótkiej przerwie
     delay(ESPNOW_RETRY_DELAY_MS);
-    sendResult = esp_now_send(masterAddress, (uint8_t *)&msg, sizeof(msg));
+    sendResult = esp_now_send(masterAddress, (uint8_t *)&txMsg, sizeof(txMsg));
     if (sendResult == ESP_OK)
     {
       DEBUG_I("Ponowne wysłanie wyniku udane");
