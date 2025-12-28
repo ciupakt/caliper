@@ -37,9 +37,47 @@ class MeasurementTab:
                     dpg.add_spacer(height=5)
                     dpg.add_text("Status: Not connected", tag="status")
                     dpg.add_text("", tag="csv_info")
-                
+
+                    dpg.add_spacer(height=10)
+                    dpg.add_text("Measurement Configuration:", color=(100, 200, 255))
+                    dpg.add_spacer(height=5)
+                    dpg.add_input_int(
+                        label="txMsg.timeout (ms)",
+                        tag="tx_timeout_input",
+                        default_value=0,
+                        min_value=0,
+                        max_value=600000,
+                        width=200,
+                    )
+                    dpg.add_input_int(
+                        label="txMsg.motorTorque (0-255)",
+                        tag="tx_torque_input",
+                        default_value=0,
+                        min_value=0,
+                        max_value=255,
+                        width=200,
+                    )
+                    dpg.add_input_int(
+                        label="txMsg.motorSpeed (0-255)",
+                        tag="tx_speed_input",
+                        default_value=255,
+                        min_value=0,
+                        max_value=255,
+                        width=200,
+                    )
+                    dpg.add_spacer(height=5)
+                    dpg.add_button(
+                        label="Zastosuj",
+                        callback=self._apply_measurement_config,
+                        width=200,
+                        height=30,
+                        user_data=serial_handler,
+                    )
+                    dpg.add_spacer(height=5)
+                    dpg.add_text("UART cmds: o <ms>, q <0-255>, s <0-255>", color=(150, 150, 150))
+
                 dpg.add_spacer(width=30)
-                
+
                 # Measurement Controls Group
                 with dpg.group():
                     dpg.add_text("Measurement Controls:", color=(100, 200, 255))
@@ -51,18 +89,30 @@ class MeasurementTab:
                     dpg.add_input_int(label="Interval (ms)", tag="interval_ms", default_value=1000, min_value=500, enabled=False, width=150)
                     dpg.add_spacer(height=5)
                     dpg.add_checkbox(label="Include timestamp", callback=self._timestamp_checkbox, tag="timestamp_cb")
+
                     dpg.add_spacer(height=10)
-                    
-                    dpg.add_text("Motor Controls:", color=(100, 200, 255))
-                    dpg.add_spacer(height=5)
-                    with dpg.group(horizontal=True):
-                        dpg.add_button(label="Forward", callback=lambda: self._send_motor_command(serial_handler, "f"), width=95, height=30)
-                        dpg.add_button(label="Reverse", callback=lambda: self._send_motor_command(serial_handler, "r"), width=95, height=30)
-                    dpg.add_button(label="Stop Motor", callback=lambda: self._send_motor_command(serial_handler, "s"), width=200, height=30)
-                    dpg.add_spacer(height=5)
+                    dpg.add_text("Calibration (Master local):", color=(100, 200, 255))
+                    dpg.add_input_float(
+                        label="localCalibrationOffset (mm)",
+                        tag="cal_offset_input",
+                        default_value=0.0,
+                        min_value=-14.999,
+                        max_value=14.999,
+                        format="%.3f",
+                        width=150,
+                    )
+                    dpg.add_button(
+                        label="Zastosuj",
+                        callback=self._apply_calibration_offset,
+                        width=200,
+                        height=30,
+                        user_data=serial_handler,
+                    )
+
+                    dpg.add_spacer(height=10)
                     dpg.add_text("ESP32 Master: http://192.168.4.1", color=(100, 255, 100))
                     dpg.add_text("Connect WiFi: ESP32_Pomiar", color=(100, 255, 100))
-            
+
             dpg.add_separator()
             dpg.add_spacer(height=10)
             
@@ -133,9 +183,66 @@ class MeasurementTab:
         self.include_timestamp = app_data
         self._show_measurements()
     
-    def _send_motor_command(self, serial_handler, command: str):
-        """Send motor control command"""
-        serial_handler.write(command)
+    @staticmethod
+    def _clamp_int(val: int, vmin: int, vmax: int) -> int:
+        return max(vmin, min(vmax, int(val)))
+
+    @staticmethod
+    def _clamp_float(val: float, vmin: float, vmax: float) -> float:
+        return max(vmin, min(vmax, float(val)))
+
+    def _safe_write(self, serial_handler, data: str) -> bool:
+        """Write to serial only when port is open; update status otherwise."""
+        if serial_handler is None or not hasattr(serial_handler, "is_open"):
+            dpg.set_value("status", "ERR: Serial handler missing")
+            return False
+
+        if not serial_handler.is_open():
+            dpg.set_value("status", "ERR: Port not open")
+            return False
+
+        serial_handler.write(data)
+        return True
+
+    def _apply_calibration_offset(self, sender, app_data, user_data):
+        """Apply localCalibrationOffset on Master via UART command: c <±14.999>."""
+        serial_handler = user_data
+        try:
+            val = float(dpg.get_value("cal_offset_input"))
+        except Exception:
+            dpg.set_value("status", "ERR: Invalid localCalibrationOffset")
+            return
+
+        val = self._clamp_float(val, -14.999, 14.999)
+        dpg.set_value("cal_offset_input", val)
+        if self._safe_write(serial_handler, f"c {val:.3f}"):
+            dpg.set_value("status", f"Sent: c {val:.3f}")
+
+    def _apply_measurement_config(self, sender, app_data, user_data):
+        """Apply txMsg config fields on Master via UART commands: o/q/s."""
+        serial_handler = user_data
+
+        try:
+            timeout_ms = int(dpg.get_value("tx_timeout_input"))
+            torque = int(dpg.get_value("tx_torque_input"))
+            speed = int(dpg.get_value("tx_speed_input"))
+        except Exception:
+            dpg.set_value("status", "ERR: Invalid config values")
+            return
+
+        timeout_ms = self._clamp_int(timeout_ms, 0, 600000)
+        torque = self._clamp_int(torque, 0, 255)
+        speed = self._clamp_int(speed, 0, 255)
+
+        dpg.set_value("tx_timeout_input", timeout_ms)
+        dpg.set_value("tx_torque_input", torque)
+        dpg.set_value("tx_speed_input", speed)
+
+        if not self._safe_write(serial_handler, f"o {timeout_ms}"):
+            return
+        self._safe_write(serial_handler, f"q {torque}")
+        self._safe_write(serial_handler, f"s {speed}")
+        dpg.set_value("status", f"Sent: o {timeout_ms}, q {torque}, s {speed}")
     
     def add_measurement(self, timestamp: str, value: str, numeric_value: float):
         """Add a measurement to history and plot"""

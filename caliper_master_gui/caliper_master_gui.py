@@ -190,7 +190,7 @@ class CaliperGUI:
                 self.measurement_tab.create(tab_bar_id, self.serial_handler, self.csv_handler)
 
                 # Log tab
-                self.log_tab.create(tab_bar_id)
+                self.log_tab.create(tab_bar_id, self.serial_handler)
 
         # Bind font
         dpg.bind_font(default_font)

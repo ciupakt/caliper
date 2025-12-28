@@ -70,7 +70,8 @@ function startSession() {
 }
 
 function measureSession() {
-    document.getElementById('status').textContent = 'Wysyłanie zadania...';
+    document.getElementById('status').textContent = 'Wykonywanie pomiaru...';
+
     fetch('/measure_session', {
         method: 'POST'
     })
@@ -83,30 +84,18 @@ function measureSession() {
     .then(data => {
         if (data.error) {
             document.getElementById('status').textContent = 'Błąd: ' + data.error;
-        } else {
-            document.getElementById('measurement-value').textContent = data.measurement;
-            document.getElementById('status').textContent = 'Zadanie wysłane! Odczekaj chwile i odśwież.';
-            setTimeout(refreshSession, 1500);
+            return;
         }
-    })
-    .catch(error => {
-        document.getElementById('status').textContent = 'Błąd: ' + error.message;
-    });
-}
 
-function refreshSession() {
-    document.getElementById('status').textContent = 'Pobieranie danych...';
-    
-    // Pobierz dane z API
-    fetch('/api')
-    .then(response => {
-        if (!response.ok) {
-            throw new Error('Błąd serwera: ' + response.status);
-        }
-        return response.json();
-    })
-    .then(data => {
         document.getElementById('measurement-value').textContent = data.measurement;
+
+        const isValid = !!data.valid;
+        if (!isValid) {
+            document.getElementById('battery').textContent = 'Brak danych';
+            document.getElementById('angle-x').textContent = 'Brak danych';
+            document.getElementById('status').textContent = 'Brak świeżych danych (brak odpowiedzi z urządzenia).';
+            return;
+        }
 
         const batt = Number(data.batteryVoltage);
         document.getElementById('battery').textContent = Number.isFinite(batt)
@@ -123,40 +112,4 @@ function refreshSession() {
     .catch(error => {
         document.getElementById('status').textContent = 'Błąd: ' + error.message;
     });
-}
-
-// Funkcje sterowania silnikiem (jeden endpoint /motor → CMD_MOTORTEST)
-function motorSend() {
-    const state = document.getElementById('motor-state').value;
-    const speed = document.getElementById('motor-speed').value;
-    const torque = document.getElementById('motor-torque').value;
-
-    document.getElementById('status').textContent = 'Wysyłanie komendy silnika...';
-
-    fetch('/motor', {
-        method: 'POST',
-        headers: {'Content-Type': 'application/x-www-form-urlencoded'},
-        body: 'state=' + encodeURIComponent(state) +
-              '&speed=' + encodeURIComponent(speed) +
-              '&torque=' + encodeURIComponent(torque)
-    })
-    .then(response => {
-        if (!response.ok) {
-            return response.json().then(err => { throw new Error(err.error || 'Błąd serwera'); });
-        }
-        return response.json();
-    })
-    .then(data => {
-        document.getElementById('status').textContent =
-            'Motor: state=' + data.state + ' speed=' + data.speed + ' torque=' + data.torque;
-    })
-    .catch(error => {
-        document.getElementById('status').textContent = 'Błąd: ' + error.message;
-    });
-}
-
-function motorStopQuick() {
-    document.getElementById('motor-state').value = '0';
-    document.getElementById('motor-speed').value = '0';
-    motorSend();
 }

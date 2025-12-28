@@ -52,15 +52,6 @@ button:hover {
     background: #0056b3;
 }
 
-button.motor {
-    width: 48%;
-    float: left;
-    margin: 1%;
-    font-size: 14px;
-    padding: 10px;
-}
-
-
 .status {
     text-align: center;
     color: #666;
