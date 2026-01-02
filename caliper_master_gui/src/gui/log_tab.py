@@ -16,12 +16,12 @@ class LogTab:
 
     def create(self, parent: int, serial_handler):
         """Create the log tab UI"""
-        with dpg.tab(label="Log", tag="log_tab", show=False, parent=parent):
+        with dpg.tab(label="Logi", tag="log_tab", show=False, parent=parent):
             dpg.add_spacer(height=5)
-            dpg.add_text("Debug Log (Ctrl+Alt+L to toggle)", color=(255, 200, 100))
+            dpg.add_text("Log debug (Ctrl+Alt+L - pokaż/ukryj)", color=(255, 200, 100))
             dpg.add_spacer(height=5)
 
-            dpg.add_text("Motor configuration (UART):", color=(100, 200, 255))
+            dpg.add_text("Konfiguracja silnika (UART):", color=(100, 200, 255))
             with dpg.group(horizontal=True):
                 dpg.add_input_int(
                     label="motorTorque",
@@ -65,7 +65,7 @@ class LogTab:
                 )
 
             dpg.add_spacer(height=5)
-            dpg.add_text("UART cmds: q <0-255>, s <0-255>, r <0-3>, t", color=(150, 150, 150))
+            dpg.add_text("Komendy UART: q <0-255>, s <0-255>, r <0-3>, t", color=(150, 150, 150))
             dpg.add_spacer(height=5)
             dpg.add_input_text(multiline=True, readonly=True, width=840, height=470, tag="log_text")
     
@@ -81,15 +81,15 @@ class LogTab:
 
     def _safe_write(self, serial_handler, data: str) -> bool:
         if serial_handler is None or not hasattr(serial_handler, "is_open"):
-            self.add_log("[GUI] ERR: Serial handler missing")
+            self.add_log("[GUI] BŁĄD: Brak SerialHandler")
             if dpg.does_item_exist("status"):
-                dpg.set_value("status", "ERR: Serial handler missing")
+                dpg.set_value("status", "BŁĄD: Brak SerialHandler")
             return False
 
         if not serial_handler.is_open():
-            self.add_log("[GUI] ERR: Port not open")
+            self.add_log("[GUI] BŁĄD: Port nie jest otwarty")
             if dpg.does_item_exist("status"):
-                dpg.set_value("status", "ERR: Port not open")
+                dpg.set_value("status", "BŁĄD: Port nie jest otwarty")
             return False
 
         serial_handler.write(data)
@@ -122,16 +122,16 @@ class LogTab:
         self._safe_write(serial_handler, f"r {state}")
 
         if dpg.does_item_exist("status"):
-            dpg.set_value("status", f"Sent: q {torque}, s {speed}, r {state}")
-        self.add_log(f"[GUI] Sent: q {torque}, s {speed}, r {state}")
+            dpg.set_value("status", f"Wysłano: q {torque}, s {speed}, r {state}")
+        self.add_log(f"[GUI] Wysłano: q {torque}, s {speed}, r {state}")
 
     def _send_motortest(self, sender, app_data, user_data):
         """Send motor test command via UART: t."""
         serial_handler = user_data
         if self._safe_write(serial_handler, "t"):
             if dpg.does_item_exist("status"):
-                dpg.set_value("status", "Sent: t")
-            self.add_log("[GUI] Sent: t")
+                dpg.set_value("status", "Wysłano: t")
+            self.add_log("[GUI] Wysłano: t")
     
     def toggle_visibility(self):
         """Toggle log tab visibility"""

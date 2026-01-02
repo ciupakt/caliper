@@ -2,6 +2,32 @@
 
 System bezprzewodowego pomiaru długości wykorzystujący suwarkę cyfrową, akcelerometr oraz mikrokontrolery ESP32 z komunikacją ESP-NOW i interfejsem webowym.
 
+## Szybki start (build/flash)
+
+Instrukcje kompilacji i wgrywania są utrzymywane w [`AGENTS.md`](AGENTS.md:1) (zalecane, zawiera komendy dla Windows + PlatformIO venv).
+
+Najczęstszy workflow:
+
+1) Kompilacja + upload firmware Slave:
+
+```powershell
+cd caliper_slave && C:\Users\tiim\.platformio\penv\Scripts\platformio.exe run --target upload -s --environment esp32doit-devkit-v1 --upload-port COM8
+```
+
+2) Kompilacja + upload firmware Master:
+
+```powershell
+cd caliper_master && C:\Users\tiim\.platformio\penv\Scripts\platformio.exe run --target upload -s --environment esp32doit-devkit-v1 --upload-port COM7
+```
+
+3) Upload UI web do LittleFS (tylko Master, po zmianach w [`caliper_master/data/`](caliper_master/data/)):
+
+```powershell
+cd caliper_master && C:\Users\tiim\.platformio\penv\Scripts\platformio.exe run --target uploadfs -s --environment esp32doit-devkit-v1 --upload-port COM7
+```
+
+Uwaga: jeśli masz `pio` w `PATH`, możesz zamienić `C:\Users\tiim\.platformio\penv\Scripts\platformio.exe` na `pio`.
+
 ## Opis Projektu
 
 System składa się z trzech głównych komponentów:
@@ -31,55 +57,92 @@ System składa się z trzech głównych komponentów:
 ## Architektura Systemu
 
 ```mermaid
-graph TD
-    subgraph "System Pomiarowy ESP32"
-        A[ESP32 Master]
-        A1[Serwer HTTP]
-        A2[Access Point WiFi]
-        A3[ESP-NOW Receiver]
-        A4[Web Interface LittleFS]
-        A5[CommunicationManager]
-        A6[Serial Command Parser]
-    
-        B[ESP32 Slave]
-        B1[CaliperInterface]
-        B2[ESP-NOW Sender]
-        B3[AccelerometerInterface ADXL345]
-        B4[BatteryMonitor]
-        B5[MotorController MP6550GG-Z]
-    
-        C[Aplikacja Python GUI]
-        C1[SerialHandler]
-        C2[MeasurementTab]
-        C3[LogTab]
-        C4[CSVHandler]
-    
-        D[Przeglądarka Web]
-        E[Suwmiarka Cyfrowa]
-        F[Akcelerometr ADXL345]
-        G[Silnik DC]
-    
-        E --> B1
-        F --> B3
-        B1 --> B2
-        B3 --> B2
-        B4 --> B2
-        B5 --> B2
-        B2 -.->|ESP-NOW MessageSlave| A3
-        A3 --> A1
-        A1 --> A4
-        A4 --> D
-        A6 --> C1
-        C1 --> C2
-        C2 --> C4
-        C3 --> C1
+flowchart TD
+    %% Uwaga: WiFi AP działa równolegle z ESP-NOW (Master w trybie WIFI_AP_STA).
+
+    subgraph SYS["System Pomiarowy ESP32"]
+        subgraph M["ESP32 Master (caliper_master)"]
+            M_WIFI["WiFi AP (SSID/hasło) + STA"]
+            M_HTTP["WebServer (HTTP :80)"]
+            M_FS["LittleFS (UI: index.html / style.css / app.js)"]
+            M_CLI["SerialCli (UART 115200)\nparser komend: m/u/o/q/s/r/t/c"]
+            M_COMM["CommunicationManager (ESP-NOW TX/RX)\nMessageMaster <-> MessageSlave"]
+            M_STATE["SystemStatus\nmsgMaster + msgSlave + localCalibrationOffset"]
+        end
+
+        subgraph S["ESP32 Slave (caliper_slave)"]
+            S_COMM["ESP-NOW RX/TX\nodbiór MessageMaster\nwysyłka MessageSlave"]
+            S_CAL["CaliperInterface\n(52-bit decode)"]
+            S_ACC["AccelerometerInterface\nADXL345 (I2C)"]
+            S_BATT["BatteryMonitor\nADC"]
+            S_MOTOR["MotorController\nMP6550GG-Z"]
+        end
+
+        GUI["Aplikacja Python GUI\n(DearPyGUI)"]
+        WEB["Przeglądarka Web\nhttp://192.168.4.1"]
+
+        CAL_HW["Suwmiarka cyfrowa"]
+        ACC_HW["ADXL345"]
+        BATT_HW["Bateria"]
+        MOTOR_HW["Silnik DC"]
+        DRIVER_HW["MP6550GG-Z"]
     end
-    
-    subgraph "WiFi Network"
-        A2
-        D
-    end
+
+    %% Hardware -> Slave
+    CAL_HW --> S_CAL
+    ACC_HW --> S_ACC
+    BATT_HW --> S_BATT
+    DRIVER_HW --> S_MOTOR
+    S_MOTOR --> MOTOR_HW
+
+    %% Komunikacja Master <-> Slave (ESP-NOW)
+    M_COMM -. "ESP-NOW: MessageMaster" .-> S_COMM
+    S_COMM -. "ESP-NOW: MessageSlave" .-> M_COMM
+
+    %% Warstwa aplikacyjna na Master
+    M_HTTP --> M_FS
+    M_HTTP -->|API: /measure /read /start_session /measure_session\n/api/calibration/*| M_STATE
+    M_CLI -->|komendy z GUI| M_STATE
+
+    %% Wyzwalanie akcji: WWW/GUI -> Master -> Slave
+    M_HTTP -->|requestMeasurement()/requestUpdate()| M_COMM
+    M_CLI -->|requestMeasurement()/requestUpdate()/sendMotorTest()| M_COMM
+
+    %% Dane zwrotne: Slave -> Master -> GUI/WWW
+    M_COMM -->|OnDataRecv() aktualizuje msgSlave\n+ DEBUG_PLOT| M_STATE
+    M_STATE -->|Serial log/plot| GUI
+
+    %% Dostęp użytkownika
+    WEB <-->|HTTP| M_HTTP
+    GUI <-->|Serial (USB/UART)| M_CLI
+
+    %% Sieć WiFi: WWW
+    M_WIFI --- WEB
 ```
+
+### Komponenty (odpowiedzialności)
+
+Skonsolidowane z dokumentacji: [`doc/architecture.md`](doc/architecture.md:1).
+
+1. **Caliper Master (ESP32)** – [`caliper_master/`](caliper_master/)
+   - komunikacja z Slave przez ESP-NOW
+   - AP WiFi + HTTP + UI web z LittleFS
+   - parser komend z UART (dla GUI)
+
+2. **Caliper Slave (ESP32)** – [`caliper_slave/`](caliper_slave/)
+   - odczyt suwmiarki cyfrowej
+   - odczyt ADXL345 (I2C)
+   - sterowanie silnikiem (MP6550GG-Z)
+   - pomiar baterii (ADC)
+
+3. **Caliper Master GUI (Python/DearPyGUI)** – [`caliper_master_gui/`](caliper_master_gui/)
+   - komunikacja z Master przez Serial
+   - live plot + historia
+   - zapis do CSV
+
+4. **Wspólna biblioteka** – [`lib/CaliperShared/`](lib/CaliperShared/)
+   - protokół (struktury/enumy) w [`shared_common.h`](lib/CaliperShared/shared_common.h:1)
+   - stałe/piny w [`shared_config.h`](lib/CaliperShared/shared_config.h:1)
 
 ## Struktura Projektu
 
@@ -111,22 +174,23 @@ caliper/
 │       │   └── motor_ctrl.h/.cpp # Sterowanie silnikiem (MP6550GG-Z)
 │       └── power/               # pomiar baterii
 │           └── battery.h/.cpp   # Pomiar napięcia baterii (ADC)
-├── caliper_master_gui/          # Aplikacja GUI (Python/DearPyGUI)
-│   ├── caliper_master_gui.py    # Entry-point
-│   ├── requirements.txt
-│   ├── src/
-│   │   ├── __init__.py
-│   │   ├── app.py               # Klasa stanu aplikacji (CaliperApp)
-│   │   ├── serial_handler.py    # Obsługa portu szeregowego
-│   │   ├── gui/
-│   │   │   ├── __init__.py
-│   │   │   ├── measurement_tab.py # Zakładka pomiarów
-│   │   │   └── log_tab.py       # Zakładka logów
-│   │   └── utils/
-│   │       ├── __init__.py
-│   │       └── csv_handler.py   # Obsługa CSV
-│   └── tests/
-│       └── test_serial.py       # Testy jednostkowe
+ ├── caliper_master_gui/          # Aplikacja GUI (Python/DearPyGUI)
+ │   ├── caliper_master_gui.py    # Entry-point
+ │   ├── requirements.txt
+ │   ├── src/
+ │   │   ├── __init__.py
+ │   │   ├── app.py               # Klasa stanu aplikacji (CaliperApp)
+ │   │   ├── serial_handler.py    # Obsługa portu szeregowego
+ │   │   ├── gui/
+ │   │   │   ├── __init__.py
+ │   │   │   ├── calibration_tab.py # Zakładka kalibracji
+ │   │   │   ├── measurement_tab.py # Zakładka pomiarów
+ │   │   │   └── log_tab.py       # Zakładka logów
+ │   │   └── utils/
+ │   │       ├── __init__.py
+ │   │       └── csv_handler.py   # Obsługa CSV
+ │   └── tests/
+ │       └── test_serial.py       # Testy jednostkowe
 ├── lib/CaliperShared/           # Wspólna biblioteka (typy/protokół/debug)
 │   ├── shared_common.h          # Wspólne definicje typów/struktur/protokołu
 │   ├── shared_config.h          # Wspólna konfiguracja (piny, stałe)
@@ -181,7 +245,7 @@ Moduł sterowania silnikiem DC wykorzystuje sterownik **MP6550GG-Z** w minimalis
 
 #### Pliki:
 - **[`motor_ctrl.h`](caliper_slave/src/motor/motor_ctrl.h:1)** – nagłówek sterownika silnika (MP6550GG-Z)
-- **`motor_ctrl.cpp`** – implementacja (w tym samym katalogu)
+- **[`motor_ctrl.cpp`](caliper_slave/src/motor/motor_ctrl.cpp:1)** – implementacja (w tym samym katalogu)
 
 #### Dostępne funkcje:
 
@@ -267,74 +331,70 @@ Slave ESP32 posiada zintegrowany akcelerometr ADXL345 do pomiaru kątów nachyle
 
 ```mermaid
 sequenceDiagram
-    participant Użytkownik
-    participant Aplikacja_Python
-    participant ESP32_Master
-    participant ESP_NOW
-    participant ESP32_Slave
-    participant Suwmiarka
-    participant ADXL345
-    participant Bateria
+    participant U as Użytkownik
+    participant GUI as Python GUI
+    participant WEB as Web UI
+    participant M as ESP32 Master
+    participant S as ESP32 Slave
+    participant CAL as Suwmiarka
+    participant ACC as ADXL345
+    participant BAT as Bateria
 
-    Note over ESP32_Slave,ESP32_Master: Inicjalizacja
-    ESP32_Slave->>ESP32_Master: ESP-NOW Peer Connection
-    ESP32_Master->>ESP32_Master: Access Point Start (SSID z config.h)
-    Aplikacja_Python->>ESP32_Master: Serial Connection (115200)
-    ESP32_Slave->>ADXL345: I2C Initialization
+    Note over M,S: Inicjalizacja (po starcie urządzeń)
+    M->>M: WiFi.softAP() + WiFi.setChannel()
+    M->>M: CommunicationManager.initialize(slaveMAC)
+    S->>S: WiFi STA + WiFi.setChannel() + esp_now_init()
+    S->>S: esp_now_add_peer(masterMAC)
+    GUI->>M: Serial (115200) - otwarcie portu
+    S->>ACC: I2C init (opcjonalnie)
 
-    Note over Użytkownik,Suwmiarka: Pomiar Manualny
-    Użytkownik->>Aplikacja_Python: "Trigger measurement"
-    Aplikacja_Python->>ESP32_Master: Serial Command 'm'
-    ESP32_Master->>ESP_NOW: Send MessageMaster{CMD_MEASURE}
-    ESP_NOW->>ESP32_Slave: Measurement Request
+    Note over U,CAL: Pomiar manualny
+    U->>GUI: "Trigger measurement"
+    GUI->>M: Serial: "m\n" (CMD_MEASURE)
+    M->>S: ESP-NOW: MessageMaster{CMD_MEASURE, motorState/speed/timeout}
 
-    Note over ESP32_Slave,Suwmiarka: Wykonanie Pomiaru
-    ESP32_Slave->>Suwmiarka: Trigger Measurement
-    Suwmiarka->>ESP32_Slave: 52-bit Data Stream
-    ESP32_Slave->>ESP32_Slave: Decode Caliper Data
-    ESP32_Slave->>ADXL345: Read Angles
-    ADXL345->>ESP32_Slave: Angle Data (X, Y, Z)
-    ESP32_Slave->>Bateria: Read Voltage
-    Bateria->>ESP32_Slave: Voltage (mV)
-    ESP32_Slave->>ESP_NOW: Send MessageSlave
-    ESP_NOW->>ESP32_Master: ESP-NOW Data
-    ESP32_Master->>ESP32_Master: Process & Store Data
-    ESP32_Master->>Aplikacja_Python: Serial DEBUG_PLOT ">measurement:xxx.xxx" + ">calibrationOffset:xxx.xxx"
-    Aplikacja_Python->>Użytkownik: GUI Update + CSV Log
+    Note over S,CAL: Wykonanie pomiaru (Slave)
+    S->>S: motor forward -> delay(timeout)
+    S->>CAL: TRIG (GPIO) + odczyt CLK/DATA
+    CAL->>S: 52-bit Data Stream
+    S->>S: decode mm
+    S->>ACC: odczyt kąta X
+    ACC->>S: angleX
+    S->>BAT: ADC read
+    BAT->>S: voltage
+    S->>M: ESP-NOW: MessageSlave{measurement,batteryVoltage,angleX}
+    M->>M: OnDataRecv(): aktualizacja msgSlave + DEBUG_PLOT
+    M->>GUI: Serial: ">measurement:.." + ">calibrationOffset:.." + ">angleX:.." + ">batteryVoltage:.."
+    GUI->>U: update GUI + opcjonalny zapis CSV
 
-    Note over Aplikacja_Python,ESP32_Master: Pomiar Automatyczny
+    Note over GUI,M: Pomiar automatyczny
     loop Auto Mode
-        Aplikacja_Python->>ESP32_Master: Periodic 'm' command
-        ESP32_Master->>ESP_NOW: MessageMaster{CMD_MEASURE}
-        ESP_NOW->>ESP32_Slave: Request
-        ESP32_Slave->>ESP_NOW: MessageSlave
-        ESP_NOW->>ESP32_Master: Results
-        ESP32_Master->>Aplikacja_Python: Data Update
-        Aplikacja_Python->>Użytkownik: Live Plot Update
+        GUI->>M: cyklicznie "m\n"
+        M->>S: ESP-NOW: MessageMaster{CMD_MEASURE}
+        S->>M: ESP-NOW: MessageSlave
+        M->>GUI: Serial DEBUG_PLOT (asynchronicznie)
+        GUI->>U: Live plot update
     end
 
-    Note over Użytkownik,ESP32_Master: Web Interface - Sesja Pomiarowa
-    Użytkownik->>Przeglądarka: Access http://192.168.4.1
-    Przeglądarka->>ESP32_Master: HTTP GET /
-    ESP32_Master->>Przeglądarka: HTML Interface
-    Użytkownik->>Przeglądarka: "Nowa sesja pomiarowa"
-    Użytkownik->>Przeglądarka: Wprowadź nazwę sesji
-    Przeglądarka->>ESP32_Master: POST /start_session
-    ESP32_Master->>Przeglądarka: Session started
-    Użytkownik->>Przeglądarka: "Wykonaj pomiar"
-    Przeglądarka->>ESP32_Master: POST /measure_session
-    ESP32_Master->>ESP_NOW: MessageMaster{CMD_MEASURE}
-    ESP32_Master->>Aplikacja_Python: Serial ">measurementReady:Nazwa xxx.xxx"
-    ESP32_Master->>Przeglądarka: Measurement result
+    Note over U,M: Web UI - sesja pomiarowa
+    U->>WEB: http://192.168.4.1
+    WEB->>M: HTTP GET /
+    M->>WEB: HTML/CSS/JS (LittleFS)
+    U->>WEB: "Nowa sesja pomiarowa" + nazwa
+    WEB->>M: POST /start_session
+    M->>WEB: {active:true, sessionName}
+    U->>WEB: "Wykonaj pomiar"
+    WEB->>M: POST /measure_session
+    M->>S: ESP-NOW: MessageMaster{CMD_MEASURE}
+    S->>M: ESP-NOW: MessageSlave
+    M->>GUI: Serial: ">measurementReady:<name> <corrected>" (DEBUG_PLOT)
+    M->>WEB: JSON z measurementRaw + calibrationOffset + measurementCorrected
 
-    Note over Użytkownik,ESP32_Master: Kalibracja
-    Użytkownik->>Przeglądarka: "Kalibracja"
-    Użytkownik->>Przeglądarka: Wprowadź offset (-14.999..14.999)
-    Przeglądarka->>ESP32_Master: POST /calibrate
-    ESP32_Master->>ESP_NOW: MessageMaster{CMD_UPDATE}
-    ESP32_Master->>Aplikacja_Python: Serial ">calibrationOffset:xxx"
-    ESP32_Master->>Aplikacja_Python: Serial ">calibrationError:xxx.xxx"
-    ESP32_Master->>Przeglądarka: Calibration result
+    Note over U,M: Kalibracja (Web UI)
+    U->>WEB: "Kalibracja" + offset (-14.999..14.999)
+    WEB->>M: POST /api/calibration/offset
+    M->>GUI: Serial: ">calibrationOffset:xxx.xxx" (log/DEBUG)
+    M->>WEB: {success:true, calibrationOffset}
 ```
 
 ## Połączenia Hardware
@@ -359,9 +419,16 @@ graph LR
         Trigger[Trigger Input]
     end
     
-    subgraph "Sterownik Silnika"
+    subgraph "Sterownik Silnika (MP6550GG-Z)"
         IN1[MP6550GG-Z IN1]
         IN2[MP6550GG-Z IN2]
+        OUT1[MP6550GG-Z OUT1]
+        OUT2[MP6550GG-Z OUT2]
+    end
+
+    subgraph "Silnik DC"
+        M1[Motor Terminal 1]
+        M2[Motor Terminal 2]
     end
     
     subgraph "Akcelerometr"
@@ -378,8 +445,10 @@ graph LR
     GPIO13 --> IN1
     GPIO12 --> IN2
     Batt --> GPIO34
-    SDA --> ADXL
-    SCL --> ADXL
+    SDA <-->|I2C| ADXL
+    SCL <-->|I2C| ADXL
+    OUT1 --> M1
+    OUT2 --> M2
 ```
 
 ## Specyfikacja Techniczna
@@ -396,7 +465,7 @@ graph LR
 - **Moduły**:
   - [`CommunicationManager`](caliper_master/src/communication.h:17) – zarządzanie ESP-NOW
   - [`SystemStatus`](lib/CaliperShared/shared_common.h:84) – śledzenie statusu systemu
-  - [`serialCommandParser()`](caliper_master/src/main.cpp:360) – parser komend Serial
+  - [`SerialCli_tick()`](caliper_master/src/serial_cli.cpp:88) – parser komend Serial
 
 ### ESP32 Slave
 - **Funkcje**: Caliper Interface, ESP-NOW Sender, Motor Controller, Battery Monitor, Accelerometer
@@ -443,23 +512,23 @@ graph LR
 
 Szczegółowe instrukcje znajdują się w [`AGENTS.md`](AGENTS.md:1).
 
-1. **Instalacja PlatformIO** w VS Code lub jako samodzielne narzędzie
-2. **Wgranie kodu Master**:
-   ```bash
-   cd caliper_master
-   pio run --target upload --environment esp32doit-devkit-v1
+1. **Instalacja PlatformIO** w VS Code lub jako samodzielne narzędzie.
+2. **Build/Upload Slave** (domyślnie port z [`caliper_slave/platformio.ini`](caliper_slave/platformio.ini:1); w razie potrzeby dopisz `--upload-port COMx`):
+
+   ```powershell
+   cd caliper_slave && C:\Users\tiim\.platformio\penv\Scripts\platformio.exe run --target upload -s --environment esp32doit-devkit-v1 --upload-port COM8
    ```
 
-3. **Wgranie kodu Slave**:
-   ```bash
-   cd caliper_slave
-   pio run --target upload --environment esp32doit-devkit-v1
+3. **Build/Upload Master**:
+
+   ```powershell
+   cd caliper_master && C:\Users\tiim\.platformio\penv\Scripts\platformio.exe run --target upload -s --environment esp32doit-devkit-v1 --upload-port COM7
    ```
 
-4. **Wgranie systemu plików LittleFS (UI web) – tylko `caliper_master`**:
-   ```bash
-   cd caliper_master
-   pio run --target uploadfs --environment esp32doit-devkit-v1
+4. **Wgranie systemu plików LittleFS (UI web) – tylko Master** (po zmianach w [`caliper_master/data/`](caliper_master/data/)):
+
+   ```powershell
+   cd caliper_master && C:\Users\tiim\.platformio\penv\Scripts\platformio.exe run --target uploadfs -s --environment esp32doit-devkit-v1 --upload-port COM7
    ```
 
 5. **Połączenia suwarki**:
@@ -491,21 +560,25 @@ Szczegółowe instrukcje znajdują się w [`AGENTS.md`](AGENTS.md:1).
 ### Konfiguracja Aplikacji Python
 
 1. **Instalacja zależności**:
-```bash
+
+```powershell
 cd caliper_master_gui
-pip install -r requirements.txt
+python -m pip install -r requirements.txt
 ```
 
 2. **Uruchomienie aplikacji**:
-```bash
+
+```powershell
 cd caliper_master_gui
 python caliper_master_gui.py
 ```
 
+Uwaga: `pytest` nie jest obecnie na liście zależności w [`requirements.txt`](caliper_master_gui/requirements.txt:1) (zob. też [`AGENTS.md`](AGENTS.md:1)).
+
 3. **Połączenie Serial**:
    - Wybierz odpowiedni port COM
-   - Kliknij "Open port"
-   - Status: "Connected to COMx"
+   - Kliknij "Otwórz port"
+   - Status: "Połączono z COMx"
 
 ### Konfiguracja WiFi
 
@@ -523,9 +596,10 @@ python caliper_master_gui.py
 ### Interfejs Aplikacji Python
 
 1. **Sterowanie pomiarem**:
-   - "Trigger measurement" – pojedynczy pomiar (wysyła `m` przez Serial)
-   - "Auto trigger" – tryb automatyczny
-   - "Interval (ms)" – interwał pomiarów
+   - **"Wykonaj pomiar (p)"** – pojedynczy pomiar (wysyła `m` przez Serial)
+   - **"Auto-pomiar"** – tryb automatyczny (cyklicznie wysyła `m`)
+   - **"Interwał (ms)"** – interwał auto-pomiaru (min. 500 ms)
+   - **"Nowa sesja pomiarowa"** – utworzenie pliku CSV po podaniu prefixu
 
 2. **Wizualizacja**:
    - **Measurement History** – lista wszystkich pomiarów
@@ -533,9 +607,10 @@ python caliper_master_gui.py
    - **Include timestamp** – dodanie znacznika czasu
 
 3. **Logging**:
-   - Automatyczne zapisywanie do pliku CSV
-   - Plik: `measurement_YYYYMMDD_HHMMSS.csv`
-   - Format: `timestamp,value` lub tylko `value`
+   - Zapisywanie do CSV działa tylko, gdy jest aktywna sesja CSV
+   - Plik jest tworzony po kliknięciu **"Nowa sesja pomiarowa"**
+   - Nazwa pliku: `<prefix>_YYYYMMDD_HHMMSS.csv`
+   - Format: `[timestamp, value]` albo tylko `[value]` (opcja „Dodaj znacznik czasu”)
 
 4. **Debug**:
    - **Log tab** (Ctrl+Alt+L) – pełny log komunikacji
@@ -599,6 +674,8 @@ python caliper_master_gui.py
 
 ## Protokół Komunikacji
 
+Ta sekcja konsoliduje informacje z [`doc/api/protocol.md`](doc/api/protocol.md:1) i aktualizuje je do stanu implementacji.
+
 ### ESP-NOW Messages
 
 **Command** (Master → Slave):
@@ -633,23 +710,29 @@ struct MessageSlave {
 };
 ```
 
+**Parametry ESP-NOW (aktualne w kodzie):**
+- kanał WiFi: [`ESPNOW_WIFI_CHANNEL`](lib/CaliperShared/shared_config.h:19) (ustawiany w Master przez `WiFi.setChannel()` w [`setup()`](caliper_master/src/main.cpp:331))
+- szyfrowanie: wyłączone (`encrypt = false`, ustawiane w [`CommunicationManager::initialize()`](caliper_master/src/communication.cpp:18))
+- retry: [`ESPNOW_MAX_RETRIES`](lib/CaliperShared/shared_config.h:21) z opóźnieniem [`ESPNOW_RETRY_DELAY_MS`](lib/CaliperShared/shared_config.h:20) (implementacja: [`CommunicationManager::sendMessage()`](caliper_master/src/communication.cpp:53))
+
 ### Serial Protocol
 
-**Trigger** (Python → Master):
+**Format:** ASCII zakończone `\n`.
+
+**Komendy (GUI → Master)** – parser: [`SerialCli_tick()`](caliper_master/src/serial_cli.cpp:88)
 ```c
-'m' + '\n'; // Single measurement trigger
-'u' + '\n'; // Request update
-'o <ms>' + '\n'; // Set msgMaster.timeout
-'q <0-255>' + '\n'; // Set msgMaster.motorTorque
-'s <0-255>' + '\n'; // Set msgMaster.motorSpeed
-'r <0-3>' + '\n'; // Set msgMaster.motorState and send CMD_MOTORTEST
-'t' + '\n'; // Send CMD_MOTORTEST with current msgMaster fields
-'c <±14.999>' + '\n'; // Set calibration offset
-'h' + '\n'; // Help
-'?' + '\n'; // Help
+"m\n";           // wyzwól pomiar (CMD_MEASURE)
+"u\n";           // żądanie statusu (CMD_UPDATE)
+"o <ms>\n";      // ustaw msgMaster.timeout (0..600000)
+"q <0-255>\n";   // ustaw msgMaster.motorTorque
+"s <0-255>\n";   // ustaw msgMaster.motorSpeed
+"r <0-3>\n";     // ustaw msgMaster.motorState i wyślij CMD_MOTORTEST
+"t\n";           // wyślij CMD_MOTORTEST z bieżących pól msgMaster
+"c <±14.999>\n"; // ustaw localCalibrationOffset (mm) na Master (bez pomiaru)
+"h\n"; "?\n";   // pomoc
 ```
 
-**Response** (Master → Python) – przez [`DEBUG_PLOT`](lib/CaliperShared/MacroDebugger.h:113):
+**Odpowiedzi (Master → GUI)** – linie emitowane przez [`DEBUG_PLOT`](lib/CaliperShared/MacroDebugger.h:113) (zawsze z prefixem `>`):
 ```c
 ">measurement:xxx.xxx"; // Raw measurement (mm)
 ">calibrationOffset:xxx.xxx"; // Calibration offset (mm)
@@ -658,7 +741,9 @@ struct MessageSlave {
 ">measurementReady:Nazwa xxx.xxx"; // Session measurement (corrected)
 ```
 
-**Available commands** (Master Serial Console – zobacz [`printSerialHelp()`](caliper_master/src/main.cpp:287)):
+**Uwaga o korekcji:** firmware Master wysyła surowy pomiar `measurement` oraz `calibrationOffset`, a klient liczy: `corrected = measurement + calibrationOffset` (zobacz komentarz w [`OnDataRecv()`](caliper_master/src/main.cpp:55)).
+
+**Available commands** (Master Serial Console – zobacz [`printSerialHelp()`](caliper_master/src/serial_cli.cpp:68)):
 - `M/m` – Wykonaj pomiar
 - `U/u` – Żądanie aktualizacji statusu
 - `o <ms>` – Ustaw msgMaster.timeout (0..600000 ms)
@@ -704,7 +789,9 @@ struct MessageSlave {
 ```json
 {
   "sessionName": "Sesja1",
-  "measurement": "25.430 mm",
+  "measurementRaw": 25.430,
+  "calibrationOffset": 0.123,
+  "measurementCorrected": 25.553,
   "valid": true,
   "timestamp": 12345,
   "batteryVoltage": 4.200,

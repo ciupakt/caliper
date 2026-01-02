@@ -13,6 +13,7 @@ from src.app import CaliperApp
 from src.serial_handler import SerialHandler
 from src.utils.csv_handler import CSVHandler
 from src.gui.measurement_tab import MeasurementTab
+from src.gui.calibration_tab import CalibrationTab
 from src.gui.log_tab import LogTab
 
 
@@ -24,12 +25,16 @@ class CaliperGUI:
         self.serial_handler = SerialHandler()
         self.csv_handler = CSVHandler()
         self.measurement_tab = MeasurementTab()
+        self.calibration_tab = CalibrationTab()
         self.log_tab = LogTab()
         self.auto_event = threading.Event()
         self.auto_running = False
 
         # Stan GUI: ostatni znany offset (przychodzi z firmware przez DEBUG_PLOT)
         self.current_calibration_offset: float = 0.0
+
+        # Stan GUI: ostatni surowy pomiar (żeby móc policzyć/odświeżyć skorygowany w zakładce Kalibracja)
+        self.last_measurement_raw: float | None = None
     
     @staticmethod
     def _normalize_debug_plot_line(data: str) -> str:
@@ -61,10 +66,15 @@ class CaliperGUI:
 
                 self.log_tab.add_log(f"[KALIBRACJA] Offset: {self.current_calibration_offset:.3f} mm")
 
-                # Jeśli użytkownik ma otwarte pole offsetu, odświeżamy je
+                # Odświeżamy UI kalibracji (jeśli istnieje)
                 try:
-                    if dpg.does_item_exist("cal_offset_input"):
-                        dpg.set_value("cal_offset_input", float(self.current_calibration_offset))
+                    if dpg.does_item_exist("cal_offset_display"):
+                        dpg.set_value("cal_offset_display", f"Aktualny offset: {self.current_calibration_offset:.3f} mm")
+
+                    # Jeśli mamy ostatni surowy pomiar, odświeżamy też skorygowany
+                    if self.last_measurement_raw is not None and dpg.does_item_exist("cal_corrected_display"):
+                        corrected = float(self.last_measurement_raw) + float(self.current_calibration_offset)
+                        dpg.set_value("cal_corrected_display", f"Skorygowany: {corrected:.3f} mm")
                 except Exception:
                     pass
 
@@ -100,17 +110,31 @@ class CaliperGUI:
                 val_str = data.split(":", 1)[1].strip()
                 raw = float(val_str)
 
-                # tryb kalibracji: auto-fill pola offsetu surowym pomiarem (bez auto-wysyłania)
+                self.last_measurement_raw = float(raw)
+
+                # Kalibracja: autofill pola offsetu tylko na żądanie (przycisk "Pobierz bieżący pomiar")
                 try:
-                    if dpg.does_item_exist("cal_mode_checkbox") and dpg.get_value("cal_mode_checkbox") is True:
+                    if dpg.does_item_exist("cal_autofill_next") and dpg.get_value("cal_autofill_next") is True:
                         if dpg.does_item_exist("cal_offset_input"):
                             # clamp jak w firmware/UI (-14.999..14.999)
                             raw_clamped = max(-14.999, min(14.999, float(raw)))
                             dpg.set_value("cal_offset_input", raw_clamped)
+                        dpg.set_value("cal_autofill_next", False)
                 except Exception:
                     pass
 
                 corrected = raw + float(self.current_calibration_offset)
+
+                # Odświeżamy UI kalibracji (jeśli istnieje)
+                try:
+                    if dpg.does_item_exist("cal_raw_display"):
+                        dpg.set_value("cal_raw_display", f"Surowy: {raw:.3f} mm")
+                    if dpg.does_item_exist("cal_offset_display"):
+                        dpg.set_value("cal_offset_display", f"Aktualny offset: {self.current_calibration_offset:.3f} mm")
+                    if dpg.does_item_exist("cal_corrected_display"):
+                        dpg.set_value("cal_corrected_display", f"Skorygowany: {corrected:.3f} mm")
+                except Exception:
+                    pass
 
                 # Validate range (na wykresie/logach trzymamy skorygowaną wartość)
                 if -1000.0 <= corrected <= 1000.0:
@@ -191,32 +215,81 @@ class CaliperGUI:
             alt_pressed = dpg.is_key_down(dpg.mvKey_LAlt) or dpg.is_key_down(dpg.mvKey_RAlt)
             if ctrl_pressed and alt_pressed:
                 self.log_tab.toggle_visibility()
+                return
+
+        # Hotkey: 'p' = wykonaj pomiar (jak kliknięcie "Wykonaj pomiar")
+        if key == dpg.mvKey_P:
+            # Jeśli user aktualnie pisze w polu tekstowym, nie przechwytujemy.
+            try:
+                if dpg.is_any_item_active() or dpg.is_any_item_focused():
+                    return
+            except Exception:
+                pass
+
+            if self.serial_handler is None or not self.serial_handler.is_open():
+                try:
+                    if dpg.does_item_exist("status"):
+                        dpg.set_value("status", "BŁĄD: Port nie jest otwarty (hotkey: p)")
+                except Exception:
+                    pass
+                return
+
+            self.serial_handler.write("m")
+            try:
+                if dpg.does_item_exist("status"):
+                    dpg.set_value("status", "Hotkey: p → wykonaj pomiar")
+            except Exception:
+                pass
+            self.log_tab.add_log("[HOTKEY] p -> m")
+            return
     
     def create_gui(self):
         """Create the main GUI"""
         dpg.create_context()
+
+        # Value registry (flagi/stany wykorzystywane przez callbacki)
+        with dpg.value_registry():
+            # Jednorazowe auto-uzupełnienie offsetu po kliknięciu "Pobierz bieżący pomiar"
+            dpg.add_bool_value(tag="cal_autofill_next", default_value=False)
         
         # Font registry
+        # DearPyGui domyślnie może nie mieć załadowanego zakresu znaków Latin Extended,
+        # więc jawnie dodajemy zakresy potrzebne dla polskich znaków.
         with dpg.font_registry():
-            default_font = dpg.add_font("C:/Windows/Fonts/segoeui.ttf", 18)
+            with dpg.font("C:/Windows/Fonts/segoeui.ttf", 22) as default_font:
+                dpg.add_font_range_hint(dpg.mvFontRangeHint_Default)
+                # Latin Extended-A (m.in. ą, ć, ę, ł, ń, ó, ś, ź, ż)
+                dpg.add_font_range(0x0100, 0x017F)
+                # Latin Extended-B (na wszelki wypadek)
+                dpg.add_font_range(0x0180, 0x024F)
+
+            # Font pogrubiony (do akcentowania przycisków, np. "Wykonaj pomiar")
+            with dpg.font("C:/Windows/Fonts/segoeuib.ttf", 24, tag="font_bold"):
+                dpg.add_font_range_hint(dpg.mvFontRangeHint_Default)
+                dpg.add_font_range(0x0100, 0x017F)
+                dpg.add_font_range(0x0180, 0x024F)
         
         # Handler registry
         with dpg.handler_registry():
             dpg.add_key_release_handler(callback=self.key_press_handler)
         
         # Create viewport
-        dpg.create_viewport(title="Caliper COM App", width=900, height=700)
+        # Większa wysokość, żeby wykres i historia były widoczne bez ucinania po starcie.
+        dpg.create_viewport(title="Caliper - aplikacja COM", width=1200, height=850)
 
         # Main window
-        with dpg.window(label="Caliper Application", width=880, height=660):
+        with dpg.window(label="Caliper - aplikacja", width=1180, height=810):
             # Uwaga: `dpg.tab` MUSI mieć jako rodzica `mvTabBar`.
             # Nie polegamy na `dpg.last_container()` (potrafi wskazać ostatnio utworzony kontener,
             # a nie aktualny `tab_bar`), tylko przekazujemy jawnie identyfikator/tab tag.
             with dpg.tab_bar(tag="main_tab_bar") as tab_bar_id:
-                # Measurement tab
+                # Pomiary
                 self.measurement_tab.create(tab_bar_id, self.serial_handler, self.csv_handler)
 
-                # Log tab
+                # Kalibracja
+                self.calibration_tab.create(tab_bar_id, self.serial_handler)
+
+                # Logi
                 self.log_tab.create(tab_bar_id, self.serial_handler)
 
         # Bind font

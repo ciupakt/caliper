@@ -1,10 +1,13 @@
-"""
-Measurement Tab GUI Component for Caliper Master GUI
+"""caliper_master_gui.src.gui.measurement_tab
+
+Zakładka „Pomiary” (GUI).
 """
 
 import dearpygui.dearpygui as dpg
 from collections import deque
 from datetime import datetime
+import threading
+import time
 
 
 class MeasurementTab:
@@ -18,125 +21,104 @@ class MeasurementTab:
         self.plot_y = deque(maxlen=max_plot_points)
         self.measurement_count = 0
         self.include_timestamp = False
+
+        # Domyślny prefix plików CSV (zamiennik „measurement_”)
+        self.csv_prefix: str = "test"
+
+        # Auto-pomiar (wątek wysyłający cyklicznie komendę "m")
+        self._auto_event = threading.Event()
+        self._auto_thread: threading.Thread | None = None
     
     def create(self, parent: int, serial_handler, csv_handler):
         """Create the measurement tab UI"""
-        with dpg.tab(label="Measurement", parent=parent):
+        with dpg.tab(label="Pomiary", parent=parent):
+            # Układ 3-kolumnowy:
+            # - lewa kolumna: historia pomiarów (żeby było widać więcej wpisów)
+            # - środek: sterowanie pomiarem (pozostaje "po środku")
+            # - prawa kolumna: konfiguracja portu COM (przy prawej krawędzi okna)
             with dpg.group(horizontal=True):
-                # Port Configuration Group
+                # --- Measurement History (left column)
                 with dpg.group():
-                    dpg.add_text("COM Port Configuration:", color=(100, 200, 255))
+                    dpg.add_text("Historia pomiarów:", color=(100, 200, 255))
+                    dpg.add_spacer(height=5)
+                    # Większa wysokość = więcej widocznych pomiarów bez scrollowania
+                    # (wyższa kolumna = więcej widocznych pomiarów)
+                    with dpg.child_window(width=420, height=360, tag="meas_scroll"):
+                        dpg.add_group(tag="meas_container")
+
+                dpg.add_spacer(width=30)
+
+                # --- Measurement Controls (center column)
+                with dpg.group():
+                    dpg.add_text("Sterowanie pomiarem:", color=(100, 200, 255))
+                    dpg.add_spacer(height=5)
+
+                    # Główny przycisk: większy + czerwony, pogrubiony napis
+                    measure_btn = dpg.add_button(
+                        label="Wykonaj pomiar (p)",
+                        callback=self._trigger,
+                        width=200,
+                        height=55,
+                        user_data=serial_handler,
+                    )
+
+                    # Theme (kolor tekstu)
+                    if not dpg.does_item_exist("measure_button_theme"):
+                        with dpg.theme(tag="measure_button_theme"):
+                            with dpg.theme_component(dpg.mvButton):
+                                dpg.add_theme_color(dpg.mvThemeCol_Text, (0, 200, 0, 255))
+
+                    dpg.bind_item_theme(measure_btn, "measure_button_theme")
+
+                    # Font (pogrubienie) – zdefiniowany w [`CaliperGUI.create_gui()`](caliper_master_gui/caliper_master_gui.py:219)
+                    if dpg.does_item_exist("font_bold"):
+                        dpg.bind_item_font(measure_btn, "font_bold")
+
+                    # Nazewnictwo jak w WWW: nowa sesja pomiarowa.
+                    # Plik CSV tworzymy dopiero po podaniu prefixu (popup na kliknięcie).
+                    new_session_btn = dpg.add_button(label="Nowa sesja pomiarowa", width=200, height=30)
+                    with dpg.popup(new_session_btn, mousebutton=dpg.mvMouseButton_Left, modal=True, tag="new_session_popup"):
+                        dpg.add_text("Podaj nazwę pliku CSV (prefix). Zostanie utworzony plik: <prefix>_YYYYMMDD_HHMMSS.csv")
+                        dpg.add_spacer(height=5)
+                        dpg.add_input_text(tag="csv_prefix_input", default_value=self.csv_prefix, width=360)
+                        dpg.add_spacer(height=8)
+                        with dpg.group(horizontal=True):
+                            dpg.add_button(label="Utwórz", callback=self._confirm_new_session, width=120, height=30, user_data=csv_handler)
+                            dpg.add_button(label="Anuluj", callback=lambda: dpg.configure_item("new_session_popup", show=False), width=120, height=30)
+
+                    dpg.add_spacer(height=5)
+                    dpg.add_checkbox(label="Auto-pomiar", tag="auto_checkbox", callback=self._set_auto, user_data=serial_handler)
+                    dpg.add_input_int(label="Interwał (ms)", tag="interval_ms", default_value=1000, min_value=500, enabled=False, width=150)
+                    dpg.add_spacer(height=5)
+                    dpg.add_checkbox(label="Dodaj znacznik czasu", callback=self._timestamp_checkbox, tag="timestamp_cb")
+
+                dpg.add_spacer(width=30)
+
+                # --- Port Configuration (right column)
+                with dpg.group():
+                    dpg.add_text("Konfiguracja portu COM:", color=(100, 200, 255))
                     dpg.add_spacer(height=5)
                     ports_list = serial_handler.list_ports()
                     dpg.add_combo(ports_list, tag="port_combo", width=250)
                     if ports_list:
                         dpg.set_value("port_combo", ports_list[0])
                     dpg.add_spacer(height=5)
-                    dpg.add_button(label="Refresh ports", callback=self._refresh_ports, width=150, height=30, user_data=serial_handler)
-                    dpg.add_button(label="Open port", callback=self._open_port, width=150, height=30, user_data=(serial_handler, csv_handler))
+                    dpg.add_button(label="Odśwież porty", callback=self._refresh_ports, width=150, height=30, user_data=serial_handler)
+                    dpg.add_button(label="Otwórz port", callback=self._open_port, width=150, height=30, user_data=(serial_handler, csv_handler))
                     dpg.add_spacer(height=5)
-                    dpg.add_text("Status: Not connected", tag="status")
+                    dpg.add_text("Status: brak połączenia", tag="status")
                     dpg.add_text("", tag="csv_info")
-
-                    dpg.add_spacer(height=10)
-                    dpg.add_text("Measurement Configuration:", color=(100, 200, 255))
-                    dpg.add_spacer(height=5)
-                    dpg.add_input_int(
-                        label="msgMaster.timeout (ms)",
-                        tag="tx_timeout_input",
-                        default_value=0,
-                        min_value=0,
-                        max_value=600000,
-                        width=200,
-                    )
-                    dpg.add_input_int(
-                        label="msgMaster.motorTorque (0-255)",
-                        tag="tx_torque_input",
-                        default_value=0,
-                        min_value=0,
-                        max_value=255,
-                        width=200,
-                    )
-                    dpg.add_input_int(
-                        label="msgMaster.motorSpeed (0-255)",
-                        tag="tx_speed_input",
-                        default_value=255,
-                        min_value=0,
-                        max_value=255,
-                        width=200,
-                    )
-                    dpg.add_spacer(height=5)
-                    dpg.add_button(
-                        label="Zastosuj",
-                        callback=self._apply_measurement_config,
-                        width=200,
-                        height=30,
-                        user_data=serial_handler,
-                    )
-                    dpg.add_spacer(height=5)
-                    dpg.add_text("UART cmds: o <ms>, q <0-255>, s <0-255>", color=(150, 150, 150))
-
-                dpg.add_spacer(width=30)
-
-                # Measurement Controls Group
-                with dpg.group():
-                    dpg.add_text("Measurement Controls:", color=(100, 200, 255))
-                    dpg.add_spacer(height=5)
-                    dpg.add_button(label="Trigger measurement", callback=self._trigger, width=200, height=30, user_data=serial_handler)
-                    dpg.add_button(label="Clear measurements", callback=self._clear, width=200, height=30, user_data=csv_handler)
-                    dpg.add_spacer(height=5)
-                    dpg.add_checkbox(label="Auto trigger", tag="auto_checkbox", callback=self._set_auto, user_data=serial_handler)
-                    dpg.add_input_int(label="Interval (ms)", tag="interval_ms", default_value=1000, min_value=500, enabled=False, width=150)
-                    dpg.add_spacer(height=5)
-                    dpg.add_checkbox(label="Include timestamp", callback=self._timestamp_checkbox, tag="timestamp_cb")
-
-                    dpg.add_spacer(height=10)
-                    dpg.add_text("Calibration (Master local):", color=(100, 200, 255))
-
-                    dpg.add_checkbox(
-                        label="Calibration mode (auto-fill offset from current measurement)",
-                        tag="cal_mode_checkbox",
-                        default_value=False,
-                    )
-
-                    dpg.add_input_float(
-                        label="localCalibrationOffset (mm)",
-                        tag="cal_offset_input",
-                        default_value=0.0,
-                        min_value=-14.999,
-                        max_value=14.999,
-                        format="%.3f",
-                        width=150,
-                    )
-                    dpg.add_button(
-                        label="Zastosuj",
-                        callback=self._apply_calibration_offset,
-                        width=200,
-                        height=30,
-                        user_data=serial_handler,
-                    )
-
-                    dpg.add_spacer(height=10)
-                    dpg.add_text("ESP32 Master: http://192.168.4.1", color=(100, 255, 100))
-                    dpg.add_text("Connect WiFi: ESP32_Pomiar", color=(100, 255, 100))
 
             dpg.add_separator()
             dpg.add_spacer(height=10)
-            
-            # Measurement History
-            dpg.add_text("Measurement History:")
-            with dpg.child_window(width=840, height=120, tag="meas_scroll"):
-                dpg.add_group(tag="meas_container")
-            
-            dpg.add_spacer(height=10)
-            
+
             # Live Plot
-            dpg.add_text("Live Plot:")
-            with dpg.plot(label="Measurements", height=250, width=840):
+            dpg.add_text("Wykres na żywo:")
+            with dpg.plot(label="Pomiary", height=260, width=1120):
                 dpg.add_plot_legend()
-                dpg.add_plot_axis(dpg.mvXAxis, label="Measurement #", tag="x_axis")
-                dpg.add_plot_axis(dpg.mvYAxis, label="Value", tag="y_axis")
-                dpg.add_line_series([], [], label="Measurement", parent="y_axis", tag="plot_data")
+                dpg.add_plot_axis(dpg.mvXAxis, label="Nr pomiaru", tag="x_axis")
+                dpg.add_plot_axis(dpg.mvYAxis, label="Wartość", tag="y_axis")
+                dpg.add_line_series([], [], label="Pomiar", parent="y_axis", tag="plot_data")
     
     def _refresh_ports(self, sender, app_data, user_data):
         """Refresh the list of available ports"""
@@ -150,40 +132,139 @@ class MeasurementTab:
         """Open the selected serial port"""
         serial_handler, csv_handler = user_data
         port = dpg.get_value("port_combo")
-        
+
         if serial_handler.open_port(port):
-            dpg.set_value("status", f"Connected to {port}")
-            filename = csv_handler.create_new_file(self.include_timestamp)
-            dpg.set_value("csv_info", f"CSV file: {filename}")
+            dpg.set_value("status", f"Połączono z {port}")
+
+            # Zgodnie z wymaganiem: plik CSV NIE jest tworzony przy otwieraniu portu.
+            # Jeśli był otwarty poprzedni plik, zamykamy go, żeby nowa sesja zawsze
+            # tworzyła nowy plik po podaniu prefixu.
+            try:
+                if csv_handler is not None and hasattr(csv_handler, "is_open") and csv_handler.is_open():
+                    csv_handler.close()
+            except Exception:
+                pass
+
+            dpg.set_value("csv_info", "Plik CSV: (brak — kliknij 'Nowa sesja pomiarowa')")
         else:
-            dpg.set_value("status", "ERR: Failed to open port")
+            dpg.set_value("status", "BŁĄD: Nie udało się otworzyć portu")
     
     def _trigger(self, sender, app_data, user_data):
         """Send trigger command"""
         serial_handler = user_data
         serial_handler.write("m")
     
-    def _clear(self, sender, app_data, user_data):
-        """Clear all measurements"""
-        csv_handler = user_data
+    def _clear(self, sender=None, app_data=None, user_data=None):
+        """Clear all measurements (local GUI state only)."""
         self.meas_history.clear()
         self.plot_x.clear()
         self.plot_y.clear()
         self.measurement_count = 0
         dpg.set_value("plot_data", [list(self.plot_x), list(self.plot_y)])
         self._show_measurements()
-        
-        # Create new CSV file
-        filename = csv_handler.create_new_file(self.include_timestamp)
-        dpg.set_value("csv_info", f"CSV file: {filename}")
-        dpg.set_value("status", "Measurements cleared, new CSV created")
     
+    def _confirm_new_session(self, sender, app_data, user_data):
+        """Create new CSV file with user-provided prefix and clear history."""
+        csv_handler = user_data
+
+        # Read prefix
+        try:
+            prefix = str(dpg.get_value("csv_prefix_input")).strip()
+        except Exception:
+            prefix = "test"
+
+        self.csv_prefix = prefix or "test"
+
+        # Clear GUI measurements
+        self._clear()
+
+        # Create CSV file now
+        filename = None
+        try:
+            filename = csv_handler.create_new_file(self.include_timestamp, prefix=self.csv_prefix)
+        except Exception:
+            filename = None
+
+        if filename:
+            dpg.set_value("csv_info", f"Plik CSV: {filename}")
+            dpg.set_value("status", "Nowa sesja pomiarowa: utworzono nowy plik CSV")
+        else:
+            dpg.set_value("status", "BŁĄD: Nie udało się utworzyć pliku CSV")
+
+        try:
+            dpg.configure_item("new_session_popup", show=False)
+        except Exception:
+            pass
+
     def _set_auto(self, sender, app_data, user_data):
         """Toggle auto trigger"""
         serial_handler = user_data
         running = dpg.get_value("auto_checkbox")
         dpg.configure_item("interval_ms", enabled=running)
-        # Note: Auto trigger thread implementation would go here
+
+        # Start / stop background task
+        if running:
+            # szybka informacja w statusie (UI thread)
+            try:
+                if dpg.does_item_exist("status"):
+                    if serial_handler is None or not hasattr(serial_handler, "is_open") or not serial_handler.is_open():
+                        dpg.set_value("status", "Auto-pomiar: włączony (port nieotwarty)")
+                    else:
+                        dpg.set_value("status", "Auto-pomiar: włączony")
+            except Exception:
+                pass
+
+            # jeśli już działa, nic nie rób
+            if self._auto_thread is not None and self._auto_thread.is_alive():
+                return
+
+            self._auto_event.clear()
+            self._auto_thread = threading.Thread(
+                target=self._auto_loop,
+                args=(serial_handler,),
+                daemon=True,
+                name="auto_measurement",
+            )
+            self._auto_thread.start()
+        else:
+            self._auto_event.set()
+            # join krótki, żeby nie blokować GUI przy długim sleep
+            try:
+                if self._auto_thread is not None:
+                    self._auto_thread.join(timeout=0.3)
+            except Exception:
+                pass
+            self._auto_thread = None
+
+            try:
+                if dpg.does_item_exist("status"):
+                    dpg.set_value("status", "Auto-pomiar: wyłączony")
+            except Exception:
+                pass
+
+    def _auto_loop(self, serial_handler):
+        """Worker loop for auto-measure.
+
+        Uwaga: unikamy operacji na UI z wątku w tle (DearPyGui nie gwarantuje thread-safety).
+        """
+        while not self._auto_event.is_set():
+            # odczytuj interwał „na żywo”, żeby zmiana w UI działała bez restartu
+            try:
+                interval = int(dpg.get_value("interval_ms"))
+            except Exception:
+                interval = 1000
+
+            interval = self._clamp_int(interval, 500, 600000)
+
+            # wysyłamy tylko gdy port otwarty; jeśli nie, po prostu czekamy
+            try:
+                if serial_handler is not None and hasattr(serial_handler, "is_open") and serial_handler.is_open():
+                    serial_handler.write("m")
+            except Exception:
+                # nie wywalaj wątku – najwyżej pomiń iterację
+                pass
+
+            time.sleep(interval / 1000.0)
     
     def _timestamp_checkbox(self, sender, app_data, user_data):
         """Toggle timestamp inclusion"""
@@ -270,8 +351,8 @@ class MeasurementTab:
         if dpg.does_item_exist("meas_container"):
             dpg.delete_item("meas_container", children_only=True)
         
-        # Show only last 50 measurements for performance
-        recent_measurements = list(self.meas_history)[-50:]
+        # Pokazujemy więcej wpisów (historia jest teraz wysoką kolumną po lewej stronie)
+        recent_measurements = list(self.meas_history)[-200:]
         start_idx = max(1, len(self.meas_history) - len(recent_measurements) + 1)
         
         for idx, (t, v) in enumerate(recent_measurements, start=start_idx):

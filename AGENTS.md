@@ -19,6 +19,8 @@ Projekt Caliper składa się z dwóch podprojektów PlatformIO oraz aplikacji GU
 
 Używany environment w obu projektach: `esp32doit-devkit-v1`.
 
+Uwaga: w poniższych poleceniach używany jest bezpośrednio `platformio.exe` z venv PlatformIO. Jeśli masz `pio` w `PATH`, możesz zamienić `C:\Users\tiim\.platformio\penv\Scripts\platformio.exe` na `pio`.
+
 ### Kompilacja `caliper_slave`
 
 ```powershell
@@ -76,6 +78,7 @@ caliper_master/
 │   ├── main.cpp              # Główna logika: AP WiFi + HTTP + ESP-NOW + obsługa LittleFS
 │   ├── config.h              # Konfiguracja specyficzna dla Master (SSID, hasło, MAC, stałe)
 │   ├── communication.h/.cpp  # Menedżer komunikacji ESP-NOW (wysyłanie komend + retry)
+│   ├── serial_cli.h/.cpp     # Proste CLI po Serial (komendy serwisowe/diagnostyczne)
 ├── data/                     # Pliki LittleFS (HTML/CSS/JS)
 │   ├── index.html
 │   ├── style.css
@@ -114,6 +117,7 @@ caliper_master_gui/
 │   ├── serial_handler.py      # Obsługa portu szeregowego
 │   ├── gui/
 │   │   ├── __init__.py
+│   │   ├── calibration_tab.py  # Zakładka kalibracji
 │   │   ├── measurement_tab.py # Zakładka pomiarów
 │   │   └── log_tab.py         # Zakładka logów
 │   └── utils/
@@ -152,7 +156,7 @@ lib/CaliperShared/
 
 ```powershell
 cd caliper_master_gui
-pip install -r requirements.txt
+python -m pip install -r requirements.txt
 ```
 
 ### Uruchomienie
@@ -164,14 +168,17 @@ python caliper_master_gui.py
 
 ### Testy jednostkowe
 
+Uwaga: `pytest` nie jest obecnie na liście zależności w [`requirements.txt`](caliper_master_gui/requirements.txt:1), więc przed uruchomieniem testów doinstaluj go ręcznie.
+
 ```powershell
 cd caliper_master_gui
+python -m pip install pytest
 python -m pytest tests/
 ```
 
 ## Uwagi
 
 - Kompilacja może generować ostrzeżenia, które nie przerywają procesu.
-- Pliki firmware są generowane w katalogu `.pio\build\[board]\firmware.bin`.
+- Pliki firmware są generowane w katalogu `.pio\build\[board]\firmware.bin` (np. `.pio\build\esp32doit-devkit-v1\firmware.bin`).
 - Aby włączyć tryb szczegółowy PlatformIO, dodaj opcję `-v` / `--verbose`.
 - `caliper_master` wymaga jednorazowego wgrania LittleFS (`uploadfs`) po zmianach w `caliper_master/data/`.
