@@ -83,8 +83,8 @@ struct MessageMaster
  */
 struct SystemStatus
 {
-  struct MessageSlave rxMsg;
-  struct MessageMaster txMsg;
+  struct MessageSlave msgSlave;
+  struct MessageMaster msgMaster;
   float localCalibrationOffset;
   float localDeviation;
 };

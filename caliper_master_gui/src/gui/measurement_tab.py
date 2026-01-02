@@ -42,7 +42,7 @@ class MeasurementTab:
                     dpg.add_text("Measurement Configuration:", color=(100, 200, 255))
                     dpg.add_spacer(height=5)
                     dpg.add_input_int(
-                        label="txMsg.timeout (ms)",
+                        label="msgMaster.timeout (ms)",
                         tag="tx_timeout_input",
                         default_value=0,
                         min_value=0,
@@ -50,7 +50,7 @@ class MeasurementTab:
                         width=200,
                     )
                     dpg.add_input_int(
-                        label="txMsg.motorTorque (0-255)",
+                        label="msgMaster.motorTorque (0-255)",
                         tag="tx_torque_input",
                         default_value=0,
                         min_value=0,
@@ -58,7 +58,7 @@ class MeasurementTab:
                         width=200,
                     )
                     dpg.add_input_int(
-                        label="txMsg.motorSpeed (0-255)",
+                        label="msgMaster.motorSpeed (0-255)",
                         tag="tx_speed_input",
                         default_value=255,
                         min_value=0,
@@ -219,7 +219,7 @@ class MeasurementTab:
             dpg.set_value("status", f"Sent: c {val:.3f}")
 
     def _apply_measurement_config(self, sender, app_data, user_data):
-        """Apply txMsg config fields on Master via UART commands: o/q/s."""
+        """Apply msgMaster config fields on Master via UART commands: o/q/s."""
         serial_handler = user_data
 
         try:

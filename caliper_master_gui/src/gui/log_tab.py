@@ -96,7 +96,7 @@ class LogTab:
         return True
 
     def _apply_motor_config(self, sender, app_data, user_data):
-        """Apply txMsg.motorTorque/motorSpeed/motorState via UART: q, s, r."""
+        """Apply msgMaster.motorTorque/motorSpeed/motorState via UART: q, s, r."""
         serial_handler = user_data
 
         try:

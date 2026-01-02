@@ -49,10 +49,10 @@ void OnDataRecv(const esp_now_recv_info_t *recv_info, const uint8_t *incomingDat
   memcpy(&msg, incomingData, sizeof(msg));
   measurementReady = true;
 
-  systemStatus.rxMsg = msg;
-  systemStatus.localDeviation = systemStatus.rxMsg.measurement + systemStatus.localCalibrationOffset;
+  systemStatus.msgSlave = msg;
+  systemStatus.localDeviation = systemStatus.msgSlave.measurement + systemStatus.localCalibrationOffset;
 
-  lastMeasurementValue = systemStatus.rxMsg.measurement;
+  lastMeasurementValue = systemStatus.msgSlave.measurement;
   lastDeviationValue = systemStatus.localDeviation;
 
   DEBUG_I("command:%c", (char)msg.command);
@@ -87,11 +87,11 @@ static constexpr uint32_t DEFAULT_TIMEOUT_MS = 0;
 
 static void initDefaultTxMessage()
 {
-  memset(&systemStatus.txMsg, 0, sizeof(systemStatus.txMsg));
-  systemStatus.txMsg.motorSpeed = DEFAULT_MOTOR_SPEED;
-  systemStatus.txMsg.motorTorque = DEFAULT_MOTOR_TORQUE;
-  systemStatus.txMsg.motorState = DEFAULT_MOTOR_STATE;
-  systemStatus.txMsg.timeout = DEFAULT_TIMEOUT_MS;
+  memset(&systemStatus.msgMaster, 0, sizeof(systemStatus.msgMaster));
+  systemStatus.msgMaster.motorSpeed = DEFAULT_MOTOR_SPEED;
+  systemStatus.msgMaster.motorTorque = DEFAULT_MOTOR_TORQUE;
+  systemStatus.msgMaster.motorState = DEFAULT_MOTOR_STATE;
+  systemStatus.msgMaster.timeout = DEFAULT_TIMEOUT_MS;
 }
 
 ErrorCode sendTxToSlave(CommandType command, const char *commandName, bool expectResponse)
@@ -102,10 +102,10 @@ ErrorCode sendTxToSlave(CommandType command, const char *commandName, bool expec
     lastMeasurement = "Oczekiwanie na odpowiedź...";
   }
 
-  systemStatus.txMsg.command = command;
-  systemStatus.txMsg.timestamp = millis();
+  systemStatus.msgMaster.command = command;
+  systemStatus.msgMaster.timestamp = millis();
 
-  ErrorCode result = commManager.sendMessage(systemStatus.txMsg);
+  ErrorCode result = commManager.sendMessage(systemStatus.msgMaster);
 
   if (result == ERR_NONE)
   {
@@ -270,7 +270,7 @@ void handleMeasureSession()
     DEBUG_PLOT("measurementReady:%s %.3f", currentSessionName.c_str(), (double)lastDeviationValue);
   }
 
-  const MessageSlave &m = systemStatus.rxMsg;
+  const MessageSlave &m = systemStatus.msgSlave;
 
   String response = "{";
   response += "\"sessionName\":\"" + currentSessionName + "\",";
@@ -289,16 +289,16 @@ void printSerialHelp()
   DEBUG_I("\n=== DOSTĘPNE KOMENDY SERIAL (UART) ===\n"
           "m            - Wyślij do slave: CMD_MEASURE (M)\n"
           "u            - Wyślij do slave: CMD_UPDATE (U)\n"
-          "o <ms>       - Ustaw txMsg.timeout (timeout)\n"
-          "q <0-255>    - Ustaw txMsg.motorTorque\n"
-          "s <0-255>    - Ustaw txMsg.motorSpeed\n"
-          "r <0-3>      - Ustaw txMsg.motorState i wyślij CMD_MOTORTEST (T)\n"
-          "t            - Wyślij CMD_MOTORTEST (T) z bieżących pól txMsg\n"
-          "o <ms>       - Ustaw txMsg.timeout (timeout)\n"
-          "q <0-255>    - Ustaw txMsg.motorTorque\n"
-          "s <0-255>    - Ustaw txMsg.motorSpeed\n"
-          "r <0-3>      - Ustaw txMsg.motorState i wyślij CMD_MOTORTEST (T)\n"
-          "t            - Wyślij CMD_MOTORTEST (T) z bieżących pól txMsg\n"
+          "o <ms>       - Ustaw msgMaster.timeout (timeout)\n"
+          "q <0-255>    - Ustaw msgMaster.motorTorque\n"
+          "s <0-255>    - Ustaw msgMaster.motorSpeed\n"
+          "r <0-3>      - Ustaw msgMaster.motorState i wyślij CMD_MOTORTEST (T)\n"
+          "t            - Wyślij CMD_MOTORTEST (T) z bieżących pól msgMaster\n"
+          "o <ms>       - Ustaw msgMaster.timeout (timeout)\n"
+          "q <0-255>    - Ustaw msgMaster.motorTorque\n"
+          "s <0-255>    - Ustaw msgMaster.motorSpeed\n"
+          "r <0-3>      - Ustaw msgMaster.motorState i wyślij CMD_MOTORTEST (T)\n"
+          "t            - Wyślij CMD_MOTORTEST (T) z bieżących pól msgMaster\n"
           "c <±14.999>  - Ustaw offset kalibracji w mm (lokalnie na Master)\n"
           "h/?          - Wyświetl tę pomoc\n"
           "=====================================\n");
@@ -425,10 +425,10 @@ bool serialCommandParser(void *arg)
         break;
       }
 
-      systemStatus.txMsg.timeout = (uint32_t)val;
-      DEBUG_I("tx.timeout:%u", (unsigned)systemStatus.txMsg.timeout);
-      systemStatus.txMsg.timeout = (uint32_t)val;
-      DEBUG_I("tx.timeout:%u", (unsigned)systemStatus.txMsg.timeout);
+      systemStatus.msgMaster.timeout = (uint32_t)val;
+      DEBUG_I("tx.timeout:%u", (unsigned)systemStatus.msgMaster.timeout);
+      systemStatus.msgMaster.timeout = (uint32_t)val;
+      DEBUG_I("tx.timeout:%u", (unsigned)systemStatus.msgMaster.timeout);
       break;
 
     case 'u':
@@ -470,10 +470,10 @@ bool serialCommandParser(void *arg)
         break;
       }
 
-      systemStatus.txMsg.motorTorque = (uint8_t)val;
-      DEBUG_I("tx.motorTorque:%u", (unsigned)systemStatus.txMsg.motorTorque);
-      systemStatus.txMsg.motorTorque = (uint8_t)val;
-      DEBUG_I("tx.motorTorque:%u", (unsigned)systemStatus.txMsg.motorTorque);
+      systemStatus.msgMaster.motorTorque = (uint8_t)val;
+      DEBUG_I("tx.motorTorque:%u", (unsigned)systemStatus.msgMaster.motorTorque);
+      systemStatus.msgMaster.motorTorque = (uint8_t)val;
+      DEBUG_I("tx.motorTorque:%u", (unsigned)systemStatus.msgMaster.motorTorque);
       break;
 
     case 's':
@@ -490,10 +490,10 @@ bool serialCommandParser(void *arg)
         break;
       }
 
-      systemStatus.txMsg.motorSpeed = (uint8_t)val;
-      DEBUG_I("tx.motorSpeed:%u", (unsigned)systemStatus.txMsg.motorSpeed);
-      systemStatus.txMsg.motorSpeed = (uint8_t)val;
-      DEBUG_I("tx.motorSpeed:%u", (unsigned)systemStatus.txMsg.motorSpeed);
+      systemStatus.msgMaster.motorSpeed = (uint8_t)val;
+      DEBUG_I("tx.motorSpeed:%u", (unsigned)systemStatus.msgMaster.motorSpeed);
+      systemStatus.msgMaster.motorSpeed = (uint8_t)val;
+      DEBUG_I("tx.motorSpeed:%u", (unsigned)systemStatus.msgMaster.motorSpeed);
       break;
 
     case 'r':
@@ -510,10 +510,10 @@ bool serialCommandParser(void *arg)
         break;
       }
 
-      systemStatus.txMsg.motorState = (MotorState)val;
-      DEBUG_I("tx.motorState:%u", (unsigned)systemStatus.txMsg.motorState);
-      systemStatus.txMsg.motorState = (MotorState)val;
-      DEBUG_I("tx.motorState:%u", (unsigned)systemStatus.txMsg.motorState);
+      systemStatus.msgMaster.motorState = (MotorState)val;
+      DEBUG_I("tx.motorState:%u", (unsigned)systemStatus.msgMaster.motorState);
+      systemStatus.msgMaster.motorState = (MotorState)val;
+      DEBUG_I("tx.motorState:%u", (unsigned)systemStatus.msgMaster.motorState);
       sendMotorTest();
       break;
 
