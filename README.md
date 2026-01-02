@@ -299,7 +299,7 @@ sequenceDiagram
     ESP32_Slave->>ESP_NOW: Send MessageSlave
     ESP_NOW->>ESP32_Master: ESP-NOW Data
     ESP32_Master->>ESP32_Master: Process & Store Data
-    ESP32_Master->>Aplikacja_Python: Serial DEBUG_PLOT ">deviation:xxx.xxx"
+    ESP32_Master->>Aplikacja_Python: Serial DEBUG_PLOT ">measurement:xxx.xxx" + ">calibrationOffset:xxx.xxx"
     Aplikacja_Python->>Użytkownik: GUI Update + CSV Log
 
     Note over Aplikacja_Python,ESP32_Master: Pomiar Automatyczny
@@ -564,11 +564,12 @@ python caliper_master_gui.py
    - **"Odśwież wynik"** – pobiera najnowsze dane
 
 5. **API endpointy**:
-   - `GET /measure` – wyzwolenie pomiaru
-   - `GET /read` – odczyt ostatniego wyniku
-   - `POST /calibrate` – kalibracja z offsetem
-   - `POST /start_session` – rozpoczęcie sesji
-   - `POST /measure_session` – pomiar w sesji
+    - `GET /measure` – wyzwolenie pomiaru
+    - `GET /read` – odczyt ostatniego wyniku
+    - `POST /api/calibration/measure` – pobranie bieżącego pomiaru (do trybu kalibracji)
+    - `POST /api/calibration/offset` – ustawienie `localCalibrationOffset` na Master
+    - `POST /start_session` – rozpoczęcie sesji
+    - `POST /measure_session` – pomiar w sesji
 
 ### Obsługa Błędów
 
@@ -650,12 +651,11 @@ struct MessageSlave {
 
 **Response** (Master → Python) – przez [`DEBUG_PLOT`](lib/CaliperShared/MacroDebugger.h:113):
 ```c
-">deviation:xxx.xxx"; // Measurement value with calibration offset
+">measurement:xxx.xxx"; // Raw measurement (mm)
+">calibrationOffset:xxx.xxx"; // Calibration offset (mm)
 ">angleX:xxx"; // Angle X from accelerometer
 ">batteryVoltage:xxx.xxx"; // Battery voltage in V
-">calibrationOffset:xxx.xxx"; // Calibration offset
-">calibrationError:xxx.xxx"; // Calibration error
-">measurementReady:Nazwa xxx.xxx"; // Session measurement
+">measurementReady:Nazwa xxx.xxx"; // Session measurement (corrected)
 ```
 
 **Available commands** (Master Serial Console – zobacz [`printSerialHelp()`](caliper_master/src/main.cpp:287)):
@@ -675,11 +675,20 @@ struct MessageSlave {
 **GET** `/measure` – Wyzwolenie pomiaru
 **GET** `/read` – Odczyt ostatniego wyniku
 
-**POST** `/calibrate` – Kalibracja z offsetem:
+**POST** `/api/calibration/measure` – Pobranie bieżącego pomiaru (kalibracja):
 ```json
 {
-  "offset": 0.123,
-  "error": 0.456
+  "success": true,
+  "measurementRaw": 0.123,
+  "calibrationOffset": 0.000
+}
+```
+
+**POST** `/api/calibration/offset` – Ustawienie offsetu (bez wyzwalania pomiaru):
+```json
+{
+  "success": true,
+  "calibrationOffset": 0.123
 }
 ```
 

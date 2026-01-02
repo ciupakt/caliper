@@ -129,13 +129,14 @@ struct Message {
 
 ### Serial (Master ↔ GUI)
 
-**Format danych:**
-- `VAL_1:<wartość>` - Pomiar suwmiarki
-- `>Angle X:<wartość>` - Kąt X
-- `>Napiecie baterii:<wartość>` - Napięcie baterii
-- `CAL_OFFSET:<wartość>` - Offset kalibracji
-- `CAL_ERROR:<wartość>` - Błąd kalibracji
-- `MEAS_SESSION:<nazwa> <wartość>` - Pomiar sesji
+**Format danych (UART, `DEBUG_PLOT`):**
+- `>measurement:<wartość>` - Surowy pomiar (mm)
+- `>calibrationOffset:<wartość>` - Offset kalibracji (mm)
+- `>angleX:<wartość>` - Kąt X
+- `>batteryVoltage:<wartość>` - Napięcie baterii
+- `>measurementReady:<nazwa> <wartość>` - Pomiar sesji (wartość skorygowana)
+
+**Uwaga:** korekcja jest liczona po stronie klienta: `corrected = measurement + calibrationOffset`.
 
 **Komendy GUI → Master:**
 - `m` - Wyzwól pomiar

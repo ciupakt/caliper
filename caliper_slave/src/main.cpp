@@ -14,28 +14,28 @@
 
 // Master device MAC address (defined in config.h)
 uint8_t masterAddress[] = MASTER_MAC_ADDR;
-//TODO: Wypisz MAC Address Mastera
+// TODO: Wypisz MAC Address Mastera
 esp_now_peer_info_t peerInfo;
 CaliperInterface caliper;
 AccelerometerInterface accelerometer;
 BatteryMonitor battery;
-MessageMaster msgSlave;
-MessageSlave msgMaster;
+MessageMaster msgMaster;
+MessageSlave msgSlave;
 
 bool runMeasReq(void *arg);
 auto timerWorker = timer_create_default();
 
 void OnDataRecv(const esp_now_recv_info_t *recv_info, const uint8_t *incomingData, int len)
 {
-  if (len != sizeof(msgSlave))
+  if (len != sizeof(msgMaster))
   {
     DEBUG_E("BLAD: Nieprawidlowa dlugosc pakietu ESP-NOW");
     return;
   }
 
-  memcpy(&msgSlave, incomingData, sizeof(msgSlave));
+  memcpy(&msgMaster, incomingData, sizeof(msgMaster));
 
-  switch (msgSlave.command)
+  switch (msgMaster.command)
   {
   case CMD_MEASURE: // Measurement request
     DEBUG_I("CMD_MEASURE");
@@ -52,11 +52,11 @@ void OnDataRecv(const esp_now_recv_info_t *recv_info, const uint8_t *incomingDat
   // Motor control (generic)
   case CMD_MOTORTEST:
     DEBUG_I("CMD_MOTORTEST");
-    motorCtrlRun(msgSlave.motorSpeed, msgSlave.motorTorque, msgSlave.motorState);
+    motorCtrlRun(msgMaster.motorSpeed, msgMaster.motorTorque, msgMaster.motorState);
     break;
 
   default:
-    DEBUG_W("Nieznana komenda: %c", msgSlave.command);
+    DEBUG_W("Nieznana komenda: %c", msgMaster.command);
     break;
   }
 }
@@ -73,24 +73,40 @@ void OnDataSent(const wifi_tx_info_t *info, esp_now_send_status_t status)
   }
 }
 
+bool updateMeasureData(void *arg)
+{
+  accelerometer.update();
+  msgSlave.measurement = caliper.performMeasurement();
+  msgSlave.angleX = accelerometer.getAngleX();
+  msgSlave.batteryVoltage = battery.readVoltageNow();
+  msgSlave.timestamp = millis();
+  msgSlave.command = msgMaster.command;
+  return false; // do not repeat this task
+}
+
 // callback evry measurement request
 bool runMeasReq(void *arg)
 {
-  accelerometer.update();
-  msgMaster.measurement = caliper.performMeasurement();
-  msgMaster.angleX = accelerometer.getAngleX();
-  msgMaster.batteryVoltage = battery.readVoltageNow();
-  msgMaster.timestamp = millis();
-  msgMaster.command = msgSlave.command;
+  if (msgMaster.command == CMD_MEASURE)
+  {
+    motorCtrlRun(msgMaster.motorSpeed, msgMaster.motorTorque, MOTOR_FORWARD);
+    delay(msgMaster.timeout); // wait for motor to stabilize
+    DEBUG_I("Czekanie %u ms na ustabilizowanie silnika...", msgMaster.timeout);
+    updateMeasureData(nullptr);
+    motorCtrlRun(msgMaster.motorSpeed, msgMaster.motorTorque, MOTOR_REVERSE);
+    // delay(msgMaster.timeout);
+  }
+  else if (msgMaster.command == CMD_UPDATE)
+  {
+    updateMeasureData(nullptr);
+  }
 
-  DEBUG_I("command:%c", msgMaster.command);
+  DEBUG_PLOT("timestamp:%u", msgSlave.timestamp);
+  DEBUG_PLOT("measurement:%.3f", msgSlave.measurement);
+  DEBUG_PLOT("angleX:%u", msgSlave.angleX);
+  DEBUG_PLOT("batteryVoltage:%.3f", msgSlave.batteryVoltage);
 
-  DEBUG_PLOT("timestamp:%u", msgMaster.timestamp);
-  DEBUG_PLOT("measurement:%.3f", msgMaster.measurement);
-  DEBUG_PLOT("angleX:%u", msgMaster.angleX);
-  DEBUG_PLOT("batteryVoltage:%.3f", msgMaster.batteryVoltage);
-
-  esp_err_t sendResult = esp_now_send(masterAddress, (uint8_t *)&msgMaster, sizeof(msgMaster));
+  esp_err_t sendResult = esp_now_send(masterAddress, (uint8_t *)&msgSlave, sizeof(msgSlave));
   if (sendResult == ESP_OK)
   {
     DEBUG_I("Wynik wysłany do Mastera");
@@ -101,7 +117,7 @@ bool runMeasReq(void *arg)
 
     // Próba ponownego wysłania po krótkiej przerwie
     delay(ESPNOW_RETRY_DELAY_MS);
-    sendResult = esp_now_send(masterAddress, (uint8_t *)&msgMaster, sizeof(msgMaster));
+    sendResult = esp_now_send(masterAddress, (uint8_t *)&msgSlave, sizeof(msgSlave));
     if (sendResult == ESP_OK)
     {
       DEBUG_I("Ponowne wysłanie wyniku udane");
@@ -114,7 +130,6 @@ bool runMeasReq(void *arg)
 
   return false; // do not repeat this task
 }
-
 
 void setup()
 {

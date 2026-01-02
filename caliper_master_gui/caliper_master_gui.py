@@ -27,6 +27,9 @@ class CaliperGUI:
         self.log_tab = LogTab()
         self.auto_event = threading.Event()
         self.auto_running = False
+
+        # Stan GUI: ostatni znany offset (przychodzi z firmware przez DEBUG_PLOT)
+        self.current_calibration_offset: float = 0.0
     
     @staticmethod
     def _normalize_debug_plot_line(data: str) -> str:
@@ -46,15 +49,25 @@ class CaliperGUI:
         więc tu dostajemy już linię znormalizowaną (bez wiodącego '>').
         """
         try:
-            # --- Kalibracja (wysyłane przez DEBUG_PLOT w handleCalibrate)
+            # --- Kalibracja (wysyłane przez DEBUG_PLOT przy zmianie offsetu i przy pomiarze)
             if data.startswith("calibrationOffset:"):
                 val_str = data.split(":", 1)[1].strip()
-                self.log_tab.add_log(f"[KALIBRACJA] Offset: {val_str}")
-                return
+                try:
+                    self.current_calibration_offset = float(val_str)
+                except Exception:
+                    # jeśli nie da się sparsować, logujemy tylko tekst
+                    self.log_tab.add_log(f"[KALIBRACJA] Offset (parse err): {val_str}")
+                    return
 
-            if data.startswith("calibrationError:"):
-                val_str = data.split(":", 1)[1].strip()
-                self.log_tab.add_log(f"[KALIBRACJA] Błąd: {val_str} mm")
+                self.log_tab.add_log(f"[KALIBRACJA] Offset: {self.current_calibration_offset:.3f} mm")
+
+                # Jeśli użytkownik ma otwarte pole offsetu, odświeżamy je
+                try:
+                    if dpg.does_item_exist("cal_offset_input"):
+                        dpg.set_value("cal_offset_input", float(self.current_calibration_offset))
+                except Exception:
+                    pass
+
                 return
 
             # --- Sesja pomiarowa (wysyłane przez DEBUG_PLOT w handleMeasureSession)
@@ -80,15 +93,30 @@ class CaliperGUI:
                 return
 
             # --- Pomiar (wysyłane przez DEBUG_PLOT w OnDataRecv)
-            if data.startswith("deviation:"):
+            # Firmware Master wysyła surowy pomiar jako `measurement:`.
+            # GUI liczy korekcję po swojej stronie:
+            # corrected = measurementRaw + current_calibration_offset
+            if data.startswith("measurement:"):
                 val_str = data.split(":", 1)[1].strip()
-                val = float(val_str)
+                raw = float(val_str)
 
-                # Validate range
-                if -1000.0 <= val <= 1000.0:
+                # tryb kalibracji: auto-fill pola offsetu surowym pomiarem (bez auto-wysyłania)
+                try:
+                    if dpg.does_item_exist("cal_mode_checkbox") and dpg.get_value("cal_mode_checkbox") is True:
+                        if dpg.does_item_exist("cal_offset_input"):
+                            # clamp jak w firmware/UI (-14.999..14.999)
+                            raw_clamped = max(-14.999, min(14.999, float(raw)))
+                            dpg.set_value("cal_offset_input", raw_clamped)
+                except Exception:
+                    pass
+
+                corrected = raw + float(self.current_calibration_offset)
+
+                # Validate range (na wykresie/logach trzymamy skorygowaną wartość)
+                if -1000.0 <= corrected <= 1000.0:
                     ts = datetime.now().isoformat(timespec="seconds")
-                    measurement_str = f"{val_str} mm"
-                    self.measurement_tab.add_measurement(ts, measurement_str, val)
+                    measurement_str = f"{corrected:.3f} mm"
+                    self.measurement_tab.add_measurement(ts, measurement_str, float(corrected))
 
                     if self.csv_handler.is_open():
                         if self.measurement_tab.include_timestamp:
@@ -96,7 +124,7 @@ class CaliperGUI:
                         else:
                             self.csv_handler.write_measurement(measurement_str)
                 else:
-                    self.log_tab.add_log(f"BLAD: Wartosc poza zakresem: {val}")
+                    self.log_tab.add_log(f"BLAD: Wartosc poza zakresem (corrected): {corrected}")
                 return
 
             if data.startswith("angleX:"):
@@ -128,11 +156,10 @@ class CaliperGUI:
         # (tylko klucze faktycznie emitowane przez firmware Master)
         if payload.startswith(
             (
-                "deviation:",
+                "measurement:",
                 "angleX:",
                 "batteryVoltage:",
                 "calibrationOffset:",
-                "calibrationError:",
                 "measurementReady:",
             )
         ):

@@ -92,6 +92,13 @@ class MeasurementTab:
 
                     dpg.add_spacer(height=10)
                     dpg.add_text("Calibration (Master local):", color=(100, 200, 255))
+
+                    dpg.add_checkbox(
+                        label="Calibration mode (auto-fill offset from current measurement)",
+                        tag="cal_mode_checkbox",
+                        default_value=False,
+                    )
+
                     dpg.add_input_float(
                         label="localCalibrationOffset (mm)",
                         tag="cal_offset_input",

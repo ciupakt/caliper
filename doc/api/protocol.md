@@ -16,19 +16,29 @@ Dokumentacja opisuje protokoły komunikacji używane w projekcie Caliper:
 Aktualna struktura jest zdefiniowana wspólnie dla Master i Slave w [`shared_common.h`](lib/CaliperShared/shared_common.h:1):
 
 ```cpp
-struct Message
+// Slave -> Master
+struct MessageSlave
 {
-  CommandType command;     // Komenda (CMD_*)
-  uint8_t angleX;          // Kąt X (0-255) z ADXL345 (skalowanie zależy od implementacji)
-  uint8_t motorSpeed;      // Prędkość silnika (0-255)
-  uint8_t motorTorque;     // „Moment” (0-255) — obecnie nieużywany przez driver
-  uint32_t timestamp;      // Timestamp w ms (millis())
-  float measurement;       // Pomiar w mm
-  float batteryVoltage;    // Napięcie baterii w V
+  uint32_t timestamp;
+  float measurement;       // surowy pomiar w mm
+  float batteryVoltage;    // V
+  CommandType command;
+  uint8_t angleX;
+};
+
+// Master -> Slave
+struct MessageMaster
+{
+  uint32_t timestamp;
+  uint32_t timeout;
+  CommandType command;
+  MotorState motorState;
+  uint8_t motorSpeed;
+  uint8_t motorTorque;
 };
 ```
 
-**Zasada:** komunikacja ESP-NOW zawsze przenosi pełną strukturę `Message` w obie strony. Pola nieużywane w danym typie wiadomości mogą być ignorowane (pozostawione jako 0).
+**Zasada:** komunikacja ESP-NOW przenosi pełną strukturę `MessageSlave` (Slave→Master) oraz `MessageMaster` (Master→Slave). Pola nieużywane w danym scenariuszu mogą być ignorowane.
 
 ### Komendy
 
@@ -37,7 +47,7 @@ Zgodnie z [`enum CommandType`](lib/CaliperShared/shared_common.h:22):
 | Komenda | Kod | Kierunek | Opis |
 |---------|-----|----------|------|
 | CMD_MEASURE | 'M' | Master → Slave | Żądanie pomiaru suwmiarki |
-| CMD_UPDATE  | 'U' | Master → Slave | Żądanie odświeżenia/statusu (używane także jako „kalibracja” w Master) |
+| CMD_UPDATE  | 'U' | Master → Slave | Żądanie odświeżenia/statusu |
 | CMD_MOTORTEST | 'T' | Master → Slave | Generyczne sterowanie silnikiem (używa pól `motorState/motorSpeed/motorTorque`) |
 
 ### Przepływ Komunikacji
@@ -119,75 +129,23 @@ Wszystkie dane przesyłane są jako tekst ASCII zakończony znakiem nowej linii 
 
 ### Odpowiedzi Master → GUI
 
-#### Pomiar Suwmiarki
+Aplikacja GUI czyta logi tekstowe z UART. Dane pomiarowe są emitowane przez [`DEBUG_PLOT`](lib/CaliperShared/MacroDebugger.h:113) jako linie zaczynające się od `>`.
+
+**Klucze (Master → GUI):**
 
 ```
-VAL_1:<wartość>
+>measurement:<wartość>
+>calibrationOffset:<wartość>
+>angleX:<wartość>
+>batteryVoltage:<wartość>
+>measurementReady:<nazwa_sesji> <wartość>
 ```
 
-**Przykład:**
-```
-VAL_1:12.345
-```
-
-**Walidacja:**
-- Zakres: -1000.0 do 1000.0 mm
-- Wartości poza zakresem są odrzucane
-
-#### Kąt Akcelerometru
-
-```
->Angle X:<wartość>
-```
-
-**Przykład:**
-```
->Angle X:1.23
-```
-
-#### Napięcie Baterii
-
-```
->Napiecie baterii:<wartość>
-```
-
-**Przykład:**
-```
->Napiecie baterii:4200
-```
-
-#### Kalibracja - Offset
-
-```
-CAL_OFFSET:<wartość>
-```
-
-**Przykład:**
-```
-CAL_OFFSET:0.123
-```
-
-#### Kalibracja - Błąd
-
-```
-CAL_ERROR:<wartość>
-```
-
-**Przykład:**
-```
-CAL_ERROR:Invalid value
-```
-
-#### Sesja Pomiarowa
-
-```
-MEAS_SESSION:<nazwa> <wartość>
-```
-
-**Przykład:**
-```
-MEAS_SESSION:test1 12.345
-```
+**Znaczenie:**
+- `measurement` — surowy pomiar z suwmiarki (mm)
+- `calibrationOffset` — offset utrzymywany na Master (mm)
+- korekcja jest liczona po stronie GUI/WWW: `corrected = measurement + calibrationOffset`
+- `measurementReady` — (dla sesji) wartość już skorygowana wysyłana jako event/log
 
 ### Przepływ Komunikacji
 
@@ -231,37 +189,18 @@ Zwraca główną stronę HTML z interfejsem użytkownika.
 - `/style.css` - Style CSS
 - `/app.js` - Logika JavaScript
 
-#### GET /api/status
+#### (Aktualne endpointy w firmware)
 
-Zwraca aktualny status systemu.
+Firmware Master używa endpointów:
+- `GET /` (UI)
+- `GET /measure`
+- `GET /read`
+- `POST /start_session`
+- `POST /measure_session`
+- `POST /api/calibration/measure`
+- `POST /api/calibration/offset`
 
-**Odpowiedź JSON:**
-```json
-{
-  "batteryVoltage": 4200,
-  "angleX": 1.23,
-  "lastMeasurement": 12.345,
-  "timestamp": 1703673600000
-}
-```
-
-#### POST /api/measure
-
-Wyzwala pomiar suwmiarki.
-
-**Żądanie:**
-```json
-{}
-```
-
-**Odpowiedź JSON:**
-```json
-{
-  "success": true,
-  "measurement": 12.345,
-  "timestamp": 1703673600000
-}
-```
+W odpowiedzi z `POST /measure_session` zwracane są m.in. `measurementRaw` i `calibrationOffset`, a korekcja jest liczona w UI.
 
 #### POST /motor
 

@@ -7,14 +7,93 @@ function showView(viewId) {
 }
 
 // Funkcje kalibracji
-function calibrate() {
+// Założenie: UI liczy korekcję po swojej stronie:
+// corrected = measurementRaw + calibrationOffset
+
+let lastCalibrationRaw = NaN;
+let lastCalibrationOffset = NaN;
+let offsetJustApplied = false;
+
+function formatMm(value) {
+    return Number.isFinite(value) ? value.toFixed(3) : 'n/a';
+}
+
+function renderCalibrationMeasurement() {
+    const elMeas = document.getElementById('calibration-measurement');
+
+    const raw = lastCalibrationRaw;
+    const offset = lastCalibrationOffset;
+    const corrected = (Number.isFinite(raw) && Number.isFinite(offset)) ? (raw + offset) : NaN;
+
+    const offsetLabel = offsetJustApplied ? 'Aktualny offset (ustawiono):' : 'Aktualny offset:';
+
+    elMeas.innerHTML =
+        '<div class="cal-line">' +
+            '<span class="calibration-line-label">Surowy:</span>' +
+            '<span class="calibration-line-value">' + formatMm(raw) + ' mm</span>' +
+        '</div>' +
+        '<div class="cal-line calibration-line--offset">' +
+            '<span class="calibration-line-label">' + offsetLabel + '</span>' +
+            '<span class="calibration-line-value">' + formatMm(offset) + ' mm</span>' +
+        '</div>' +
+        '<div class="cal-line">' +
+            '<span class="calibration-line-label">Skorygowany:</span>' +
+            '<span class="calibration-line-value">' + formatMm(corrected) + ' mm</span>' +
+        '</div>';
+}
+
+function calibrationMeasure() {
+    const elStatus = document.getElementById('cal-status');
+
+    elStatus.textContent = 'Pobieranie bieżącego pomiaru...';
+
+    fetch('/api/calibration/measure', {
+        method: 'POST'
+    })
+    .then(response => {
+        if (!response.ok) {
+            return response.json().then(err => { throw new Error(err.error || 'Błąd serwera'); });
+        }
+        return response.json();
+    })
+    .then(data => {
+        if (!data || data.success !== true) {
+            throw new Error((data && data.error) ? data.error : 'Nieznany błąd');
+        }
+
+        const raw = Number(data.measurementRaw);
+        const offset = Number(data.calibrationOffset);
+
+        if (Number.isFinite(raw)) {
+            // tryb kalibracji: podbijamy pole offsetu bieżącym pomiarem (bez automatycznego wysyłania)
+            document.getElementById('offset-input').value = raw.toFixed(3);
+        }
+
+        lastCalibrationRaw = raw;
+        lastCalibrationOffset = offset;
+        offsetJustApplied = false;
+
+        renderCalibrationMeasurement();
+
+        elStatus.textContent = 'OK';
+    })
+    .catch(error => {
+        elStatus.textContent = 'Błąd: ' + error.message;
+    });
+}
+
+function applyCalibrationOffset() {
     const offset = Number(document.getElementById('offset-input').value);
+    const elStatus = document.getElementById('cal-status');
+
     if (!Number.isFinite(offset) || offset < -14.999 || offset > 14.999) {
         alert('Offset musi być w zakresie -14.999 .. 14.999');
         return;
     }
-    document.getElementById('status').textContent = 'Wykonywanie kalibracji...';
-    fetch('/calibrate', {
+
+    elStatus.textContent = 'Ustawianie offsetu...';
+
+    fetch('/api/calibration/offset', {
         method: 'POST',
         headers: {'Content-Type': 'application/x-www-form-urlencoded'},
         body: 'offset=' + offset
@@ -26,15 +105,17 @@ function calibrate() {
         return response.json();
     })
     .then(data => {
-        if (data.error && !data.offset) {
-            document.getElementById('status').textContent = 'Błąd: ' + data.error;
-        } else {
-            document.getElementById('calibration-result').innerHTML = 'Offset: ' + data.offset + '<br>Błąd: ' + data.error + ' mm';
-            document.getElementById('status').textContent = 'Kalibracja zakończona';
+        if (!data || data.success !== true) {
+            throw new Error((data && data.error) ? data.error : 'Nieznany błąd');
         }
+        lastCalibrationOffset = Number(data.calibrationOffset);
+        offsetJustApplied = true;
+        renderCalibrationMeasurement();
+
+        elStatus.textContent = 'OK';
     })
     .catch(error => {
-        document.getElementById('status').textContent = 'Błąd: ' + error.message;
+        elStatus.textContent = 'Błąd: ' + error.message;
     });
 }
 
@@ -87,15 +168,32 @@ function measureSession() {
             return;
         }
 
-        document.getElementById('measurement-value').textContent = data.measurement;
-
         const isValid = !!data.valid;
         if (!isValid) {
+            document.getElementById('measurement-value').textContent = 'Brak danych';
+            document.getElementById('measurement-raw').textContent = 'Brak danych';
+            document.getElementById('measurement-offset').textContent = 'Brak danych';
             document.getElementById('battery').textContent = 'Brak danych';
             document.getElementById('angle-x').textContent = 'Brak danych';
             document.getElementById('status').textContent = 'Brak świeżych danych (brak odpowiedzi z urządzenia).';
             return;
         }
+
+        const raw = Number(data.measurementRaw);
+        const offset = Number(data.calibrationOffset);
+        const corrected = (Number.isFinite(raw) && Number.isFinite(offset)) ? (raw + offset) : NaN;
+
+        document.getElementById('measurement-value').textContent = Number.isFinite(corrected)
+            ? corrected.toFixed(3) + ' mm'
+            : (data.measurementCorrected + ' mm');
+
+        document.getElementById('measurement-raw').textContent = Number.isFinite(raw)
+            ? raw.toFixed(3) + ' mm'
+            : (data.measurementRaw + ' mm');
+
+        document.getElementById('measurement-offset').textContent = Number.isFinite(offset)
+            ? offset.toFixed(3) + ' mm'
+            : (data.calibrationOffset + ' mm');
 
         const batt = Number(data.batteryVoltage);
         document.getElementById('battery').textContent = Number.isFinite(batt)

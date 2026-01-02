@@ -85,8 +85,11 @@ struct SystemStatus
 {
   struct MessageSlave msgSlave;
   struct MessageMaster msgMaster;
+
+  // Offset kalibracji utrzymywany lokalnie na Master.
+  // UI (WWW/GUI) wysyła go osobno, a korekcja jest liczona po stronie klienta:
+  // corrected = msgSlave.measurement + localCalibrationOffset
   float localCalibrationOffset;
-  float localDeviation;
 };
 
 #endif // CALIPER_MASTER
