@@ -105,8 +105,8 @@ flowchart TD
     M_CLI -->|komendy z GUI| M_STATE
 
     %% Wyzwalanie akcji: WWW/GUI -> Master -> Slave
-    M_HTTP -->|requestMeasurement()/requestUpdate()| M_COMM
-    M_CLI -->|requestMeasurement()/requestUpdate()/sendMotorTest()| M_COMM
+    M_HTTP -->|requestMeasurement()\nrequestUpdate()| M_COMM
+    M_CLI -->|requestMeasurement()\nrequestUpdate()\nsendMotorTest()| M_COMM
 
     %% Dane zwrotne: Slave -> Master -> GUI/WWW
     M_COMM -->|OnDataRecv() aktualizuje msgSlave\n+ DEBUG_PLOT| M_STATE
