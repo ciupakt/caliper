@@ -51,7 +51,6 @@ void OnDataRecv(const esp_now_recv_info_t *recv_info, const uint8_t *incomingDat
 
   DEBUG_I("ODEBRANO DANE OD SLAVE");
   DEBUG_I("command:%c", (char)systemStatus.msgSlave.command);
-  DEBUG_I("timestamp:%u", (unsigned)systemStatus.msgSlave.timestamp);
 
   // UI (WWW/GUI) liczy korekcję po swojej stronie:
   // corrected = measurement + calibrationOffset
@@ -129,7 +128,6 @@ ErrorCode sendTxToSlave(CommandType command, const char *commandName, bool expec
   }
 
   systemStatus.msgMaster.command = command;
-  systemStatus.msgMaster.timestamp = millis();
 
   ErrorCode result = commManager.sendMessage(systemStatus.msgMaster);
 
@@ -311,7 +309,6 @@ void handleMeasureSession()
   response += "\"measurementCorrected\":" + String((double)(m.measurement + systemStatus.calibrationOffset), 3) + ",";
 
   response += "\"valid\":" + String(measurementReady ? "true" : "false") + ",";
-  response += "\"timestamp\":" + String((unsigned)m.timestamp) + ",";
   response += "\"batteryVoltage\":" + String(m.batteryVoltage, 3) + ",";
   response += "\"angleX\":" + String((unsigned)m.angleX);
   response += "}";

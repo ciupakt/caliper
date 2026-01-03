@@ -79,7 +79,6 @@ bool updateMeasureData(void *arg)
   msgSlave.measurement = caliper.performMeasurement();
   msgSlave.angleX = accelerometer.getAngleX();
   msgSlave.batteryVoltage = battery.readVoltageNow();
-  msgSlave.timestamp = millis();
   msgSlave.command = msgMaster.command;
   return false; // do not repeat this task
 }
@@ -101,7 +100,6 @@ bool runMeasReq(void *arg)
     updateMeasureData(nullptr);
   }
 
-  DEBUG_PLOT("timestamp:%u", msgSlave.timestamp);
   DEBUG_PLOT("measurement:%.3f", msgSlave.measurement);
   DEBUG_PLOT("angleX:%u", msgSlave.angleX);
   DEBUG_PLOT("batteryVoltage:%.3f", msgSlave.batteryVoltage);

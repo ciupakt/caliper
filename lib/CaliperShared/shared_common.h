@@ -58,7 +58,6 @@ enum ErrorCode : uint8_t
  */
 struct MessageSlave
 {
-  uint32_t timestamp;      /**< Timestamp from system start (ms) */
   float measurement;       /**< Measurement value in mm */
   float batteryVoltage;    /**< Battery voltage in voltage */
   CommandType command;     /**< Command type */
@@ -67,7 +66,6 @@ struct MessageSlave
 
 struct MessageMaster
 {
-  uint32_t timestamp;      /**< Timestamp from system start (ms) */
   uint32_t timeout;      /**< Timeout for run motor while measure (ms) */
   CommandType command;     /**< Command type */
   MotorState motorState;  /**< Current motor state */
