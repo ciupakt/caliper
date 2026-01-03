@@ -2,24 +2,45 @@
 Calibration Tab GUI Component for Caliper Master GUI
 
 Zawiera:
-- Konfigurację parametrów pomiaru (msgMaster.* wysyłane po UART)
+- Konfigurację parametrów pomiaru (msgMaster.* wysyłane po UART):
+  - timeout (ms) - komenda UART: o <ms>
+  - motorTorque (0-255) - komenda UART: q <0-255>
+  - motorSpeed (0-255) - komenda UART: s <0-255>
+  - motorState (0-3) - komenda UART: r <0-3> (combo box z enum MotorState)
+  - Test silnika - komenda UART: t
 - Kalibrację lokalną Mastera (calibrationOffset)
+- Dwa obszary logów: komunikacja serial i logi aplikacji
+
+Enum MotorState:
+  - 0 = MOTOR_STOP (Motor stopped/coast)
+  - 1 = MOTOR_FORWARD (Motor rotating forward)
+  - 2 = MOTOR_REVERSE (Motor rotating reverse)
+  - 3 = MOTOR_BRAKE (Motor braking)
 
 UWAGA: tagi kontrolek są używane przez `CaliperGUI.process_measurement_data()` do
 odświeżania pól podglądu (surowy/offset/skorygowany) oraz pól konfiguracyjnych
-(timeout, motorTorque, motorSpeed).
+(timeout, motorTorque, motorSpeed, motorState).
 """
 
 import dearpygui.dearpygui as dpg
+from collections import deque
+import time
 
 
 class CalibrationTab:
     """Calibration tab component"""
 
+    def __init__(self, max_lines: int = 200):
+        self.max_lines = max_lines
+        self.serial_log_lines = deque(maxlen=max_lines)
+        self.app_log_lines = deque(maxlen=max_lines)
+        # Śledzenie czasu ostatniego kliknięcia do wykrywania podwójnego kliknięcia
+        self.last_click_time = 0.0
+        self.double_click_threshold = 0.5  # sekundy
+
     def create(self, parent: int, serial_handler):
         """Create the calibration tab UI"""
         with dpg.tab(label="Kalibracja", parent=parent):
-            dpg.add_text("Kalibracja i konfiguracja pomiaru", color=(100, 200, 255))
             dpg.add_spacer(height=5)
 
             # Status tylko dla tej zakładki (żeby feedback był widoczny nawet gdy user nie jest w 'Pomiary')
@@ -56,17 +77,38 @@ class CalibrationTab:
                         max_value=255,
                         width=220,
                     )
+                    dpg.add_combo(
+                        label="motorState",
+                        tag="tx_state_input",
+                        items=[
+                            "MOTOR_STOP (0)",
+                            "MOTOR_FORWARD (1)",
+                            "MOTOR_REVERSE (2)",
+                            "MOTOR_BRAKE (3)"
+                        ],
+                        default_value="MOTOR_STOP (0)",
+                        width=220,
+                    )
 
                     dpg.add_spacer(height=5)
-                    dpg.add_button(
-                        label="Zastosuj",
-                        callback=self._apply_measurement_config,
-                        width=220,
-                        height=30,
-                        user_data=serial_handler,
-                    )
+                    with dpg.group(horizontal=True):
+                        dpg.add_button(
+                            label="Zastosuj",
+                            callback=self._apply_measurement_config,
+                            width=150,
+                            height=30,
+                            user_data=serial_handler,
+                        )
+                        dpg.add_button(
+                            label="Motortest",
+                            callback=self._send_motortest,
+                            width=150,
+                            height=30,
+                            user_data=serial_handler,
+                        )
                     dpg.add_spacer(height=5)
-                    dpg.add_text("Komendy UART: o <ms>, q <0-255>, s <0-255>", color=(150, 150, 150))
+                    dpg.add_text("Komendy UART: o <ms>, q <0-255>, s <0-255>, r <0-3>, t", color=(150, 150, 150))
+                    dpg.add_text("motorState: 0=STOP, 1=FORWARD, 2=REVERSE, 3=BRAKE", color=(150, 150, 150))
 
                 dpg.add_spacer(width=30)
 
@@ -110,6 +152,61 @@ class CalibrationTab:
                     dpg.add_text("ESP32 Master WWW: http://192.168.4.1", color=(100, 255, 100))
                     # Wartości zgodne z [`config.h`](caliper_master/src/config.h:33)
                     dpg.add_text("WiFi: Orange_WiFi (hasło: 1670$2026)", color=(100, 255, 100))
+
+            dpg.add_spacer(height=10)
+            dpg.add_separator()
+            dpg.add_spacer(height=10)
+
+            # --- Obszary logów
+            dpg.add_separator()
+            dpg.add_spacer(height=10)
+
+            with dpg.group(horizontal=True):
+                # Log komunikacji serial
+                with dpg.group():
+                    dpg.add_text("Log komunikacji serial:", color=(100, 200, 255))
+                    dpg.add_spacer(height=5)
+                    dpg.add_input_text(
+                        multiline=True,
+                        readonly=True,
+                        width=560,
+                        height=200,
+                        tag="cal_serial_log",
+                    )
+                    # Dodaj handler kliknięcia do czyszczenia logów
+                    with dpg.item_handler_registry():
+                        dpg.add_item_clicked_handler(callback=self._on_log_clicked, user_data="serial")
+                    dpg.bind_item_handler_registry("cal_serial_log", dpg.last_container())
+
+                dpg.add_spacer(width=20)
+
+                # Log aplikacji
+                with dpg.group():
+                    dpg.add_text("Log aplikacji:", color=(100, 200, 255))
+                    dpg.add_spacer(height=5)
+                    dpg.add_input_text(
+                        multiline=True,
+                        readonly=True,
+                        width=560,
+                        height=200,
+                        tag="cal_app_log",
+                    )
+                    # Dodaj handler kliknięcia do czyszczenia logów
+                    with dpg.item_handler_registry():
+                        dpg.add_item_clicked_handler(callback=self._on_log_clicked, user_data="app")
+                    dpg.bind_item_handler_registry("cal_app_log", dpg.last_container())
+
+    def add_serial_log(self, line: str):
+        """Add a line to the serial log"""
+        self.serial_log_lines.append(line)
+        if dpg.does_item_exist("cal_serial_log"):
+            dpg.set_value("cal_serial_log", "\n".join(list(self.serial_log_lines)))
+
+    def add_app_log(self, line: str):
+        """Add a line to the app log"""
+        self.app_log_lines.append(line)
+        if dpg.does_item_exist("cal_app_log"):
+            dpg.set_value("cal_app_log", "\n".join(list(self.app_log_lines)))
 
     @staticmethod
     def _clamp_int(val: int, vmin: int, vmax: int) -> int:
@@ -174,13 +271,17 @@ class CalibrationTab:
             self._set_status(f"Wysłano: c {val:.3f} (zastosuj offset)")
 
     def _apply_measurement_config(self, sender, app_data, user_data):
-        """Apply msgMaster config fields on Master via UART commands: o/q/s."""
+        """Apply msgMaster config fields on Master via UART commands: o/q/s/r."""
         serial_handler = user_data
 
         try:
             timeout_ms = int(dpg.get_value("tx_timeout_input"))
             torque = int(dpg.get_value("tx_torque_input"))
             speed = int(dpg.get_value("tx_speed_input"))
+            
+            # Parsowanie motorState z combo boxa (format: "MOTOR_STOP (0)")
+            state_str = dpg.get_value("tx_state_input")
+            state = int(state_str.split("(")[-1].rstrip(")"))
         except Exception:
             self._set_status("BŁĄD: Nieprawidłowe wartości konfiguracji")
             return
@@ -188,14 +289,54 @@ class CalibrationTab:
         timeout_ms = self._clamp_int(timeout_ms, 0, 600000)
         torque = self._clamp_int(torque, 0, 255)
         speed = self._clamp_int(speed, 0, 255)
+        state = self._clamp_int(state, 0, 3)
 
         dpg.set_value("tx_timeout_input", timeout_ms)
         dpg.set_value("tx_torque_input", torque)
         dpg.set_value("tx_speed_input", speed)
+        dpg.set_value("tx_state_input", state)
 
         if not self._safe_write(serial_handler, f"o {timeout_ms}"):
             return
         self._safe_write(serial_handler, f"q {torque}")
         self._safe_write(serial_handler, f"s {speed}")
+        self._safe_write(serial_handler, f"r {state}")
 
-        self._set_status(f"Wysłano: o {timeout_ms}, q {torque}, s {speed}")
+        self._set_status(f"Wysłano: o {timeout_ms}, q {torque}, s {speed}, r {state}")
+
+    def _send_motortest(self, sender, app_data, user_data):
+        """Send motor test command via UART: t."""
+        serial_handler = user_data
+        if self._safe_write(serial_handler, "t"):
+            if dpg.does_item_exist("status"):
+                dpg.set_value("status", "Wysłano: t")
+            self.add_app_log("[GUI] Wysłano: t")
+
+    def _on_log_clicked(self, sender, app_data, user_data):
+        """Handle double click on log areas - clear logs on double click"""
+        current_time = time.time()
+        
+        # Sprawdź, czy to podwójne kliknięcie
+        if current_time - self.last_click_time < self.double_click_threshold:
+            # To podwójne kliknięcie - wyczyść odpowiednie logi
+            log_type = user_data
+            if log_type == "serial":
+                self.serial_log_lines.clear()
+                if dpg.does_item_exist("cal_serial_log"):
+                    dpg.set_value("cal_serial_log", "")
+            elif log_type == "app":
+                self.app_log_lines.clear()
+                if dpg.does_item_exist("cal_app_log"):
+                    dpg.set_value("cal_app_log", "")
+        
+        # Zaktualizuj czas ostatniego kliknięcia
+        self.last_click_time = current_time
+
+    def clear_logs(self):
+        """Clear all log lines"""
+        self.serial_log_lines.clear()
+        self.app_log_lines.clear()
+        if dpg.does_item_exist("cal_serial_log"):
+            dpg.set_value("cal_serial_log", "")
+        if dpg.does_item_exist("cal_app_log"):
+            dpg.set_value("cal_app_log", "")

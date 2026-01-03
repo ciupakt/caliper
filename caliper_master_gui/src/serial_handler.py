@@ -18,6 +18,7 @@ class SerialHandler:
         self.current_port = ''
         self.running = False
         self.data_callback: Optional[Callable[[str], None]] = None
+        self.write_callback: Optional[Callable[[str], None]] = None
     
     @staticmethod
     def list_ports() -> list:
@@ -50,6 +51,9 @@ class SerialHandler:
         """Write data to serial port"""
         if self.is_open():
             self.ser.write(f"{data}\n".encode())
+            # Call write callback if set
+            if self.write_callback:
+                self.write_callback(data)
     
     def read_line(self) -> Optional[str]:
         """Read a line from serial port"""
@@ -64,6 +68,10 @@ class SerialHandler:
     def set_data_callback(self, callback: Callable[[str], None]):
         """Set callback for received data"""
         self.data_callback = callback
+    
+    def set_write_callback(self, callback: Callable[[str], None]):
+        """Set callback for written data"""
+        self.write_callback = callback
     
     def start_reading(self):
         """Start background reading thread"""

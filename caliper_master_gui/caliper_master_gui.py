@@ -13,7 +13,6 @@ from src.serial_handler import SerialHandler
 from src.utils.csv_handler import CSVHandler
 from src.gui.measurement_tab import MeasurementTab
 from src.gui.calibration_tab import CalibrationTab
-from src.gui.log_tab import LogTab
 
 
 class CaliperGUI:
@@ -24,7 +23,6 @@ class CaliperGUI:
         self.csv_handler = CSVHandler()
         self.measurement_tab = MeasurementTab()
         self.calibration_tab = CalibrationTab()
-        self.log_tab = LogTab()
 
         # Stan GUI: ostatni znany offset (przychodzi z firmware przez DEBUG_PLOT)
         self.current_calibration_offset: float = 0.0
@@ -57,10 +55,10 @@ class CaliperGUI:
                     self.current_calibration_offset = float(val_str)
                 except Exception:
                     # jeśli nie da się sparsować, logujemy tylko tekst
-                    self.log_tab.add_log(f"[KALIBRACJA] Offset (parse err): {val_str}")
+                    self.calibration_tab.add_app_log(f"[KALIBRACJA] Offset (parse err): {val_str}")
                     return
 
-                self.log_tab.add_log(f"[KALIBRACJA] Offset: {self.current_calibration_offset:.3f} mm")
+                self.calibration_tab.add_app_log(f"[KALIBRACJA] Offset: {self.current_calibration_offset:.3f} mm")
 
                 # Odświeżamy UI kalibracji (jeśli istnieje)
                 try:
@@ -119,17 +117,17 @@ class CaliperGUI:
                     if self.csv_handler.is_open():
                         self.csv_handler.write_measurement(measurement_str, ts if self.measurement_tab.include_timestamp else None)
                 else:
-                    self.log_tab.add_log(f"BLAD: Wartosc poza zakresem (corrected): {corrected}")
+                    self.calibration_tab.add_app_log(f"BLAD: Wartosc poza zakresem (corrected): {corrected}")
                 return
 
             if data.startswith("angleX:"):
                 angle_str = data.split(":", 1)[1].strip()
-                self.log_tab.add_log(f"[ANGLE X] {angle_str}°")
+                self.calibration_tab.add_app_log(f"[ANGLE X] {angle_str}°")
                 return
 
             if data.startswith("batteryVoltage:"):
                 voltage_str = data.split(":", 1)[1].strip()
-                self.log_tab.add_log(f"[BATERIA] {voltage_str} V")
+                self.calibration_tab.add_app_log(f"[BATERIA] {voltage_str} V")
                 return
 
             # --- Konfiguracja pomiaru (wysyłane przez DEBUG_PLOT przy zmianie o/q/s/r)
@@ -137,7 +135,7 @@ class CaliperGUI:
                 val_str = data.split(":", 1)[1].strip()
                 try:
                     timeout_val = int(val_str)
-                    self.log_tab.add_log(f"[KONFIG] timeout: {timeout_val} ms")
+                    self.calibration_tab.add_app_log(f"[KONFIG] timeout: {timeout_val} ms")
                     # Odświeżamy UI kalibracji (jeśli istnieje)
                     try:
                         if dpg.does_item_exist("tx_timeout_input"):
@@ -145,14 +143,14 @@ class CaliperGUI:
                     except Exception:
                         pass
                 except Exception:
-                    self.log_tab.add_log(f"[KONFIG] timeout (parse err): {val_str}")
+                    self.calibration_tab.add_app_log(f"[KONFIG] timeout (parse err): {val_str}")
                 return
 
             if data.startswith("motorTorque:"):
                 val_str = data.split(":", 1)[1].strip()
                 try:
                     torque_val = int(val_str)
-                    self.log_tab.add_log(f"[KONFIG] motorTorque: {torque_val}")
+                    self.calibration_tab.add_app_log(f"[KONFIG] motorTorque: {torque_val}")
                     # Odświeżamy UI kalibracji (jeśli istnieje)
                     try:
                         if dpg.does_item_exist("tx_torque_input"):
@@ -160,14 +158,14 @@ class CaliperGUI:
                     except Exception:
                         pass
                 except Exception:
-                    self.log_tab.add_log(f"[KONFIG] motorTorque (parse err): {val_str}")
+                    self.calibration_tab.add_app_log(f"[KONFIG] motorTorque (parse err): {val_str}")
                 return
 
             if data.startswith("motorSpeed:"):
                 val_str = data.split(":", 1)[1].strip()
                 try:
                     speed_val = int(val_str)
-                    self.log_tab.add_log(f"[KONFIG] motorSpeed: {speed_val}")
+                    self.calibration_tab.add_app_log(f"[KONFIG] motorSpeed: {speed_val}")
                     # Odświeżamy UI kalibracji (jeśli istnieje)
                     try:
                         if dpg.does_item_exist("tx_speed_input"):
@@ -175,32 +173,48 @@ class CaliperGUI:
                     except Exception:
                         pass
                 except Exception:
-                    self.log_tab.add_log(f"[KONFIG] motorSpeed (parse err): {val_str}")
+                    self.calibration_tab.add_app_log(f"[KONFIG] motorSpeed (parse err): {val_str}")
                 return
 
             if data.startswith("motorState:"):
                 val_str = data.split(":", 1)[1].strip()
                 try:
                     state_val = int(val_str)
-                    state_names = {0: "STOP", 1: "FORWARD", 2: "REVERSE", 3: "BRAKE"}
+                    state_names = {
+                        0: "MOTOR_STOP (0)",
+                        1: "MOTOR_FORWARD (1)",
+                        2: "MOTOR_REVERSE (2)",
+                        3: "MOTOR_BRAKE (3)"
+                    }
                     state_name = state_names.get(state_val, f"UNKNOWN({state_val})")
-                    self.log_tab.add_log(f"[KONFIG] motorState: {state_name} ({state_val})")
+                    self.calibration_tab.add_app_log(f"[KONFIG] motorState: {state_name}")
+                    
+                    # Odświeżamy UI kalibracji (jeśli istnieje)
+                    try:
+                        if dpg.does_item_exist("tx_state_input"):
+                            dpg.set_value("tx_state_input", state_name)
+                    except Exception:
+                        pass
                 except Exception:
-                    self.log_tab.add_log(f"[KONFIG] motorState (parse err): {val_str}")
+                    self.calibration_tab.add_app_log(f"[KONFIG] motorState (parse err): {val_str}")
                 return
 
             # Inne (nie-plot) linie zostawiamy jako log (np. SILNIK)
             if "SILNIK" in data.upper() or "blad silnika" in data.lower():
-                self.log_tab.add_log(f"[SILNIK] {data}")
+                self.calibration_tab.add_app_log(f"[SILNIK] {data}")
 
         except ValueError as val_err:
-            self.log_tab.add_log(f"BLAD: Nieprawidlowa wartosc - {str(val_err)}")
+            self.calibration_tab.add_app_log(f"BLAD: Nieprawidlowa wartosc - {str(val_err)}")
         except Exception as e:
-            self.log_tab.add_log(f"BLAD przetwarzania danych: {str(e)}")
+            self.calibration_tab.add_app_log(f"BLAD przetwarzania danych: {str(e)}")
     
+    def serial_write_callback(self, data: str):
+        """Callback for written serial data."""
+        self.calibration_tab.add_serial_log(f"> {data}")
+
     def serial_data_callback(self, data: str):
         """Callback for received serial data."""
-        self.log_tab.add_log(f"< {data}")
+        self.calibration_tab.add_serial_log(f"< {data}")
 
         payload = self._normalize_debug_plot_line(data)
 
@@ -223,18 +237,10 @@ class CaliperGUI:
 
         # Motor / other status lines
         if "SILNIK" in payload.upper() or "blad silnika" in payload.lower():
-            self.log_tab.add_log(f"[SILNIK] {payload}")
+            self.calibration_tab.add_app_log(f"[SILNIK] {payload}")
     
     def key_press_handler(self, sender, key):
         """Handle keyboard shortcuts"""
-        # Check for Ctrl+Alt+L
-        if key == dpg.mvKey_L:
-            ctrl_pressed = dpg.is_key_down(dpg.mvKey_LControl) or dpg.is_key_down(dpg.mvKey_RControl)
-            alt_pressed = dpg.is_key_down(dpg.mvKey_LAlt) or dpg.is_key_down(dpg.mvKey_RAlt)
-            if ctrl_pressed and alt_pressed:
-                self.log_tab.toggle_visibility()
-                return
-
         # Hotkey: 'p' = wykonaj pomiar (jak kliknięcie "Wykonaj pomiar")
         if key == dpg.mvKey_P:
             # Jeśli user aktualnie pisze w polu tekstowym, nie przechwytujemy.
@@ -258,7 +264,7 @@ class CaliperGUI:
                     dpg.set_value("status", "Hotkey: p → wykonaj pomiar")
             except Exception:
                 pass
-            self.log_tab.add_log("[HOTKEY] p -> m")
+            self.calibration_tab.add_app_log("[HOTKEY] p -> m")
             return
     
     def create_gui(self):
@@ -307,16 +313,14 @@ class CaliperGUI:
                 # Kalibracja
                 self.calibration_tab.create(tab_bar_id, self.serial_handler)
 
-                # Logi
-                self.log_tab.create(tab_bar_id, self.serial_handler)
-
         # Bind font
         dpg.bind_font(default_font)
     
     def run(self):
         """Run the application"""
-        # Set up serial data callback
+        # Set up serial data callbacks
         self.serial_handler.set_data_callback(self.serial_data_callback)
+        self.serial_handler.set_write_callback(self.serial_write_callback)
         
         # Start serial reading
         self.serial_handler.start_reading()
