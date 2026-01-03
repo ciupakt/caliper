@@ -5,8 +5,9 @@ Zawiera:
 - Konfigurację parametrów pomiaru (msgMaster.* wysyłane po UART)
 - Kalibrację lokalną Mastera (calibrationOffset)
 
-UWAGA: tagi kontrolek są celowo takie same jak wcześniej w `MeasurementTab`, bo:
-- `CaliperGUI.process_measurement_data()` odświeża `cal_offset_input` oraz pola podglądu (surowy/offset/skorygowany)
+UWAGA: tagi kontrolek są używane przez `CaliperGUI.process_measurement_data()` do
+odświeżania pól podglądu (surowy/offset/skorygowany) oraz pól konfiguracyjnych
+(timeout, motorTorque, motorSpeed).
 """
 
 import dearpygui.dearpygui as dpg

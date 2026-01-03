@@ -9,7 +9,6 @@ import time
 from datetime import datetime
 
 # Import application modules
-from src.app import CaliperApp
 from src.serial_handler import SerialHandler
 from src.utils.csv_handler import CSVHandler
 from src.gui.measurement_tab import MeasurementTab
@@ -21,14 +20,11 @@ class CaliperGUI:
     """Main GUI application class"""
     
     def __init__(self):
-        self.app = CaliperApp()
         self.serial_handler = SerialHandler()
         self.csv_handler = CSVHandler()
         self.measurement_tab = MeasurementTab()
         self.calibration_tab = CalibrationTab()
         self.log_tab = LogTab()
-        self.auto_event = threading.Event()
-        self.auto_running = False
 
         # Stan GUI: ostatni znany offset (przychodzi z firmware przez DEBUG_PLOT)
         self.current_calibration_offset: float = 0.0
@@ -121,10 +117,7 @@ class CaliperGUI:
                     self.measurement_tab.add_measurement(ts, measurement_str, float(corrected))
 
                     if self.csv_handler.is_open():
-                        if self.measurement_tab.include_timestamp:
-                            self.csv_handler.write_measurement(measurement_str, ts)
-                        else:
-                            self.csv_handler.write_measurement(measurement_str)
+                        self.csv_handler.write_measurement(measurement_str, ts if self.measurement_tab.include_timestamp else None)
                 else:
                     self.log_tab.add_log(f"BLAD: Wartosc poza zakresem (corrected): {corrected}")
                 return
@@ -231,19 +224,6 @@ class CaliperGUI:
         # Motor / other status lines
         if "SILNIK" in payload.upper() or "blad silnika" in payload.lower():
             self.log_tab.add_log(f"[SILNIK] {payload}")
-    
-    def auto_task(self):
-        """Auto trigger task"""
-        try:
-            interval = int(dpg.get_value("interval_ms"))
-            if interval < 500:
-                interval = 500
-        except:
-            interval = 1000
-        
-        while not self.auto_event.is_set():
-            self.serial_handler.write("m")
-            time.sleep(interval / 1000.0)
     
     def key_press_handler(self, sender, key):
         """Handle keyboard shortcuts"""

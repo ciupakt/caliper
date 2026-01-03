@@ -17,7 +17,6 @@ class CSVHandler:
         self.file: Optional[TextIO] = None
         self.writer: Optional[csv.writer] = None
         self.filename: Optional[str] = None
-        self.include_timestamp: bool = False
 
     @classmethod
     def _sanitize_prefix(cls, prefix: str) -> str:
@@ -35,7 +34,7 @@ class CSVHandler:
 
         return p or cls.DEFAULT_PREFIX
 
-    def create_new_file(self, include_timestamp: bool = False, prefix: str = DEFAULT_PREFIX) -> str:
+    def create_new_file(self, prefix: str = DEFAULT_PREFIX) -> str:
         """Create a new CSV file with timestamp-based name.
 
         `prefix` replaces the default "measurement" prefix.
@@ -44,7 +43,6 @@ class CSVHandler:
         if self.file:
             self.close()
 
-        self.include_timestamp = include_timestamp
         safe_prefix = self._sanitize_prefix(prefix)
         self.filename = datetime.now().strftime(f"{safe_prefix}_%Y%m%d_%H%M%S.csv")
         self.file = open(self.filename, "w", newline="")
@@ -53,11 +51,17 @@ class CSVHandler:
         return self.filename
     
     def write_measurement(self, measurement: str, timestamp: Optional[str] = None):
-        """Write a measurement to the CSV file"""
+        """Write a measurement to the CSV file
+        
+        Args:
+            measurement: Measurement value string
+            timestamp: Optional timestamp string. If provided, the row will include timestamp.
+                      If None, only the measurement value is written.
+        """
         if not self.writer:
             return
         
-        if self.include_timestamp:
+        if timestamp is not None:
             ts = timestamp or datetime.now().isoformat(timespec='seconds')
             self.writer.writerow([ts, measurement])
         else:

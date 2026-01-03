@@ -181,7 +181,7 @@ class MeasurementTab:
         # Create CSV file now
         filename = None
         try:
-            filename = csv_handler.create_new_file(self.include_timestamp, prefix=self.csv_prefix)
+            filename = csv_handler.create_new_file(prefix=self.csv_prefix)
         except Exception:
             filename = None
 
@@ -270,67 +270,6 @@ class MeasurementTab:
         """Toggle timestamp inclusion"""
         self.include_timestamp = app_data
         self._show_measurements()
-    
-    @staticmethod
-    def _clamp_int(val: int, vmin: int, vmax: int) -> int:
-        return max(vmin, min(vmax, int(val)))
-
-    @staticmethod
-    def _clamp_float(val: float, vmin: float, vmax: float) -> float:
-        return max(vmin, min(vmax, float(val)))
-
-    def _safe_write(self, serial_handler, data: str) -> bool:
-        """Write to serial only when port is open; update status otherwise."""
-        if serial_handler is None or not hasattr(serial_handler, "is_open"):
-            dpg.set_value("status", "ERR: Serial handler missing")
-            return False
-
-        if not serial_handler.is_open():
-            dpg.set_value("status", "ERR: Port not open")
-            return False
-
-        serial_handler.write(data)
-        return True
-
-    def _apply_calibration_offset(self, sender, app_data, user_data):
-        """Apply calibrationOffset on Master via UART command: c <±14.999>."""
-        serial_handler = user_data
-        try:
-            val = float(dpg.get_value("cal_offset_input"))
-        except Exception:
-            dpg.set_value("status", "ERR: Invalid calibrationOffset")
-            return
-
-        val = self._clamp_float(val, -14.999, 14.999)
-        dpg.set_value("cal_offset_input", val)
-        if self._safe_write(serial_handler, f"c {val:.3f}"):
-            dpg.set_value("status", f"Sent: c {val:.3f}")
-
-    def _apply_measurement_config(self, sender, app_data, user_data):
-        """Apply msgMaster config fields on Master via UART commands: o/q/s."""
-        serial_handler = user_data
-
-        try:
-            timeout_ms = int(dpg.get_value("tx_timeout_input"))
-            torque = int(dpg.get_value("tx_torque_input"))
-            speed = int(dpg.get_value("tx_speed_input"))
-        except Exception:
-            dpg.set_value("status", "ERR: Invalid config values")
-            return
-
-        timeout_ms = self._clamp_int(timeout_ms, 0, 600000)
-        torque = self._clamp_int(torque, 0, 255)
-        speed = self._clamp_int(speed, 0, 255)
-
-        dpg.set_value("tx_timeout_input", timeout_ms)
-        dpg.set_value("tx_torque_input", torque)
-        dpg.set_value("tx_speed_input", speed)
-
-        if not self._safe_write(serial_handler, f"o {timeout_ms}"):
-            return
-        self._safe_write(serial_handler, f"q {torque}")
-        self._safe_write(serial_handler, f"s {speed}")
-        dpg.set_value("status", f"Sent: o {timeout_ms}, q {torque}, s {speed}")
     
     def add_measurement(self, timestamp: str, value: str, numeric_value: float):
         """Add a measurement to history and plot"""
