@@ -29,6 +29,9 @@ class CaliperGUI:
 
         # Stan GUI: ostatni surowy pomiar (żeby móc policzyć/odświeżyć skorygowany w zakładce Kalibracja)
         self.last_measurement_raw: float | None = None
+        
+        # Stan GUI: nazwa bieżącej sesji
+        self.current_session_name: str = ""
     
     @staticmethod
     def _normalize_debug_plot_line(data: str) -> str:
@@ -198,10 +201,24 @@ class CaliperGUI:
                 except Exception:
                     self.calibration_tab.add_app_log(f"[KONFIG] motorState (parse err): {val_str}")
                 return
-
-            # Inne (nie-plot) linie zostawiamy jako log (np. SILNIK)
-            if "SILNIK" in data.upper() or "blad silnika" in data.lower():
-                self.calibration_tab.add_app_log(f"[SILNIK] {data}")
+    
+                # --- Nazwa sesji (wysyłane przez DEBUG_PLOT przy zmianie nazwy sesji)
+                if data.startswith("sessionName:"):
+                    name_str = data.split(":", 1)[1].strip()
+                    self.current_session_name = name_str
+                    self.calibration_tab.add_app_log(f"[SESJA] Nazwa sesji: {name_str}")
+                    
+                    # Odświeżamy UI z nazwą sesji (jeśli istnieje)
+                    try:
+                        if dpg.does_item_exist("session_name_display"):
+                            dpg.set_value("session_name_display", f"Sesja: {name_str}")
+                    except Exception:
+                        pass
+                    return
+    
+                # Inne (nie-plot) linie zostawiamy jako log (np. SILNIK)
+                if "SILNIK" in data.upper() or "blad silnika" in data.lower():
+                    self.calibration_tab.add_app_log(f"[SILNIK] {data}")
 
         except ValueError as val_err:
             self.calibration_tab.add_app_log(f"BLAD: Nieprawidlowa wartosc - {str(val_err)}")
@@ -230,6 +247,7 @@ class CaliperGUI:
                 "motorTorque:",
                 "motorSpeed:",
                 "motorState:",
+                "sessionName:",
             )
         ):
             self.process_measurement_data(payload)

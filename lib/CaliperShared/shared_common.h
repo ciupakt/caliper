@@ -88,6 +88,10 @@ struct SystemStatus
   // UI (WWW/GUI) wysyła go osobno, a korekcja jest liczona po stronie klienta:
   // corrected = msgSlave.measurement + calibrationOffset
   float calibrationOffset;
+
+  // Nazwa sesji pomiarowej (maks 31 znaków + null terminator)
+  // Ustawiana przez komendę 'n' lub przez WWW/GUI
+  char sessionName[32];
 };
 
 #endif // CALIPER_MASTER

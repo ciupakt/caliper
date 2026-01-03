@@ -1,6 +1,8 @@
 #include "serial_cli.h"
 
 #include <stdlib.h>
+#include <string.h>
+#include <ctype.h>
 
 #include <MacroDebugger.h>
 #include <shared_common.h>
@@ -65,6 +67,43 @@ bool parseFloatStrict(const String &s, float &out)
 
 static SerialCliContext g_ctx;
 
+/**
+ * @brief Walidacja nazwy sesji
+ *
+ * @param name Nazwa sesji do walidacji
+ * @return true Nazwa jest prawidłowa
+ * @return false Nazwa jest nieprawidłowa
+ */
+static bool validateSessionName(const String &name)
+{
+  // Minimalna długość: 1 znak
+  if (name.length() < 1)
+  {
+    DEBUG_W("Nazwa sesji jest pusta");
+    return false;
+  }
+
+  // Maksymalna długość: 31 znaków (32 z null terminator)
+  if (name.length() > 31)
+  {
+    DEBUG_W("Nazwa sesji jest za długa (maks 31 znaków)");
+    return false;
+  }
+
+  // Walidacja znaków: litery (a-z, A-Z), cyfry (0-9), spacje, podkreślenia (_), myślniki (-)
+  for (unsigned int i = 0; i < name.length(); i++)
+  {
+    char c = name.charAt(i);
+    if (!(isalnum((unsigned char)c) || c == ' ' || c == '_' || c == '-'))
+    {
+      DEBUG_W("Nazwa sesji zawiera niedozwolone znaki: '%c'", c);
+      return false;
+    }
+  }
+
+  return true;
+}
+
 static void printSerialHelp()
 {
   DEBUG_I("\n=== DOSTĘPNE KOMENDY SERIAL (UART) ===\n"
@@ -76,6 +115,7 @@ static void printSerialHelp()
           "r <0-3>      - Ustaw motorState (0=STOP, 1=FORWARD, 2=REVERSE, 3=BRAKE)\n"
           "t            - Wyślij CMD_MOTORTEST (T) z bieżącymi ustawieniami\n"
           "c <±14.999>  - Ustaw calibrationOffset (mm) na Master (bez wyzwalania pomiaru)\n"
+          "n <nazwa>    - Ustaw nazwę sesji (maks 31 znaków, dozwolone: a-z, A-Z, 0-9, spacja, _, -)\n"
           "g            - Odśwież ustawienia (wyślij wszystkie aktualne wartości)\n"
           "h/?          - Wyświetl tę pomoc\n"
           "=====================================\n");
@@ -263,6 +303,25 @@ bool SerialCli_tick(void *arg)
       }
       break;
 
+    case 'n':
+      // Ustaw nazwę sesji
+      if (!validateSessionName(rest))
+      {
+        DEBUG_W("Serial: nieprawidłowa nazwa sesji dla 'n' (użyj: n <nazwa>\\n)");
+        printSerialHelp();
+        break;
+      }
+
+      // Zapisz nazwę sesji do systemStatus.sessionName
+      memset(g_ctx.systemStatus->sessionName, 0, sizeof(g_ctx.systemStatus->sessionName));
+      strncpy(g_ctx.systemStatus->sessionName, rest.c_str(), sizeof(g_ctx.systemStatus->sessionName) - 1);
+      
+      DEBUG_I("sessionName:%s", g_ctx.systemStatus->sessionName);
+
+      // Ujednolicamy kanał dla GUI (DEBUG_PLOT) — GUI może od razu zaktualizować stan.
+      DEBUG_PLOT("sessionName:%s", g_ctx.systemStatus->sessionName);
+      break;
+
     case 'g':
       // Wyślij wszystkie aktualne ustawienia przez DEBUG_PLOT
       DEBUG_PLOT("calibrationOffset:%.3f", (double)g_ctx.systemStatus->calibrationOffset);
@@ -270,6 +329,7 @@ bool SerialCli_tick(void *arg)
       DEBUG_PLOT("motorTorque:%u", (unsigned)g_ctx.systemStatus->msgMaster.motorTorque);
       DEBUG_PLOT("motorSpeed:%u", (unsigned)g_ctx.systemStatus->msgMaster.motorSpeed);
       DEBUG_PLOT("motorState:%u", (unsigned)g_ctx.systemStatus->msgMaster.motorState);
+      DEBUG_PLOT("sessionName:%s", g_ctx.systemStatus->sessionName);
       break;
 
     case 'h':

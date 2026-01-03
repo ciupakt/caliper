@@ -8,6 +8,7 @@ from collections import deque
 from datetime import datetime
 import threading
 import time
+import re
 
 
 class MeasurementTab:
@@ -24,6 +25,9 @@ class MeasurementTab:
 
         # Domyślny prefix plików CSV (zamiennik „measurement_”)
         self.csv_prefix: str = "test"
+
+        # Nazwa sesji (używana jako domyślna wartość w polu input)
+        self.session_name: str = ""
 
         # Auto-pomiar (wątek wysyłający cyklicznie komendę "m")
         self._auto_event = threading.Event()
@@ -75,16 +79,20 @@ class MeasurementTab:
                         dpg.bind_item_font(measure_btn, "font_bold")
 
                     # Nazewnictwo jak w WWW: nowa sesja pomiarowa.
-                    # Plik CSV tworzymy dopiero po podaniu prefixu (popup na kliknięcie).
+                    # Plik CSV tworzymy z nazwą sesji jako prefixem.
                     new_session_btn = dpg.add_button(label="Nowa sesja pomiarowa", width=200, height=30)
                     with dpg.popup(new_session_btn, mousebutton=dpg.mvMouseButton_Left, modal=True, tag="new_session_popup"):
-                        dpg.add_text("Podaj nazwę pliku CSV (prefix). Zostanie utworzony plik: <prefix>_YYYYMMDD_HHMMSS.csv")
+                        dpg.add_text("Podaj nazwę sesji (maks 31 znaków, dozwolone: a-z, A-Z, 0-9, spacja, _, -)")
+                        dpg.add_text("Zostanie utworzony plik: <nazwa_sesji>_YYYYMMDD_HHMMSS.csv")
                         dpg.add_spacer(height=5)
-                        dpg.add_input_text(tag="csv_prefix_input", default_value=self.csv_prefix, width=360)
+                        dpg.add_input_text(tag="session_name_input", default_value=self.session_name, width=360)
                         dpg.add_spacer(height=8)
                         with dpg.group(horizontal=True):
-                            dpg.add_button(label="Utwórz", callback=self._confirm_new_session, width=120, height=30, user_data=csv_handler)
+                            dpg.add_button(label="Utwórz", callback=self._confirm_new_session, width=120, height=30, user_data=(serial_handler, csv_handler))
                             dpg.add_button(label="Anuluj", callback=lambda: dpg.configure_item("new_session_popup", show=False), width=120, height=30)
+
+                    dpg.add_spacer(height=5)
+                    dpg.add_text("", tag="session_name_display")
 
                     dpg.add_spacer(height=5)
                     dpg.add_checkbox(label="Auto-pomiar", tag="auto_checkbox", callback=self._set_auto, user_data=serial_handler)
@@ -164,16 +172,48 @@ class MeasurementTab:
         self._show_measurements()
     
     def _confirm_new_session(self, sender, app_data, user_data):
-        """Create new CSV file with user-provided prefix and clear history."""
-        csv_handler = user_data
+        """Create new CSV file with session name as prefix and clear history."""
+        serial_handler, csv_handler = user_data
 
-        # Read prefix
+        # Read session name
         try:
-            prefix = str(dpg.get_value("csv_prefix_input")).strip()
+            session_name = str(dpg.get_value("session_name_input")).strip()
         except Exception:
-            prefix = "test"
+            session_name = ""
 
-        self.csv_prefix = prefix or "test"
+        # Walidacja nazwy sesji
+        if not self._validate_session_name(session_name):
+            try:
+                if dpg.does_item_exist("status"):
+                    dpg.set_value("status", "BŁĄD: Nazwa sesji jest nieprawidłowa")
+            except Exception:
+                pass
+            return
+
+        self.session_name = session_name
+
+        # Wysyłanie komendy 'n' do ESP32 Master
+        try:
+            if serial_handler is not None and hasattr(serial_handler, "is_open") and serial_handler.is_open():
+                serial_handler.write(f"n {session_name}")
+                # Zapisz do logu aplikacji (przez callback w main)
+            else:
+                try:
+                    if dpg.does_item_exist("status"):
+                        dpg.set_value("status", "BŁĄD: Port nie jest otwarty")
+                except Exception:
+                    pass
+                return
+        except Exception:
+            try:
+                if dpg.does_item_exist("status"):
+                    dpg.set_value("status", "BŁĄD: Nie udało się wysłać nazwy sesji")
+            except Exception:
+                pass
+            return
+
+        # Użyj nazwy sesji jako prefixu pliku CSV
+        self.csv_prefix = session_name
 
         # Clear GUI measurements
         self._clear()
@@ -187,7 +227,7 @@ class MeasurementTab:
 
         if filename:
             dpg.set_value("csv_info", f"Plik CSV: {filename}")
-            dpg.set_value("status", "Nowa sesja pomiarowa: utworzono nowy plik CSV")
+            dpg.set_value("status", f"Nowa sesja pomiarowa: {session_name}")
         else:
             dpg.set_value("status", "BŁĄD: Nie udało się utworzyć pliku CSV")
 
@@ -245,6 +285,31 @@ class MeasurementTab:
     def _clamp_int(self, value: int, min_val: int, max_val: int) -> int:
         """Clamp integer value to specified range."""
         return max(min_val, min(value, max_val))
+
+    @staticmethod
+    def _validate_session_name(name: str) -> bool:
+        """Walidacja nazwy sesji.
+        
+        Args:
+            name: Nazwa sesji do walidacji
+            
+        Returns:
+            True jeśli nazwa jest prawidłowa
+        """
+        # Minimalna długość: 1 znak
+        if not name or len(name) < 1:
+            return False
+
+        # Maksymalna długość: 31 znaków
+        if len(name) > 31:
+            return False
+
+        # Dozwolone znaki: litery (a-z, A-Z), cyfry (0-9), spacje, podkreślenia (_), myślniki (-)
+        allowed_pattern = r'^[a-zA-Z0-9 _-]+$'
+        if not re.match(allowed_pattern, name):
+            return False
+
+        return True
     
     def _auto_loop(self, serial_handler):
         """Worker loop for auto-measure.

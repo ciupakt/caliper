@@ -119,13 +119,41 @@ function applyCalibrationOffset() {
     });
 }
 
+/**
+ * Walidacja nazwy sesji
+ * @param {string} name - Nazwa sesji do walidacji
+ * @returns {boolean} - true jeśli nazwa jest prawidłowa
+ */
+function validateSessionName(name) {
+    // Minimalna długość: 1 znak
+    if (!name || name.length < 1) {
+        return false;
+    }
+
+    // Maksymalna długość: 31 znaków
+    if (name.length > 31) {
+        return false;
+    }
+
+    // Dozwolone znaki: litery (a-z, A-Z), cyfry (0-9), spacje, podkreślenia (_), myślniki (-)
+    const allowedChars = /^[a-zA-Z0-9 _-]+$/;
+    if (!allowedChars.test(name)) {
+        return false;
+    }
+
+    return true;
+}
+
 // Funkcje sesji pomiarowej
 function startSession() {
     const sessionName = document.getElementById('session-name-input').value;
-    if (!sessionName) {
-        alert('Podaj nazwę sesji');
+    
+    // Walidacja nazwy sesji
+    if (!validateSessionName(sessionName)) {
+        alert('Nazwa sesji jest nieprawidłowa (maks 31 znaków, dozwolone: a-z, A-Z, 0-9, spacja, _, -)');
         return;
     }
+    
     fetch('/start_session', {
         method: 'POST',
         headers: {'Content-Type': 'application/x-www-form-urlencoded'},
@@ -141,7 +169,7 @@ function startSession() {
         if (data.error) {
             document.getElementById('status').textContent = 'Błąd: ' + data.error;
         } else {
-            document.getElementById('session-name-display').textContent = sessionName;
+            document.getElementById('session-name-display').textContent = data.sessionName || sessionName;
             showView('measurement');
         }
     })

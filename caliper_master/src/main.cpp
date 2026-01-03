@@ -29,9 +29,7 @@ auto timerWorker = timer_create_default();
 String lastMeasurement = "Brak pomiaru";
 String lastBatteryVoltage = "Brak danych";
 float lastMeasurementValue = 0.0f; // Ostatnie wartości liczbowe (ułatwia logowanie / JSON)
-String currentSessionName = ""; // Session management variables
 bool measurementReady = false;
-bool sessionActive = false;
 
 void OnDataRecv(const esp_now_recv_info_t *recv_info, const uint8_t *incomingData, int len)
 {
@@ -58,6 +56,7 @@ void OnDataRecv(const esp_now_recv_info_t *recv_info, const uint8_t *incomingDat
   DEBUG_PLOT("calibrationOffset:%.3f", (double)systemStatus.calibrationOffset);
   DEBUG_PLOT("angleX:%u", (unsigned)msg.angleX);
   DEBUG_PLOT("batteryVoltage:%.3f", (double)msg.batteryVoltage);
+  DEBUG_PLOT("sessionName:%s", systemStatus.sessionName);
 
   lastMeasurement = String(systemStatus.msgSlave.measurement, 3) + " mm";
   lastBatteryVoltage = String(msg.batteryVoltage, 3) + " V";
@@ -266,29 +265,68 @@ void handleCalibrationSetOffset()
   server.send(200, "application/json", response);
 }
 
+/**
+ * @brief Walidacja nazwy sesji
+ *
+ * @param name Nazwa sesji do walidacji
+ * @return true Nazwa jest prawidłowa
+ * @return false Nazwa jest nieprawidłowa
+ */
+static bool validateSessionName(const String &name)
+{
+  // Minimalna długość: 1 znak
+  if (name.length() < 1)
+  {
+    return false;
+  }
+
+  // Maksymalna długość: 31 znaków (32 z null terminator)
+  if (name.length() > 31)
+  {
+    return false;
+  }
+
+  // Walidacja znaków: litery (a-z, A-Z), cyfry (0-9), spacje, podkreślenia (_), myślniki (-)
+  for (unsigned int i = 0; i < name.length(); i++)
+  {
+    char c = name.charAt(i);
+    if (!(isalnum((unsigned char)c) || c == ' ' || c == '_' || c == '-'))
+    {
+      return false;
+    }
+  }
+
+  return true;
+}
+
 void handleStartSession()
 {
   String sessionName = server.arg("sessionName");
   sessionName.replace("%20", " "); // Zamień spacje z URL encoding
 
-  if (sessionName.length() == 0)
+  // Walidacja nazwy sesji
+  if (!validateSessionName(sessionName))
   {
-    server.send(400, "application/json", "{\"error\":\"Nazwa sesji nie może być pusta\"}");
+    server.send(400, "application/json", "{\"error\":\"Nazwa sesji jest nieprawidłowa (maks 31 znaków, dozwolone: a-z, A-Z, 0-9, spacja, _, -)\"}");
     return;
   }
 
-  currentSessionName = sessionName;
-  sessionActive = true;
+  // Zapisz nazwę sesji do systemStatus.sessionName
+  memset(systemStatus.sessionName, 0, sizeof(systemStatus.sessionName));
+  strncpy(systemStatus.sessionName, sessionName.c_str(), sizeof(systemStatus.sessionName) - 1);
+  
+  DEBUG_I("sessionName:%s", systemStatus.sessionName);
 
-  String response = "{\"sessionName\":\"" + sessionName + "\",\"active\":true}";
+  String response = "{\"sessionName\":\"" + sessionName + "\"}";
   server.send(200, "application/json", response);
 }
 
 void handleMeasureSession()
 {
-  if (!sessionActive)
+  // Sprawdź czy sesja jest aktywna (sessionName nie jest puste)
+  if (strlen(systemStatus.sessionName) == 0)
   {
-    server.send(400, "application/json", "{\"error\":\"Sesja nieaktywna\"}");
+    server.send(400, "application/json", "{\"error\":\"Sesja nieaktywna (nie ustawiono nazwy sesji)\"}");
     return;
   }
 
@@ -300,7 +338,7 @@ void handleMeasureSession()
   const MessageSlave &m = systemStatus.msgSlave;
 
   String response = "{";
-  response += "\"sessionName\":\"" + currentSessionName + "\",";
+  response += "\"sessionName\":\"" + String(systemStatus.sessionName) + "\",";
 
   response += "\"measurementRaw\":" + String((double)m.measurement, 3) + ",";
   response += "\"calibrationOffset\":" + String((double)systemStatus.calibrationOffset, 3) + ",";
@@ -324,6 +362,8 @@ void setup()
   // Initialize system status
   memset(&systemStatus, 0, sizeof(systemStatus));
   initDefaultTxMessage();
+  
+  // sessionName jest już zainicjalizowany na pusty string przez memset
 
   // Initialize LittleFS
   if (!LittleFS.begin())
