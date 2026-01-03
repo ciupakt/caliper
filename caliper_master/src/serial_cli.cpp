@@ -73,7 +73,7 @@ static void printSerialHelp()
           "o <ms>       - Ustaw timeout (timeout)\n"
           "q <0-255>    - Ustaw motorTorque\n"
           "s <0-255>    - Ustaw motorSpeed\n"
-          "r <0-3>      - Ustaw motorState i wyślij CMD_MOTORTEST (T)\n"
+          "r <0-3>      - Ustaw motorState (0=STOP, 1=FORWARD, 2=REVERSE, 3=BRAKE)\n"
           "t            - Wyślij CMD_MOTORTEST (T) z bieżącymi ustawieniami\n"
           "c <±14.999>  - Ustaw calibrationOffset (mm) na Master (bez wyzwalania pomiaru)\n"
           "h/?          - Wyświetl tę pomoc\n"
@@ -253,10 +253,6 @@ bool SerialCli_tick(void *arg)
 
       // Ujednolicamy kanał dla GUI (DEBUG_PLOT) — GUI może od razu zaktualizować stan.
       DEBUG_PLOT("motorState:%u", (unsigned)g_ctx.systemStatus->msgMaster.motorState);
-      if (g_ctx.sendMotorTest)
-      {
-        g_ctx.sendMotorTest();
-      }
       break;
 
     case 't':

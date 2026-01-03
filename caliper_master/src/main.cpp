@@ -49,6 +49,7 @@ void OnDataRecv(const esp_now_recv_info_t *recv_info, const uint8_t *incomingDat
   systemStatus.msgSlave = msg;
   lastMeasurementValue = systemStatus.msgSlave.measurement;
 
+  DEBUG_I("ODEBRANO DANE OD SLAVE");
   DEBUG_I("command:%c", (char)systemStatus.msgSlave.command);
   DEBUG_I("timestamp:%u", (unsigned)systemStatus.msgSlave.timestamp);
 

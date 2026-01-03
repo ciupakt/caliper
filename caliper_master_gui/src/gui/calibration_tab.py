@@ -7,7 +7,7 @@ Zawiera:
   - motorTorque (0-255) - komenda UART: q <0-255>
   - motorSpeed (0-255) - komenda UART: s <0-255>
   - motorState (0-3) - komenda UART: r <0-3> (combo box z enum MotorState)
-  - Test silnika - komenda UART: t
+  - Test silnika - komenda UART: r <state> + t (przycisk "Motortest")
 - Kalibrację lokalną Mastera (calibrationOffset)
 - Dwa obszary logów: komunikacja serial i logi aplikacji
 
@@ -20,11 +20,15 @@ Enum MotorState:
 UWAGA: tagi kontrolek są używane przez `CaliperGUI.process_measurement_data()` do
 odświeżania pól podglądu (surowy/offset/skorygowany) oraz pól konfiguracyjnych
 (timeout, motorTorque, motorSpeed, motorState).
+
+KOMENDA 'r': jest wysyłana tylko po wciśnięciu przycisku "Motortest".
+Przycisk "Zastosuj" wysyła tylko komendy o, q, s (bez r).
 """
 
 import dearpygui.dearpygui as dpg
 from collections import deque
 import time
+from datetime import datetime
 
 
 class CalibrationTab:
@@ -107,8 +111,6 @@ class CalibrationTab:
                             user_data=serial_handler,
                         )
                     dpg.add_spacer(height=5)
-                    dpg.add_text("Komendy UART: o <ms>, q <0-255>, s <0-255>, r <0-3>, t", color=(150, 150, 150))
-                    dpg.add_text("motorState: 0=STOP, 1=FORWARD, 2=REVERSE, 3=BRAKE", color=(150, 150, 150))
 
                 dpg.add_spacer(width=30)
 
@@ -197,14 +199,16 @@ class CalibrationTab:
                     dpg.bind_item_handler_registry("cal_app_log", dpg.last_container())
 
     def add_serial_log(self, line: str):
-        """Add a line to the serial log"""
-        self.serial_log_lines.append(line)
+        """Add a line to the serial log with timestamp"""
+        timestamp = datetime.now().strftime("[%H:%M:%S.%f]")[:-3]  # [HH:MM:SS.mmm]
+        self.serial_log_lines.append(f"{timestamp} {line}")
         if dpg.does_item_exist("cal_serial_log"):
             dpg.set_value("cal_serial_log", "\n".join(list(self.serial_log_lines)))
 
     def add_app_log(self, line: str):
-        """Add a line to the app log"""
-        self.app_log_lines.append(line)
+        """Add a line to the app log with timestamp"""
+        timestamp = datetime.now().strftime("[%H:%M:%S.%f]")[:-3]  # [HH:MM:SS.mmm]
+        self.app_log_lines.append(f"{timestamp} {line}")
         if dpg.does_item_exist("cal_app_log"):
             dpg.set_value("cal_app_log", "\n".join(list(self.app_log_lines)))
 
@@ -271,7 +275,7 @@ class CalibrationTab:
             self._set_status(f"Wysłano: c {val:.3f} (zastosuj offset)")
 
     def _apply_measurement_config(self, sender, app_data, user_data):
-        """Apply msgMaster config fields on Master via UART commands: o/q/s/r."""
+        """Apply msgMaster config fields on Master via UART commands: o/q/s."""
         serial_handler = user_data
 
         try:
@@ -300,17 +304,28 @@ class CalibrationTab:
             return
         self._safe_write(serial_handler, f"q {torque}")
         self._safe_write(serial_handler, f"s {speed}")
-        self._safe_write(serial_handler, f"r {state}")
 
-        self._set_status(f"Wysłano: o {timeout_ms}, q {torque}, s {speed}, r {state}")
+        self._set_status(f"Wysłano: o {timeout_ms}, q {torque}, s {speed}")
 
     def _send_motortest(self, sender, app_data, user_data):
-        """Send motor test command via UART: t."""
+        """Send motor test command via UART: r <state> i t."""
         serial_handler = user_data
-        if self._safe_write(serial_handler, "t"):
-            if dpg.does_item_exist("status"):
-                dpg.set_value("status", "Wysłano: t")
-            self.add_app_log("[GUI] Wysłano: t")
+        
+        try:
+            # Parsowanie motorState z combo boxa (format: "MOTOR_STOP (0)")
+            state_str = dpg.get_value("tx_state_input")
+            state = int(state_str.split("(")[-1].rstrip(")"))
+        except Exception:
+            self._set_status("BŁĄD: Nieprawidłowa wartość motorState")
+            return
+        
+        state = self._clamp_int(state, 0, 3)
+        
+        # Wysyłamy komendę r <state> przed testem silnika
+        if self._safe_write(serial_handler, f"r {state}"):
+            self._set_status(f"Wysłano: r {state}, t")
+            self.add_app_log(f"[GUI] Wysłano: r {state}, t")
+            self._safe_write(serial_handler, "t")
 
     def _on_log_clicked(self, sender, app_data, user_data):
         """Handle double click on log areas - clear logs on double click"""

@@ -242,6 +242,10 @@ class MeasurementTab:
             except Exception:
                 pass
 
+    def _clamp_int(self, value: int, min_val: int, max_val: int) -> int:
+        """Clamp integer value to specified range."""
+        return max(min_val, min(value, max_val))
+    
     def _auto_loop(self, serial_handler):
         """Worker loop for auto-measure.
 
