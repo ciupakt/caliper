@@ -6,6 +6,7 @@
 
 #include <MacroDebugger.h>
 #include <shared_common.h>
+#include "preferences_manager.h"
 
 bool parseIntStrict(const String &s, long &out)
 {
@@ -201,6 +202,12 @@ bool SerialCli_tick(void *arg)
       g_ctx.systemStatus->msgMaster.timeout = (uint32_t)val;
       DEBUG_I("tx.timeout:%u", (unsigned)g_ctx.systemStatus->msgMaster.timeout);
 
+      // Zapisz do Preferences
+      if (g_ctx.prefsManager != nullptr)
+      {
+        g_ctx.prefsManager->saveTimeout((uint32_t)val);
+      }
+
       // Ujednolicamy kanał dla GUI (DEBUG_PLOT) — GUI może od razu zaktualizować stan.
       DEBUG_PLOT("timeout:%u", (unsigned)g_ctx.systemStatus->msgMaster.timeout);
       break;
@@ -229,6 +236,12 @@ bool SerialCli_tick(void *arg)
       g_ctx.systemStatus->calibrationOffset = fval;
       DEBUG_I("calibrationOffset:%.3f", (double)g_ctx.systemStatus->calibrationOffset);
 
+      // Zapisz do Preferences
+      if (g_ctx.prefsManager != nullptr)
+      {
+        g_ctx.prefsManager->saveCalibrationOffset(fval);
+      }
+
       // Ujednolicamy kanał dla GUI (DEBUG_PLOT) — GUI może od razu zaktualizować stan.
       DEBUG_PLOT("calibrationOffset:%.3f", (double)g_ctx.systemStatus->calibrationOffset);
       break;
@@ -250,6 +263,12 @@ bool SerialCli_tick(void *arg)
       g_ctx.systemStatus->msgMaster.motorTorque = (uint8_t)val;
       DEBUG_I("tx.motorTorque:%u", (unsigned)g_ctx.systemStatus->msgMaster.motorTorque);
 
+      // Zapisz do Preferences
+      if (g_ctx.prefsManager != nullptr)
+      {
+        g_ctx.prefsManager->saveMotorTorque((uint8_t)val);
+      }
+
       // Ujednolicamy kanał dla GUI (DEBUG_PLOT) — GUI może od razu zaktualizować stan.
       DEBUG_PLOT("motorTorque:%u", (unsigned)g_ctx.systemStatus->msgMaster.motorTorque);
       break;
@@ -270,6 +289,12 @@ bool SerialCli_tick(void *arg)
 
       g_ctx.systemStatus->msgMaster.motorSpeed = (uint8_t)val;
       DEBUG_I("tx.motorSpeed:%u", (unsigned)g_ctx.systemStatus->msgMaster.motorSpeed);
+
+      // Zapisz do Preferences
+      if (g_ctx.prefsManager != nullptr)
+      {
+        g_ctx.prefsManager->saveMotorSpeed((uint8_t)val);
+      }
 
       // Ujednolicamy kanał dla GUI (DEBUG_PLOT) — GUI może od razu zaktualizować stan.
       DEBUG_PLOT("motorSpeed:%u", (unsigned)g_ctx.systemStatus->msgMaster.motorSpeed);

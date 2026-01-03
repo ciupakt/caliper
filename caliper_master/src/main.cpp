@@ -8,6 +8,7 @@
 #include <arduino-timer.h>
 #include "communication.h"
 #include "serial_cli.h"
+#include "preferences_manager.h"
 
 // Slave device MAC address (defined in config.h)
 uint8_t slaveAddress[] = SLAVE_MAC_ADDR;
@@ -15,6 +16,7 @@ uint8_t slaveAddress[] = SLAVE_MAC_ADDR;
 WebServer server(WEB_SERVER_PORT);
 CommunicationManager commManager;
 SystemStatus systemStatus;
+PreferencesManager prefsManager;
 
 // Ujednolicona wysyłka: Master → Slave zawsze wysyła pełną strukturę MessageMaster
 static constexpr uint8_t DEFAULT_MOTOR_SPEED = 100;
@@ -335,6 +337,13 @@ void handleMeasureSession()
   // Poczekaj na wynik
   (void)waitForMeasurementReady(calcMeasurementWaitTimeoutMs());
 
+  // Sprawdź czy dane są gotowe przed użyciem
+  if (!measurementReady)
+  {
+    server.send(504, "application/json", "{\"error\":\"Brak odpowiedzi z urządzenia\"}");
+    return;
+  }
+
   const MessageSlave &m = systemStatus.msgSlave;
 
   String response = "{";
@@ -346,7 +355,7 @@ void handleMeasureSession()
   // (opcjonalne) pole pomocnicze dla UI/debug
   response += "\"measurementCorrected\":" + String((double)(m.measurement + systemStatus.calibrationOffset), 3) + ",";
 
-  response += "\"valid\":" + String(measurementReady ? "true" : "false") + ",";
+  response += "\"valid\":true,";
   response += "\"batteryVoltage\":" + String(m.batteryVoltage, 3) + ",";
   response += "\"angleX\":" + String((unsigned)m.angleX);
   response += "}";
@@ -361,7 +370,24 @@ void setup()
 
   // Initialize system status
   memset(&systemStatus, 0, sizeof(systemStatus));
-  initDefaultTxMessage();
+  
+  // Initialize Preferences Manager and load settings
+  if (!prefsManager.begin())
+  {
+    DEBUG_W("PreferencesManager initialization failed, using default values");
+    initDefaultTxMessage();
+  }
+  else
+  {
+    // Load settings from NVS
+    prefsManager.loadSettings(&systemStatus);
+    
+    // Ensure motorState is set to default (not stored in Preferences)
+    systemStatus.msgMaster.motorState = DEFAULT_MOTOR_STATE;
+    
+    // Ensure calibrationOffset is initialized if not loaded
+    // (loadSettings handles this with default value)
+  }
   
   // sessionName jest już zainicjalizowany na pusty string przez memset
 
@@ -429,6 +455,7 @@ void setup()
 
   SerialCliContext cliCtx;
   cliCtx.systemStatus = &systemStatus;
+  cliCtx.prefsManager = &prefsManager;
   cliCtx.requestMeasurement = requestMeasurement;
   cliCtx.requestUpdate = requestUpdate;
   cliCtx.sendMotorTest = sendMotorTest;

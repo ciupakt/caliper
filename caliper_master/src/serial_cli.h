@@ -8,12 +8,14 @@ bool parseIntStrict(const String &s, long &out);
 bool parseFloatStrict(const String &s, float &out);
 
 struct SystemStatus;
+class PreferencesManager;
 
 // Minimalny kontekst wymagany przez parser komend po Serial.
 // Dzięki temu `main.cpp` pozostaje czytelny, a moduł nie musi znać WebServera.
 struct SerialCliContext
 {
   SystemStatus *systemStatus = nullptr;
+  PreferencesManager *prefsManager = nullptr;
 
   // Akcje (implementowane w main.cpp)
   void (*requestMeasurement)() = nullptr;
