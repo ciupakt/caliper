@@ -110,6 +110,13 @@ class CalibrationTab:
                             height=30,
                             user_data=serial_handler,
                         )
+                        dpg.add_button(
+                            label="Odśwież ustawienia",
+                            callback=self._refresh_settings,
+                            width=150,
+                            height=30,
+                            user_data=serial_handler,
+                        )
                     dpg.add_spacer(height=5)
 
                 dpg.add_spacer(width=30)
@@ -326,6 +333,14 @@ class CalibrationTab:
             self._set_status(f"Wysłano: r {state}, t")
             self.add_app_log(f"[GUI] Wysłano: r {state}, t")
             self._safe_write(serial_handler, "t")
+
+    def _refresh_settings(self, sender, app_data, user_data):
+        """Refresh all settings from Master via UART command 'g'."""
+        serial_handler = user_data
+        
+        if self._safe_write(serial_handler, "g"):
+            self._set_status("Wysłano: g (odśwież ustawienia)")
+            self.add_app_log("[GUI] Wysłano: g (odśwież ustawienia)")
 
     def _on_log_clicked(self, sender, app_data, user_data):
         """Handle double click on log areas - clear logs on double click"""

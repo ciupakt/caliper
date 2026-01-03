@@ -76,6 +76,7 @@ static void printSerialHelp()
           "r <0-3>      - Ustaw motorState (0=STOP, 1=FORWARD, 2=REVERSE, 3=BRAKE)\n"
           "t            - Wyślij CMD_MOTORTEST (T) z bieżącymi ustawieniami\n"
           "c <±14.999>  - Ustaw calibrationOffset (mm) na Master (bez wyzwalania pomiaru)\n"
+          "g            - Odśwież ustawienia (wyślij wszystkie aktualne wartości)\n"
           "h/?          - Wyświetl tę pomoc\n"
           "=====================================\n");
 }
@@ -260,6 +261,15 @@ bool SerialCli_tick(void *arg)
       {
         g_ctx.sendMotorTest();
       }
+      break;
+
+    case 'g':
+      // Wyślij wszystkie aktualne ustawienia przez DEBUG_PLOT
+      DEBUG_PLOT("calibrationOffset:%.3f", (double)g_ctx.systemStatus->calibrationOffset);
+      DEBUG_PLOT("timeout:%u", (unsigned)g_ctx.systemStatus->msgMaster.timeout);
+      DEBUG_PLOT("motorTorque:%u", (unsigned)g_ctx.systemStatus->msgMaster.motorTorque);
+      DEBUG_PLOT("motorSpeed:%u", (unsigned)g_ctx.systemStatus->msgMaster.motorSpeed);
+      DEBUG_PLOT("motorState:%u", (unsigned)g_ctx.systemStatus->msgMaster.motorState);
       break;
 
     case 'h':
