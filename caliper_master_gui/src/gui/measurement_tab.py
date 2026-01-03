@@ -293,12 +293,12 @@ class MeasurementTab:
         return True
 
     def _apply_calibration_offset(self, sender, app_data, user_data):
-        """Apply localCalibrationOffset on Master via UART command: c <±14.999>."""
+        """Apply calibrationOffset on Master via UART command: c <±14.999>."""
         serial_handler = user_data
         try:
             val = float(dpg.get_value("cal_offset_input"))
         except Exception:
-            dpg.set_value("status", "ERR: Invalid localCalibrationOffset")
+            dpg.set_value("status", "ERR: Invalid calibrationOffset")
             return
 
         val = self._clamp_float(val, -14.999, 14.999)

@@ -88,8 +88,8 @@ struct SystemStatus
 
   // Offset kalibracji utrzymywany lokalnie na Master.
   // UI (WWW/GUI) wysyła go osobno, a korekcja jest liczona po stronie klienta:
-  // corrected = msgSlave.measurement + localCalibrationOffset
-  float localCalibrationOffset;
+  // corrected = msgSlave.measurement + calibrationOffset
+  float calibrationOffset;
 };
 
 #endif // CALIPER_MASTER

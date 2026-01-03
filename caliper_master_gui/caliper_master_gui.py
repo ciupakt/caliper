@@ -80,28 +80,6 @@ class CaliperGUI:
 
                 return
 
-            # --- Sesja pomiarowa (wysyłane przez DEBUG_PLOT w handleMeasureSession)
-            # Format: measurementReady:<session_name> <value>
-            if data.startswith("measurementReady:"):
-                rest = data.split(":", 1)[1].strip()
-                if rest:
-                    # sesja może mieć spacje, więc tniemy po OSTATNIEJ spacji (wartość jest na końcu)
-                    if " " in rest:
-                        session_name, val_str = rest.rsplit(" ", 1)
-                        session_name = session_name.strip()
-                        val_str = val_str.strip()
-                        if session_name and val_str:
-                            self.log_tab.add_log(f"[SESJA {session_name}] Pomiar: {val_str} mm")
-
-                            if self.csv_handler.is_open():
-                                ts = datetime.now().isoformat(timespec="seconds")
-                                measurement_str = f"{val_str} mm"
-                                if self.measurement_tab.include_timestamp:
-                                    self.csv_handler.write_row([ts, f"[{session_name}] {measurement_str}"])
-                                else:
-                                    self.csv_handler.write_row([f"[{session_name}] {measurement_str}"])
-                return
-
             # --- Pomiar (wysyłane przez DEBUG_PLOT w OnDataRecv)
             # Firmware Master wysyła surowy pomiar jako `measurement:`.
             # GUI liczy korekcję po swojej stronie:
@@ -161,6 +139,63 @@ class CaliperGUI:
                 self.log_tab.add_log(f"[BATERIA] {voltage_str} V")
                 return
 
+            # --- Konfiguracja pomiaru (wysyłane przez DEBUG_PLOT przy zmianie o/q/s/r)
+            if data.startswith("timeout:"):
+                val_str = data.split(":", 1)[1].strip()
+                try:
+                    timeout_val = int(val_str)
+                    self.log_tab.add_log(f"[KONFIG] timeout: {timeout_val} ms")
+                    # Odświeżamy UI kalibracji (jeśli istnieje)
+                    try:
+                        if dpg.does_item_exist("tx_timeout_input"):
+                            dpg.set_value("tx_timeout_input", timeout_val)
+                    except Exception:
+                        pass
+                except Exception:
+                    self.log_tab.add_log(f"[KONFIG] timeout (parse err): {val_str}")
+                return
+
+            if data.startswith("motorTorque:"):
+                val_str = data.split(":", 1)[1].strip()
+                try:
+                    torque_val = int(val_str)
+                    self.log_tab.add_log(f"[KONFIG] motorTorque: {torque_val}")
+                    # Odświeżamy UI kalibracji (jeśli istnieje)
+                    try:
+                        if dpg.does_item_exist("tx_torque_input"):
+                            dpg.set_value("tx_torque_input", torque_val)
+                    except Exception:
+                        pass
+                except Exception:
+                    self.log_tab.add_log(f"[KONFIG] motorTorque (parse err): {val_str}")
+                return
+
+            if data.startswith("motorSpeed:"):
+                val_str = data.split(":", 1)[1].strip()
+                try:
+                    speed_val = int(val_str)
+                    self.log_tab.add_log(f"[KONFIG] motorSpeed: {speed_val}")
+                    # Odświeżamy UI kalibracji (jeśli istnieje)
+                    try:
+                        if dpg.does_item_exist("tx_speed_input"):
+                            dpg.set_value("tx_speed_input", speed_val)
+                    except Exception:
+                        pass
+                except Exception:
+                    self.log_tab.add_log(f"[KONFIG] motorSpeed (parse err): {val_str}")
+                return
+
+            if data.startswith("motorState:"):
+                val_str = data.split(":", 1)[1].strip()
+                try:
+                    state_val = int(val_str)
+                    state_names = {0: "STOP", 1: "FORWARD", 2: "REVERSE", 3: "BRAKE"}
+                    state_name = state_names.get(state_val, f"UNKNOWN({state_val})")
+                    self.log_tab.add_log(f"[KONFIG] motorState: {state_name} ({state_val})")
+                except Exception:
+                    self.log_tab.add_log(f"[KONFIG] motorState (parse err): {val_str}")
+                return
+
             # Inne (nie-plot) linie zostawiamy jako log (np. SILNIK)
             if "SILNIK" in data.upper() or "blad silnika" in data.lower():
                 self.log_tab.add_log(f"[SILNIK] {data}")
@@ -184,7 +219,10 @@ class CaliperGUI:
                 "angleX:",
                 "batteryVoltage:",
                 "calibrationOffset:",
-                "measurementReady:",
+                "timeout:",
+                "motorTorque:",
+                "motorSpeed:",
+                "motorState:",
             )
         ):
             self.process_measurement_data(payload)

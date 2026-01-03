@@ -17,15 +17,15 @@ CommunicationManager commManager;
 SystemStatus systemStatus;
 
 // Ujednolicona wysyłka: Master → Slave zawsze wysyła pełną strukturę MessageMaster
-static constexpr uint8_t DEFAULT_MOTOR_SPEED = 255;
-static constexpr uint8_t DEFAULT_MOTOR_TORQUE = 0;
+static constexpr uint8_t DEFAULT_MOTOR_SPEED = 100;
+static constexpr uint8_t DEFAULT_MOTOR_TORQUE = 100;
 static constexpr MotorState DEFAULT_MOTOR_STATE = MOTOR_STOP;
-static constexpr uint32_t DEFAULT_TIMEOUT_MS = 0;
+static constexpr uint32_t DEFAULT_TIMEOUT_MS = 1000;
 
 auto timerWorker = timer_create_default();
 
 // Global variables
-// Offset kalibracji (mm) jest utrzymywany w systemStatus.localCalibrationOffset
+// Offset kalibracji (mm) jest utrzymywany w systemStatus.calibrationOffset
 String lastMeasurement = "Brak pomiaru";
 String lastBatteryVoltage = "Brak danych";
 float lastMeasurementValue = 0.0f; // Ostatnie wartości liczbowe (ułatwia logowanie / JSON)
@@ -55,7 +55,7 @@ void OnDataRecv(const esp_now_recv_info_t *recv_info, const uint8_t *incomingDat
   // UI (WWW/GUI) liczy korekcję po swojej stronie:
   // corrected = measurement + calibrationOffset
   DEBUG_PLOT("measurement:%.3f", (double)systemStatus.msgSlave.measurement);
-  DEBUG_PLOT("calibrationOffset:%.3f", (double)systemStatus.localCalibrationOffset);
+  DEBUG_PLOT("calibrationOffset:%.3f", (double)systemStatus.calibrationOffset);
   DEBUG_PLOT("angleX:%u", (unsigned)msg.angleX);
   DEBUG_PLOT("batteryVoltage:%.3f", (double)msg.batteryVoltage);
 
@@ -212,7 +212,7 @@ void handleRead()
 
 // --- Kalibracja (WWW)
 // 1) POST /api/calibration/measure  -> robi pomiar i zwraca measurementRaw + calibrationOffset
-// 2) POST /api/calibration/offset  -> ustawia localCalibrationOffset (bez wyzwalania pomiaru)
+// 2) POST /api/calibration/offset  -> ustawia calibrationOffset (bez wyzwalania pomiaru)
 
 void handleCalibrationMeasure()
 {
@@ -228,7 +228,7 @@ void handleCalibrationMeasure()
   }
 
   const float raw = systemStatus.msgSlave.measurement;
-  const float offset = systemStatus.localCalibrationOffset;
+  const float offset = systemStatus.calibrationOffset;
 
   String response = "{";
   response += "\"success\":true,";
@@ -256,12 +256,12 @@ void handleCalibrationSetOffset()
     return;
   }
 
-  systemStatus.localCalibrationOffset = offsetValue;
-  DEBUG_I("calibrationOffset:%.3f", (double)systemStatus.localCalibrationOffset);
+  systemStatus.calibrationOffset = offsetValue;
+  DEBUG_I("calibrationOffset:%.3f", (double)systemStatus.calibrationOffset);
 
   String response = "{";
   response += "\"success\":true,";
-  response += "\"calibrationOffset\":" + String((double)systemStatus.localCalibrationOffset, 3);
+  response += "\"calibrationOffset\":" + String((double)systemStatus.calibrationOffset, 3);
   response += "}";
 
   server.send(200, "application/json", response);
@@ -300,24 +300,14 @@ void handleMeasureSession()
 
   const MessageSlave &m = systemStatus.msgSlave;
 
-  // Sesja: wysyłamy surowy pomiar + offset, a klient (WWW/GUI) liczy korekcję.
-  if (measurementReady)
-  {
-    const float raw = m.measurement;
-    const float offset = systemStatus.localCalibrationOffset;
-    const float corrected = raw + offset;
-
-    DEBUG_PLOT("measurementReady:%s %.3f", currentSessionName.c_str(), (double)corrected);
-  }
-
   String response = "{";
   response += "\"sessionName\":\"" + currentSessionName + "\",";
 
   response += "\"measurementRaw\":" + String((double)m.measurement, 3) + ",";
-  response += "\"calibrationOffset\":" + String((double)systemStatus.localCalibrationOffset, 3) + ",";
+  response += "\"calibrationOffset\":" + String((double)systemStatus.calibrationOffset, 3) + ",";
 
   // (opcjonalne) pole pomocnicze dla UI/debug
-  response += "\"measurementCorrected\":" + String((double)(m.measurement + systemStatus.localCalibrationOffset), 3) + ",";
+  response += "\"measurementCorrected\":" + String((double)(m.measurement + systemStatus.calibrationOffset), 3) + ",";
 
   response += "\"valid\":" + String(measurementReady ? "true" : "false") + ",";
   response += "\"timestamp\":" + String((unsigned)m.timestamp) + ",";

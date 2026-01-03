@@ -3,7 +3,7 @@ Calibration Tab GUI Component for Caliper Master GUI
 
 Zawiera:
 - Konfigurację parametrów pomiaru (msgMaster.* wysyłane po UART)
-- Kalibrację lokalną Mastera (localCalibrationOffset)
+- Kalibrację lokalną Mastera (calibrationOffset)
 
 UWAGA: tagi kontrolek są celowo takie same jak wcześniej w `MeasurementTab`, bo:
 - `CaliperGUI.process_measurement_data()` odświeża `cal_offset_input` oraz pola podglądu (surowy/offset/skorygowany)
@@ -32,7 +32,7 @@ class CalibrationTab:
                     dpg.add_spacer(height=5)
 
                     dpg.add_input_int(
-                        label="msgMaster.timeout (ms)",
+                        label="timeout (ms)",
                         tag="tx_timeout_input",
                         default_value=0,
                         min_value=0,
@@ -40,7 +40,7 @@ class CalibrationTab:
                         width=220,
                     )
                     dpg.add_input_int(
-                        label="msgMaster.motorTorque (0-255)",
+                        label="motorTorque (0-255)",
                         tag="tx_torque_input",
                         default_value=0,
                         min_value=0,
@@ -48,7 +48,7 @@ class CalibrationTab:
                         width=220,
                     )
                     dpg.add_input_int(
-                        label="msgMaster.motorSpeed (0-255)",
+                        label="motorSpeed (0-255)",
                         tag="tx_speed_input",
                         default_value=255,
                         min_value=0,
@@ -81,7 +81,7 @@ class CalibrationTab:
                     dpg.add_spacer(height=5)
 
                     dpg.add_input_float(
-                        label="localCalibrationOffset (mm)",
+                        label="calibrationOffset (mm)",
                         tag="cal_offset_input",
                         default_value=0.0,
                         min_value=-14.999,
@@ -163,7 +163,7 @@ class CalibrationTab:
         try:
             val = float(dpg.get_value("cal_offset_input"))
         except Exception:
-            self._set_status("BŁĄD: Nieprawidłowy localCalibrationOffset")
+            self._set_status("BŁĄD: Nieprawidłowy calibrationOffset")
             return
 
         val = self._clamp_float(val, -14.999, 14.999)

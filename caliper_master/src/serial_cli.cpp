@@ -70,12 +70,12 @@ static void printSerialHelp()
   DEBUG_I("\n=== DOSTĘPNE KOMENDY SERIAL (UART) ===\n"
           "m            - Wyślij do slave: CMD_MEASURE (M)\n"
           "u            - Wyślij do slave: CMD_UPDATE (U)\n"
-          "o <ms>       - Ustaw msgMaster.timeout (timeout)\n"
-          "q <0-255>    - Ustaw msgMaster.motorTorque\n"
-          "s <0-255>    - Ustaw msgMaster.motorSpeed\n"
-          "r <0-3>      - Ustaw msgMaster.motorState i wyślij CMD_MOTORTEST (T)\n"
-          "t            - Wyślij CMD_MOTORTEST (T) z bieżących pól msgMaster\n"
-          "c <±14.999>  - Ustaw localCalibrationOffset (mm) na Master (bez wyzwalania pomiaru)\n"
+          "o <ms>       - Ustaw timeout (timeout)\n"
+          "q <0-255>    - Ustaw motorTorque\n"
+          "s <0-255>    - Ustaw motorSpeed\n"
+          "r <0-3>      - Ustaw motorState i wyślij CMD_MOTORTEST (T)\n"
+          "t            - Wyślij CMD_MOTORTEST (T) z bieżącymi ustawieniami\n"
+          "c <±14.999>  - Ustaw calibrationOffset (mm) na Master (bez wyzwalania pomiaru)\n"
           "h/?          - Wyświetl tę pomoc\n"
           "=====================================\n");
 }
@@ -159,6 +159,9 @@ bool SerialCli_tick(void *arg)
 
       g_ctx.systemStatus->msgMaster.timeout = (uint32_t)val;
       DEBUG_I("tx.timeout:%u", (unsigned)g_ctx.systemStatus->msgMaster.timeout);
+
+      // Ujednolicamy kanał dla GUI (DEBUG_PLOT) — GUI może od razu zaktualizować stan.
+      DEBUG_PLOT("timeout:%u", (unsigned)g_ctx.systemStatus->msgMaster.timeout);
       break;
 
     case 'u':
@@ -182,11 +185,11 @@ bool SerialCli_tick(void *arg)
         break;
       }
 
-      g_ctx.systemStatus->localCalibrationOffset = fval;
-      DEBUG_I("localCalibrationOffset:%.3f", (double)g_ctx.systemStatus->localCalibrationOffset);
+      g_ctx.systemStatus->calibrationOffset = fval;
+      DEBUG_I("calibrationOffset:%.3f", (double)g_ctx.systemStatus->calibrationOffset);
 
       // Ujednolicamy kanał dla GUI (DEBUG_PLOT) — GUI może od razu zaktualizować stan.
-      DEBUG_PLOT("calibrationOffset:%.3f", (double)g_ctx.systemStatus->localCalibrationOffset);
+      DEBUG_PLOT("calibrationOffset:%.3f", (double)g_ctx.systemStatus->calibrationOffset);
       break;
 
     case 'q':
@@ -205,6 +208,9 @@ bool SerialCli_tick(void *arg)
 
       g_ctx.systemStatus->msgMaster.motorTorque = (uint8_t)val;
       DEBUG_I("tx.motorTorque:%u", (unsigned)g_ctx.systemStatus->msgMaster.motorTorque);
+
+      // Ujednolicamy kanał dla GUI (DEBUG_PLOT) — GUI może od razu zaktualizować stan.
+      DEBUG_PLOT("motorTorque:%u", (unsigned)g_ctx.systemStatus->msgMaster.motorTorque);
       break;
 
     case 's':
@@ -223,6 +229,9 @@ bool SerialCli_tick(void *arg)
 
       g_ctx.systemStatus->msgMaster.motorSpeed = (uint8_t)val;
       DEBUG_I("tx.motorSpeed:%u", (unsigned)g_ctx.systemStatus->msgMaster.motorSpeed);
+
+      // Ujednolicamy kanał dla GUI (DEBUG_PLOT) — GUI może od razu zaktualizować stan.
+      DEBUG_PLOT("motorSpeed:%u", (unsigned)g_ctx.systemStatus->msgMaster.motorSpeed);
       break;
 
     case 'r':
@@ -241,6 +250,9 @@ bool SerialCli_tick(void *arg)
 
       g_ctx.systemStatus->msgMaster.motorState = (MotorState)val;
       DEBUG_I("tx.motorState:%u", (unsigned)g_ctx.systemStatus->msgMaster.motorState);
+
+      // Ujednolicamy kanał dla GUI (DEBUG_PLOT) — GUI może od razu zaktualizować stan.
+      DEBUG_PLOT("motorState:%u", (unsigned)g_ctx.systemStatus->msgMaster.motorState);
       if (g_ctx.sendMotorTest)
       {
         g_ctx.sendMotorTest();
