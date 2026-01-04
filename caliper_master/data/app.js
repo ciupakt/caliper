@@ -23,7 +23,7 @@ function renderCalibrationMeasurement() {
 
     const raw = lastCalibrationRaw;
     const offset = lastCalibrationOffset;
-    const corrected = (Number.isFinite(raw) && Number.isFinite(offset)) ? (raw + offset) : NaN;
+    const corrected = (Number.isFinite(raw) && Number.isFinite(offset)) ? (raw < 0 ? (raw + offset) : (raw - offset)) : NaN;
 
     const offsetLabel = offsetJustApplied ? 'Aktualny offset (ustawiono):' : 'Aktualny offset:';
 
@@ -209,7 +209,7 @@ function measureSession() {
 
         const raw = Number(data.measurementRaw);
         const offset = Number(data.calibrationOffset);
-        const corrected = (Number.isFinite(raw) && Number.isFinite(offset)) ? (raw + offset) : NaN;
+        const corrected = (Number.isFinite(raw) && Number.isFinite(offset)) ? (raw < 0 ? (raw + offset) : (raw - offset)) : NaN;
 
         document.getElementById('measurement-value').textContent = Number.isFinite(corrected)
             ? corrected.toFixed(3) + ' mm'

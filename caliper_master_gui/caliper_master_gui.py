@@ -116,7 +116,7 @@ class CaliperGUI:
 
                     # Jeśli mamy ostatni surowy pomiar, odświeżamy też skorygowany
                     if self.last_measurement_raw is not None and dpg.does_item_exist("cal_corrected_display"):
-                        corrected = float(self.last_measurement_raw) + float(self.current_calibration_offset)
+                        corrected = float(self.last_measurement_raw) + float(self.current_calibration_offset) if float(self.last_measurement_raw) < 0 else float(self.last_measurement_raw) - float(self.current_calibration_offset)
                         dpg.set_value("cal_corrected_display", f"Skorygowany: {corrected:.3f} mm")
                 except Exception:
                     pass
@@ -144,7 +144,7 @@ class CaliperGUI:
                 except Exception:
                     pass
 
-                corrected = raw + float(self.current_calibration_offset)
+                corrected = raw + float(self.current_calibration_offset) if raw < 0 else raw - float(self.current_calibration_offset)
 
                 # Odświeżamy UI kalibracji (jeśli istnieje)
                 try:
@@ -247,28 +247,28 @@ class CaliperGUI:
                 except Exception:
                     self.calibration_tab.add_app_log(f"[KONFIG] motorState (parse err): {val_str}")
                 return
-    
-                # --- Nazwa sesji (wysyłane przez DEBUG_PLOT przy zmianie nazwy sesji)
-                if data.startswith("sessionName:"):
-                    name_str = data.split(":", 1)[1].strip()
-                    self.current_session_name = name_str
-                    
-                    # Sprawdź czy nazwa jest niepusta i różna od ostatnio zapisanej
-                    if name_str and name_str != self.last_saved_session_name:
-                        self._create_new_session_from_serial(name_str)
-                    else:
-                        # Tylko loguj i aktualizuj UI bez tworzenia nowej sesji
-                        self.calibration_tab.add_app_log(f"[SESJA] Nazwa sesji: {name_str}")
-                        try:
-                            if dpg.does_item_exist("session_name_display"):
-                                dpg.set_value("session_name_display", f"Sesja: {name_str}")
-                        except Exception:
-                            pass
-                    return
-    
-                # Inne (nie-plot) linie zostawiamy jako log (np. SILNIK)
-                if "SILNIK" in data.upper() or "blad silnika" in data.lower():
-                    self.calibration_tab.add_app_log(f"[SILNIK] {data}")
+
+            # --- Nazwa sesji (wysyłane przez DEBUG_PLOT przy zmianie nazwy sesji)
+            if data.startswith("sessionName:"):
+                name_str = data.split(":", 1)[1].strip()
+                self.current_session_name = name_str
+                
+                # Sprawdź czy nazwa jest niepusta i różna od ostatnio zapisanej
+                if name_str and name_str != self.last_saved_session_name:
+                    self._create_new_session_from_serial(name_str)
+                else:
+                    # Tylko loguj i aktualizuj UI bez tworzenia nowej sesji
+                    self.calibration_tab.add_app_log(f"[SESJA] Nazwa sesji: {name_str}")
+                    try:
+                        if dpg.does_item_exist("session_name_display"):
+                            dpg.set_value("session_name_display", f"Sesja: {name_str}")
+                    except Exception:
+                        pass
+                return
+
+            # Inne (nie-plot) linie zostawiamy jako log (np. SILNIK)
+            if "SILNIK" in data.upper() or "blad silnika" in data.lower():
+                self.calibration_tab.add_app_log(f"[SILNIK] {data}")
 
         except ValueError as val_err:
             self.calibration_tab.add_app_log(f"BLAD: Nieprawidlowa wartosc - {str(val_err)}")

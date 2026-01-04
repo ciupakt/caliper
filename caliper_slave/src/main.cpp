@@ -25,7 +25,9 @@ MessageMaster msgMaster;
 MessageSlave msgSlave;
 
 bool runMeasReq(void *arg);
+bool motorStopTimeout(void *arg);
 auto timerWorker = timer_create_default();
+auto timerMotorStopTimeout = timer_create_default();
 
 /**
  * @brief Callback odbierający dane ESP-NOW od Mastera
@@ -112,6 +114,13 @@ bool updateMeasureData(void *arg)
   return false; // do not repeat this task
 }
 
+bool MotorStopTimeout(void *arg)
+{
+  motorCtrlRun(0, 0, MOTOR_STOP);
+  DEBUG_I("Silnik zatrzymany po timeout");
+  return false; // do not repeat this task
+}
+
 /**
  * @brief Callback wykonywany przy każdym żądaniu pomiaru
  *
@@ -146,12 +155,13 @@ bool runMeasReq(void *arg)
 {
   if (msgMaster.command == CMD_MEASURE)
   {
+    timerMotorStopTimeout.cancel();
     motorCtrlRun(msgMaster.motorSpeed, msgMaster.motorTorque, MOTOR_FORWARD);
     delay(msgMaster.timeout); // wait for motor to stabilize
     DEBUG_I("Czekanie %u ms na ustabilizowanie silnika...", msgMaster.timeout);
     updateMeasureData(nullptr);
     motorCtrlRun(msgMaster.motorSpeed, msgMaster.motorTorque, MOTOR_REVERSE);
-    // delay(msgMaster.timeout);
+    timerMotorStopTimeout.in(msgMaster.timeout, MotorStopTimeout);
   }
   else if (msgMaster.command == CMD_UPDATE)
   {
@@ -255,4 +265,5 @@ void setup()
 void loop()
 {
   timerWorker.tick();
+  timerMotorStopTimeout.tick();
 }
