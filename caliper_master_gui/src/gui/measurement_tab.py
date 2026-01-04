@@ -22,6 +22,7 @@ class MeasurementTab:
         self.plot_y = deque(maxlen=max_plot_points)
         self.measurement_count = 0
         self.include_timestamp = False
+        self.include_angle = False
 
         # Domyślny prefix plików CSV (zamiennik „measurement_”)
         self.csv_prefix: str = "test"
@@ -99,6 +100,7 @@ class MeasurementTab:
                     dpg.add_input_int(label="Interwał (ms)", tag="interval_ms", default_value=1000, min_value=500, enabled=False, width=150)
                     dpg.add_spacer(height=5)
                     dpg.add_checkbox(label="Dodaj znacznik czasu", callback=self._timestamp_checkbox, tag="timestamp_cb")
+                    dpg.add_checkbox(label="Dodaj znacznik kąta", callback=self._angle_checkbox, tag="angle_cb")
 
                 dpg.add_spacer(width=30)
 
@@ -340,9 +342,21 @@ class MeasurementTab:
         self.include_timestamp = app_data
         self._show_measurements()
     
-    def add_measurement(self, timestamp: str, value: str, numeric_value: float):
-        """Add a measurement to history and plot"""
-        self.meas_history.append((timestamp, value))
+    def _angle_checkbox(self, sender, app_data, user_data):
+        """Toggle angle inclusion"""
+        self.include_angle = app_data
+        self._show_measurements()
+    
+    def add_measurement(self, timestamp: str, value: str, numeric_value: float, angle: str = ""):
+        """Add a measurement to history and plot
+        
+        Args:
+            timestamp: Timestamp string
+            value: Measurement value string
+            numeric_value: Numeric value for plotting
+            angle: Angle string (optional)
+        """
+        self.meas_history.append((timestamp, value, angle))
         self.measurement_count += 1
         
         # Update plot
@@ -363,11 +377,13 @@ class MeasurementTab:
         recent_measurements = list(self.meas_history)[-200:]
         start_idx = max(1, len(self.meas_history) - len(recent_measurements) + 1)
         
-        for idx, (t, v) in enumerate(recent_measurements, start=start_idx):
+        for idx, (t, v, a) in enumerate(recent_measurements, start=start_idx):
+            parts = [v]  # Always show measurement first
+            if self.include_angle:
+                parts.append(a)
             if self.include_timestamp:
-                line = f"{idx}: {t} {v}"
-            else:
-                line = f"{idx}: {v}"
+                parts.append(t)
+            line = f"{idx}: {' '.join(parts)}"
             dpg.add_text(line, parent="meas_container")
         
         if len(self.meas_history) > 0:

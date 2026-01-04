@@ -50,22 +50,28 @@ class CSVHandler:
 
         return self.filename
     
-    def write_measurement(self, measurement: str, timestamp: Optional[str] = None):
+    def write_measurement(self, measurement: str, timestamp: Optional[str] = None, angle: Optional[str] = None):
         """Write a measurement to the CSV file
         
         Args:
             measurement: Measurement value string
-            timestamp: Optional timestamp string. If provided, the row will include timestamp.
+            timestamp: Optional timestamp string. If provided, the row will include timestamp (at the end).
                       If None, only the measurement value is written.
+            angle: Optional angle string. If provided, the row will include angle (after measurement).
         """
         if not self.writer:
             return
         
+        # Build row based on what's included
+        # Order: value, angle, timestamp
+        row = [measurement]
+        if angle is not None:
+            row.append(angle)
         if timestamp is not None:
-            ts = timestamp or datetime.now().isoformat(timespec='seconds')
-            self.writer.writerow([ts, measurement])
-        else:
-            self.writer.writerow([measurement])
+            ts = timestamp or datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            row.append(ts)
+        
+        self.writer.writerow(row)
     
     def write_row(self, row: list):
         """Write a custom row to the CSV file"""

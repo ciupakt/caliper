@@ -30,6 +30,9 @@ class CaliperGUI:
         # Stan GUI: ostatni surowy pomiar (żeby móc policzyć/odświeżyć skorygowany w zakładce Kalibracja)
         self.last_measurement_raw: float | None = None
         
+        # Stan GUI: ostatni odczytany kąt X (z akcelerometru)
+        self.last_angle: str = ""
+        
         # Stan GUI: nazwa bieżącej sesji
         self.current_session_name: str = ""
         
@@ -159,18 +162,19 @@ class CaliperGUI:
 
                 # Validate range (na wykresie/logach trzymamy skorygowaną wartość)
                 if -1000.0 <= corrected <= 1000.0:
-                    ts = datetime.now().isoformat(timespec="seconds")
-                    measurement_str = f"{corrected:.3f} mm"
-                    self.measurement_tab.add_measurement(ts, measurement_str, float(corrected))
+                    ts = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                    measurement_str = f"{corrected:.3f}"
+                    self.measurement_tab.add_measurement(ts, measurement_str, float(corrected), self.last_angle)
 
                     if self.csv_handler.is_open():
-                        self.csv_handler.write_measurement(measurement_str, ts if self.measurement_tab.include_timestamp else None)
+                        self.csv_handler.write_measurement(measurement_str, ts if self.measurement_tab.include_timestamp else None, self.last_angle if self.measurement_tab.include_angle else None)
                 else:
                     self.calibration_tab.add_app_log(f"BLAD: Wartosc poza zakresem (corrected): {corrected}")
                 return
 
             if data.startswith("angleX:"):
                 angle_str = data.split(":", 1)[1].strip()
+                self.last_angle = angle_str
                 self.calibration_tab.add_app_log(f"[ANGLE X] {angle_str}°")
                 return
 

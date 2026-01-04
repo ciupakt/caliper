@@ -140,9 +140,9 @@ static bool waitForMeasurementReady(uint32_t timeoutMs)
   // UI (WWW/GUI) liczy korekcję po swojej stronie:
   // corrected = measurement + calibrationOffset
   DEBUG_PLOT("sessionName:%s", systemStatus.sessionName);
-  DEBUG_PLOT("measurement:%.3f", (double)systemStatus.msgSlave.measurement);
   DEBUG_PLOT("calibrationOffset:%.3f", (double)systemStatus.calibrationOffset);
   DEBUG_PLOT("angleX:%u", (unsigned)systemStatus.msgSlave.angleX);
+  DEBUG_PLOT("measurement:%.3f", (double)systemStatus.msgSlave.measurement);
   DEBUG_PLOT("batteryVoltage:%.3f", (double)systemStatus.msgSlave.batteryVoltage);
 
   return true;
