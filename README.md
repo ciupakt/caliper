@@ -52,6 +52,15 @@ Projekt **Caliper** to zaawansowany system bezprzewodowego pomiaru długości op
 - **Persistent Storage** - ustawienia zapisywane w NVS (Preferences)
 - **Nazwy sesji pomiarowych** - organizacja pomiarów
 - **Offset kalibracji** - trwałe przechowywanie wartości kalibracji
+- **MeasurementState** - klasa zarządzająca stanem pomiarowym z buforami tekstowymi
+- **PreferencesManager** - menedżer ustawień z walidacją i trwałym przechowywaniem
+
+### System obsługi błędów
+- **Kompleksowy system kodów błędów** - 8 kategorii (Communication, Sensor, Motor, Power, Storage, Network, Validation, System)
+- **10 modułów źródłowych** - ESP-NOW, Serial, Caliper, Accelerometer, Motor, Battery, LittleFS, Preferences, Web Server, CLI
+- **Makra logowania** - LOG_ERROR, LOG_WARNING, LOG_INFO z automatycznym dekodowaniem
+- **ErrorHandler** - singleton do śledzenia statystyk błędów
+- **Funkcje pomocnicze ESP-NOW** - espnow_send_with_retry, espnow_add_peer_with_retry
 
 ## 🏗️ Architektura systemu
 
@@ -68,7 +77,8 @@ flowchart TD
             M_ESPNOW[ESP-NOW manager<br/>TX/RX MessageMaster/MessageSlave]
             M_SERIAL[Serial CLI<br/>komendy ASCII -> msgMaster]
             M_PREFS[Preferences Manager<br/>NVS storage]
-            M_STATE[Stan systemu<br/>ostatni pomiar, offset, status slave]
+            M_STATE[MeasurementState<br/>stan pomiarowy]
+            M_ERROR[ErrorHandler<br/>statystyki błędów]
         end
 
         subgraph S[ESP32 Slave<br/>caliper_slave]
@@ -77,6 +87,11 @@ flowchart TD
             S_ACC[ADXL345<br/>I2C]
             S_BATT[Bateria<br/>ADC]
             S_MOTOR[Silnik<br/>MP6550GG-Z]
+        end
+
+        subgraph SHARED[CaliperShared]
+            SH_ERROR[ErrorCodes<br/>8 kategorii, 10 modułów]
+            SH_HELPER[ESP-NOW Helper<br/>retry mechanism]
         end
 
         WEB[Przeglądarka<br/>Web UI]
@@ -97,6 +112,11 @@ flowchart TD
     M_PREFS --> M_STATE
     M_HTTP --> M_STATE
     M_ESPNOW --> M_STATE
+    M_ERROR --> M_STATE
+    
+    M_ESPNOW -.-> |używa| SH_HELPER
+    M_ERROR -.-> |używa| SH_ERROR
+    S_ESPNOW -.-> |używa| SH_HELPER
 ```
 
 ### Przepływ pomiaru (typowy)
@@ -107,6 +127,9 @@ sequenceDiagram
     participant GUI as GUI przez Serial
     participant WEB as Web UI przez HTTP
     participant M as ESP32 Master
+    participant EH as ErrorHandler
+    participant MS as MeasurementState
+    participant PM as PreferencesManager
     participant S as ESP32 Slave
     participant CAL as Suwmiarka
     participant ACC as ADXL345
@@ -120,13 +143,30 @@ sequenceDiagram
         WEB->>M: HTTP /measure albo /measure_session
     end
 
+    M->>PM: loadSettings()
+    PM-->>M: systemStatus (offset, motorSpeed, etc.)
+    
+    M->>MS: setMeasurementInProgress(true)
     M->>S: ESP-NOW: MessageMaster{CMD_MEASURE,...}
-    S->>CAL: odczyt danych CLK/DATA + dekodowanie
-    S->>ACC: odczyt kąta przez I2C
-    S->>BAT: ADC read
-    S-->>M: ESP-NOW: MessageSlave{measurement, angleX, batteryVoltage}
-    M-->>GUI: Serial log/plot, wartości i offset
-    M-->>WEB: JSON, raw i corrected
+    
+    alt Błąd ESP-NOW
+        S-->>M: ESP-NOW: błąd
+        M->>EH: recordError(ERR_ESPNOW_SEND_FAILED)
+        EH->>M: LOG_ERROR
+        M->>MS: setMeasurementInProgress(false)
+    else Sukces
+        S->>CAL: odczyt danych CLK/DATA + dekodowanie
+        S->>ACC: odczyt kąta przez I2C
+        S->>BAT: ADC read
+        S-->>M: ESP-NOW: MessageSlave{measurement, angleX, batteryVoltage}
+        
+        M->>MS: setMeasurement(measurement + offset)
+        M->>MS: setReady(true)
+        M->>MS: setMeasurementInProgress(false)
+        
+        M-->>GUI: Serial log/plot, wartości i offset
+        M-->>WEB: JSON, raw i corrected
+    end
 ```
 
 ### Połączenia hardware
@@ -474,6 +514,7 @@ caliper/
 │   │   ├── config.h             # Konfiguracja specyficzna dla Master
 │   │   ├── communication.h/.cpp # Menedżer komunikacji ESP-NOW
 │   │   ├── serial_cli.h/.cpp    # Interfejs wiersza poleceń
+│   │   ├── measurement_state.h/.cpp # Zarządzanie stanem pomiarowym
 │   │   └── preferences_manager.h/.cpp # Przechowywanie ustawień w NVS
 │   ├── data/                    # Pliki LittleFS (HTML/CSS/JS)
 │   │   ├── index.html
@@ -504,14 +545,19 @@ caliper/
 │   │   │   └── csv_handler.py   # Obsługa CSV
 │   │   └── gui/
 │   │       ├── calibration_tab.py # Zakładka kalibracji
-│   │       └── measurement_tab.py # Zakładka pomiarów
+│   │       ├── measurement_tab.py # Zakładka pomiarów
+│   │       └── log_tab.py         # Zakładka logów
 │   └── tests/
 │       └── test_serial.py       # Testy jednostkowe
 │
 ├── lib/CaliperShared/           # Współdzielona biblioteka
 │   ├── shared_common.h          # Wspólne definicje typów/struktur
 │   ├── shared_config.h          # Wspólna konfiguracja (piny, stałe)
-│   └── MacroDebugger.h          # Makra debug/log/plot
+│   ├── MacroDebugger.h          # Makra debug/log/plot
+│   ├── error_codes.h/.cpp       # System kodów błędów (8 kategorii, 10 modułów)
+│   ├── error_handler.h          # Makra logowania błędów i klasa ErrorHandler
+│   ├── espnow_helper.h/.cpp     # Funkcje pomocnicze ESP-NOW z retry
+│   └── ERROR_HANDLING.md        # Dokumentacja systemu obsługi błędów
 │
 ├── doc/                         # Dokumentacja sprzętowa
 │   ├── ESP32-DevKit-V1-Pinout-Diagram-r0.1-CIRCUITSTATE-Electronics-2-1280x896.png
@@ -525,6 +571,40 @@ caliper/
 ```
 
 ## ⚙️ Konfiguracja
+
+### System obsługi błędów ([`lib/CaliperShared/ERROR_HANDLING.md`](lib/CaliperShared/ERROR_HANDLING.md:1))
+
+System obsługi błędów zapewnia spójne zarządzanie błędami w całym projekcie:
+
+**Format kodu błędu (16 bitów):**
+```
+[Category:4 bits][Module:4 bits][Code:8 bits]
+```
+
+**Kategorie błędów:**
+- `ERR_CAT_NONE` (0x00) - Brak błędu
+- `ERR_CAT_COMMUNICATION` (0x01) - Błędy komunikacji (ESP-NOW, Serial, WiFi)
+- `ERR_CAT_SENSOR` (0x02) - Błędy sensorów (suwmiarka, akcelerometr)
+- `ERR_CAT_MOTOR` (0x03) - Błędy sterownika silnika
+- `ERR_CAT_POWER` (0x04) - Błędy zasilania (bateria, ADC)
+- `ERR_CAT_STORAGE` (0x05) - Błędy pamięci (LittleFS, NVS/Preferences)
+- `ERR_CAT_NETWORK` (0x06) - Błędy sieci (WiFi AP, Web Server)
+- `ERR_CAT_VALIDATION` (0x07) - Błędy walidacji danych
+- `ERR_CAT_SYSTEM` (0x08) - Błędy systemowe
+
+**Przykłady kodów błędów:**
+- `ERR_ESPNOW_SEND_FAILED` (0x0102) - Wysłanie ESP-NOW nieudane
+- `ERR_CALIPER_TIMEOUT` (0x0201) - Timeout pomiaru suwmiarki
+- `ERR_PREFS_SAVE_FAILED` (0x0507) - Zapis Preferences nieudany
+
+**Makra logowania:**
+```cpp
+LOG_ERROR(errorCode, "Szczegóły...");
+LOG_WARNING(errorCode, "Szczegóły...");
+LOG_INFO(errorCode, "Szczegóły...");
+RETURN_ERROR(errorCode, "Szczegóły...");
+RETURN_IF_NOT_OK(errorCode, "Szczegóły...");
+```
 
 ### Wspólna konfiguracja ([`lib/CaliperShared/shared_config.h`](lib/CaliperShared/shared_config.h:1))
 
@@ -556,6 +636,50 @@ caliper/
 #define MEASUREMENT_MAX_VALUE 1000.0f
 #define INVALID_MEASUREMENT_VALUE -999.0f
 ```
+
+### Klasa MeasurementState ([`caliper_master/src/measurement_state.h`](caliper_master/src/measurement_state.h:1))
+
+Klasa zarządzająca stanem pomiarowym systemu:
+
+```cpp
+static MeasurementState measurementState;
+
+// Ustawienie pomiaru
+measurementState.setMeasurement(123.456f);
+
+// Pobranie flagi gotowości
+if (measurementState.isReady()) {
+    float value = measurementState.getValue();
+}
+
+// Resetowanie flagi gotowości
+measurementState.setReady(false);
+```
+
+### Klasa PreferencesManager ([`caliper_master/src/preferences_manager.h`](caliper_master/src/preferences_manager.h:1))
+
+Menedżer ustawień z trwałym przechowywaniem w NVS:
+
+```cpp
+static PreferencesManager prefsManager;
+
+// Inicjalizacja i wczytanie ustawień
+prefsManager.begin();
+prefsManager.loadSettings(&systemStatus);
+
+// Zapisanie ustawienia
+prefsManager.saveMotorSpeed(150);
+prefsManager.saveCalibrationOffset(1.234f);
+
+// Reset do wartości domyślnych
+prefsManager.resetToDefaults();
+```
+
+**Zakresy wartości:**
+- `motorSpeed`: 0-255 (domyślnie: 100)
+- `motorTorque`: 0-255 (domyślnie: 100)
+- `timeout`: 0-600000 ms (domyślnie: 1000)
+- `calibrationOffset`: -14.999..14.999 mm (domyślnie: 0.0)
 
 ### Konfiguracja Master ([`caliper_master/src/config.h`](caliper_master/src/config.h:1))
 
@@ -676,6 +800,6 @@ Projekt hobbystyczny/edukacyjny.
 
 ---
 
-**Wersja:** 2.0  
-**Data aktualizacji:** 2025-12-26  
+**Wersja:** 3.0
+**Data aktualizacji:** 2026-01-04
 **Platforma:** ESP32 DOIT DEVKIT V1
