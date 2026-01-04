@@ -19,6 +19,7 @@
 
 #include <Arduino.h>
 #include <shared_common.h>
+#include <shared_config.h>
 
 // Motor pin definitions
 #define MOTOR_IN2_PIN 12

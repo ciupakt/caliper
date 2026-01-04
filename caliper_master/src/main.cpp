@@ -28,8 +28,8 @@ auto timerWorker = timer_create_default();
 
 // Global variables
 // Offset kalibracji (mm) jest utrzymywany w systemStatus.calibrationOffset
-String lastMeasurement = "Brak pomiaru";
-String lastBatteryVoltage = "Brak danych";
+char lastMeasurement[LAST_MEASUREMENT_BUFFER_SIZE] = "Brak pomiaru";
+char lastBatteryVoltage[LAST_BATTERY_VOLTAGE_BUFFER_SIZE] = "Brak danych";
 float lastMeasurementValue = 0.0f; // Ostatnie wartości liczbowe (ułatwia logowanie / JSON)
 bool measurementReady = false;
 
@@ -60,8 +60,8 @@ void OnDataRecv(const esp_now_recv_info_t *recv_info, const uint8_t *incomingDat
   DEBUG_PLOT("batteryVoltage:%.3f", (double)msg.batteryVoltage);
   DEBUG_PLOT("sessionName:%s", systemStatus.sessionName);
 
-  lastMeasurement = String(systemStatus.msgSlave.measurement, 3) + " mm";
-  lastBatteryVoltage = String(msg.batteryVoltage, 3) + " V";
+  snprintf(lastMeasurement, sizeof(lastMeasurement), "%.3f mm", systemStatus.msgSlave.measurement);
+  snprintf(lastBatteryVoltage, sizeof(lastBatteryVoltage), "%.3f V", msg.batteryVoltage);
 
   measurementReady = true;
 }
@@ -87,17 +87,48 @@ static void initDefaultTxMessage()
   systemStatus.msgMaster.timeout = DEFAULT_TIMEOUT_MS;
 }
 
+/**
+ * @brief Oblicza timeout oczekiwania na pomiar
+ *
+ * Funkcja oblicza maksymalny czas oczekiwania na odpowiedź od Slave,
+ * dodając margines bezpieczeństwa do timeoutu zdefiniowanego w komendzie.
+ *
+ * @details
+ * - Timeout = msgMaster.timeout + MEASUREMENT_TIMEOUT_MARGIN_MS
+ * - Margines MEASUREMENT_TIMEOUT_MARGIN_MS (1000ms) uwzględnia czas:
+ *   - transmisji ESP-NOW
+ *   - przetwarzania danych po stronie Slave
+ *   - opóźnień w komunikacji
+ * - W przypadku przepełnienia uint32_t, funkcja zwraca UINT32_MAX
+ *
+ * @return Timeout w milisekundach (maksymalnie UINT32_MAX)
+ */
 static uint32_t calcMeasurementWaitTimeoutMs()
 {
-  // Wymóg: timeout = systemStatus.msgMaster.timeout + 1000ms
+  // Wymóg: timeout = systemStatus.msgMaster.timeout + MEASUREMENT_TIMEOUT_MARGIN_MS
   // (w razie przepełnienia saturujemy do UINT32_MAX)
-  if (systemStatus.msgMaster.timeout > (UINT32_MAX - 1000U))
+  if (systemStatus.msgMaster.timeout > (UINT32_MAX - MEASUREMENT_TIMEOUT_MARGIN_MS))
   {
     return UINT32_MAX;
   }
-  return systemStatus.msgMaster.timeout + 1000U;
+  return systemStatus.msgMaster.timeout + MEASUREMENT_TIMEOUT_MARGIN_MS;
 }
 
+/**
+ * @brief Oczekuje na gotowość pomiaru z timeoutem
+ *
+ * Funkcja blokuje wykonanie programu do momentu otrzymania danych pomiarowych
+ * lub upływu timeoutu. Używa flagi measurementReady ustawianej w OnDataRecv.
+ *
+ * @details
+ * - Pętla sprawdza flagę measurementReady co POLL_DELAY_MS (1ms)
+ * - Po otrzymaniu danych, funkcja loguje czas oczekiwania
+ * - W przypadku timeoutu, funkcja loguje błąd i zwraca false
+ * - Funkcja jest blokująca - nie należy jej używać w pętlach czasu rzeczywistego
+ *
+ * @param timeoutMs Maksymalny czas oczekiwania w milisekundach
+ * @return true jeśli dane są gotowe, false w przypadku timeoutu
+ */
 static bool waitForMeasurementReady(uint32_t timeoutMs)
 {
   const uint32_t startMs = millis();
@@ -112,7 +143,7 @@ static bool waitForMeasurementReady(uint32_t timeoutMs)
     }
 
     // Uwaga: blokująca pętla jak wcześniej, ale nie czekamy na sztywne 1000ms.
-    delay(1);
+    delay(POLL_DELAY_MS);
   }
 
   const uint32_t elapsedMs = millis() - startMs;
@@ -125,7 +156,7 @@ ErrorCode sendTxToSlave(CommandType command, const char *commandName, bool expec
   if (expectResponse)
   {
     measurementReady = false;
-    lastMeasurement = "Oczekiwanie na odpowiedź...";
+    snprintf(lastMeasurement, sizeof(lastMeasurement), "Oczekiwanie na odpowiedź...");
   }
 
   systemStatus.msgMaster.command = command;
@@ -135,12 +166,12 @@ ErrorCode sendTxToSlave(CommandType command, const char *commandName, bool expec
   if (result == ERR_NONE)
   {
     DEBUG_I("Wyslano komendę: %s", commandName);
-    lastMeasurement = String("Komenda: ") + commandName;
+    snprintf(lastMeasurement, sizeof(lastMeasurement), "Komenda: %s", commandName);
   }
   else
   {
     DEBUG_E("BLAD wysylania komendy %s: %d", commandName, (int)result);
-    lastMeasurement = "BLAD: Nie można wysłać komendy";
+    snprintf(lastMeasurement, sizeof(lastMeasurement), "BLAD: Nie można wysłać komendy");
   }
 
   return result;
@@ -214,6 +245,31 @@ void handleRead()
 // 1) POST /api/calibration/measure  -> robi pomiar i zwraca measurementRaw + calibrationOffset
 // 2) POST /api/calibration/offset  -> ustawia calibrationOffset (bez wyzwalania pomiaru)
 
+/**
+ * @brief Obsługuje żądanie pomiaru kalibracyjnego
+ *
+ * Endpoint: POST /api/calibration/measure
+ *
+ * Funkcja wykonuje pomiar i zwraca surową wartość oraz aktualny offset kalibracji.
+ *
+ * @details
+ * Przepływ operacji:
+ * 1. Wysyła komendę CMD_MEASURE do Slave
+ * 2. Oczekuje na odpowiedź z timeoutem obliczonym przez calcMeasurementWaitTimeoutMs()
+ * 3. Jeśli timeout - zwraca błąd 504 Gateway Timeout
+ * 4. Jeśli sukces - zwraca JSON z measurementRaw i calibrationOffset
+ *
+ * Format odpowiedzi JSON:
+ * ```json
+ * {
+ *   "success": true,
+ *   "measurementRaw": 123.456,
+ *   "calibrationOffset": 0.123
+ * }
+ * ```
+ *
+ * Uwaga: UI powinno obliczyć skorygowaną wartość: corrected = measurementRaw + calibrationOffset
+ */
 void handleCalibrationMeasure()
 {
   requestMeasurement();
@@ -230,15 +286,46 @@ void handleCalibrationMeasure()
   const float raw = systemStatus.msgSlave.measurement;
   const float offset = systemStatus.calibrationOffset;
 
-  String response = "{";
-  response += "\"success\":true,";
-  response += "\"measurementRaw\":" + String((double)raw, 3) + ",";
-  response += "\"calibrationOffset\":" + String((double)offset, 3);
-  response += "}";
+  char response[JSON_RESPONSE_BUFFER_SIZE];
+  snprintf(response, sizeof(response),
+    "{\"success\":true,\"measurementRaw\":%.3f,\"calibrationOffset\":%.3f}",
+    raw, offset);
 
   server.send(200, "application/json", response);
 }
 
+/**
+ * @brief Obsługuje żądanie ustawienia offsetu kalibracji
+ *
+ * Endpoint: POST /api/calibration/offset
+ *
+ * Funkcja ustawia offset kalibracji bez wykonywania pomiaru.
+ *
+ * @details
+ * Parametr URL: offset (float) - wartość offsetu w milimetrach
+ *
+ * Walidacja:
+ * - Offset musi być liczbą zmiennoprzecinkową
+ * - Zakres: CALIBRATION_OFFSET_MIN (-14.999) do CALIBRATION_OFFSET_MAX (14.999)
+ *
+ * Przepływ operacji:
+ * 1. Pobiera parametr offset z zapytania
+ * 2. Waliduje format i zakres wartości
+ * 3. Jeśli błąd - zwraca 400 Bad Request
+ * 4. Jeśli sukces - zapisuje offset do systemStatus.calibrationOffset
+ * 5. Zwraca potwierdzenie z nową wartością
+ *
+ * Format odpowiedzi JSON:
+ * ```json
+ * {
+ *   "success": true,
+ *   "calibrationOffset": 0.123
+ * }
+ * ```
+ *
+ * Uwaga: Offset jest przechowywany tylko w pamięci RAM (nie w Preferences),
+ * więc zostanie utracony po restarcie urządzenia.
+ */
 void handleCalibrationSetOffset()
 {
   const String offsetStr = server.arg("offset");
@@ -250,7 +337,7 @@ void handleCalibrationSetOffset()
     return;
   }
 
-  if (offsetValue < -14.999f || offsetValue > 14.999f)
+  if (offsetValue < CALIBRATION_OFFSET_MIN || offsetValue > CALIBRATION_OFFSET_MAX)
   {
     server.send(400, "application/json", "{\"success\":false,\"error\":\"Offset poza zakresem (-14.999..14.999)\"}");
     return;
@@ -259,10 +346,10 @@ void handleCalibrationSetOffset()
   systemStatus.calibrationOffset = offsetValue;
   DEBUG_I("calibrationOffset:%.3f", (double)systemStatus.calibrationOffset);
 
-  String response = "{";
-  response += "\"success\":true,";
-  response += "\"calibrationOffset\":" + String((double)systemStatus.calibrationOffset, 3);
-  response += "}";
+  char response[JSON_RESPONSE_BUFFER_SIZE];
+  snprintf(response, sizeof(response),
+    "{\"success\":true,\"calibrationOffset\":%.3f}",
+    systemStatus.calibrationOffset);
 
   server.send(200, "application/json", response);
 }
@@ -276,14 +363,14 @@ void handleCalibrationSetOffset()
  */
 static bool validateSessionName(const String &name)
 {
-  // Minimalna długość: 1 znak
-  if (name.length() < 1)
+  // Minimalna długość: SESSION_NAME_MIN_LENGTH znak
+  if (name.length() < SESSION_NAME_MIN_LENGTH)
   {
     return false;
   }
 
-  // Maksymalna długość: 31 znaków (32 z null terminator)
-  if (name.length() > 31)
+  // Maksymalna długość: SESSION_NAME_MAX_LENGTH znaków (32 z null terminator)
+  if (name.length() > SESSION_NAME_MAX_LENGTH)
   {
     return false;
   }
@@ -319,10 +406,56 @@ void handleStartSession()
   
   DEBUG_I("sessionName:%s", systemStatus.sessionName);
 
-  String response = "{\"sessionName\":\"" + sessionName + "\"}";
+  char response[JSON_RESPONSE_BUFFER_SIZE];
+  snprintf(response, sizeof(response), "{\"sessionName\":\"%s\"}", sessionName.c_str());
   server.send(200, "application/json", response);
 }
 
+/**
+ * @brief Obsługuje żądanie pomiaru w ramach aktywnej sesji
+ *
+ * Endpoint: POST /api/measure_session
+ *
+ * Funkcja wykonuje pomiar i zwraca wszystkie dane związane z sesją.
+ *
+ * @details
+ * Wymagania:
+ * - Sesja musi być aktywna (sessionName nie może być puste)
+ * - Nazwa sesji musi być ustawiona przez handleStartSession()
+ *
+ * Przepływ operacji:
+ * 1. Sprawdza czy sesja jest aktywna (sessionName != "")
+ * 2. Jeśli nie - zwraca 400 Bad Request
+ * 3. Wysyła komendę CMD_MEASURE do Slave
+ * 4. Oczekuje na odpowiedź z timeoutem
+ * 5. Jeśli timeout - zwraca 504 Gateway Timeout
+ * 6. Jeśli sukces - zwraca pełne dane pomiarowe
+ *
+ * Format odpowiedzi JSON:
+ * ```json
+ * {
+ *   "sessionName": "test_session",
+ *   "measurementRaw": 123.456,
+ *   "calibrationOffset": 0.123,
+ *   "measurementCorrected": 123.579,
+ *   "valid": true,
+ *   "batteryVoltage": 3.7,
+ *   "angleX": 45
+ * }
+ * ```
+ *
+ * Pola:
+ * - sessionName: nazwa aktywnej sesji
+ * - measurementRaw: surowa wartość pomiaru z suwmiarki
+ * - calibrationOffset: offset kalibracji
+ * - measurementCorrected: skorygowana wartość (raw + offset)
+ * - valid: flaga walidacji (zawsze true w tej implementacji)
+ * - batteryVoltage: napięcie baterii w woltach
+ * - angleX: kąt X z akcelerometru w stopniach
+ *
+ * Uwaga: measurementCorrected jest obliczane po stronie Mastera
+ * dla wygody UI, ale UI może też obliczyć to lokalnie.
+ */
 void handleMeasureSession()
 {
   // Sprawdź czy sesja jest aktywna (sessionName nie jest puste)
@@ -346,19 +479,15 @@ void handleMeasureSession()
 
   const MessageSlave &m = systemStatus.msgSlave;
 
-  String response = "{";
-  response += "\"sessionName\":\"" + String(systemStatus.sessionName) + "\",";
-
-  response += "\"measurementRaw\":" + String((double)m.measurement, 3) + ",";
-  response += "\"calibrationOffset\":" + String((double)systemStatus.calibrationOffset, 3) + ",";
-
-  // (opcjonalne) pole pomocnicze dla UI/debug
-  response += "\"measurementCorrected\":" + String((double)(m.measurement + systemStatus.calibrationOffset), 3) + ",";
-
-  response += "\"valid\":true,";
-  response += "\"batteryVoltage\":" + String(m.batteryVoltage, 3) + ",";
-  response += "\"angleX\":" + String((unsigned)m.angleX);
-  response += "}";
+  char response[JSON_RESPONSE_BUFFER_SIZE];
+  snprintf(response, sizeof(response),
+    "{\"sessionName\":\"%s\",\"measurementRaw\":%.3f,\"calibrationOffset\":%.3f,\"measurementCorrected\":%.3f,\"valid\":true,\"batteryVoltage\":%.3f,\"angleX\":%u}",
+    systemStatus.sessionName,
+    m.measurement,
+    systemStatus.calibrationOffset,
+    m.measurement + systemStatus.calibrationOffset,
+    m.batteryVoltage,
+    (unsigned)m.angleX);
 
   server.send(200, "application/json", response);
 }

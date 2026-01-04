@@ -59,6 +59,59 @@
 #define BATTERY_VOLTAGE_PIN 34
 
 // ============================================================================
+// Calibration Configuration
+// ============================================================================
+#define CALIBRATION_OFFSET_MIN -14.999f
+#define CALIBRATION_OFFSET_MAX 14.999f
+
+// ============================================================================
+// Session Configuration
+// ============================================================================
+#define SESSION_NAME_MIN_LENGTH 1
+#define SESSION_NAME_MAX_LENGTH 31
+
+// ============================================================================
+// Timing Configuration (Additional)
+// ============================================================================
+#define MEASUREMENT_TIMEOUT_MARGIN_MS 1000
+#define POLL_DELAY_MS 1
+#define TIMER_DELAY_MS 1
+#define WIFI_INIT_DELAY_MS 100
+#define WIFI_MAX_ATTEMPTS 10
+#define WIFI_RETRY_DELAY_MS 100
+#define PEER_MAX_ATTEMPTS 10
+#define PEER_RETRY_DELAY_MS 100
+
+// ============================================================================
+// Caliper Configuration
+// ============================================================================
+#define CALIPER_BIT_BUFFER_SIZE 52
+#define CALIPER_BIT_SHIFT 8
+#define CALIPER_NIBBLE_COUNT 13
+#define BITS_PER_NIBBLE 4
+#define CALIPER_DECIMAL_DIGITS 5
+#define CALIPER_VALUE_DIVISOR 1000.0f
+#define INCH_TO_MM_FACTOR 25.4f
+
+// ============================================================================
+// Accelerometer Configuration
+// ============================================================================
+#define ADXL345_I2C_ADDRESS 0x53
+
+// ============================================================================
+// Motor Configuration
+// ============================================================================
+#define PWM_MAX_VALUE 255
+#define MOTOR_SPEED_CHANGE_THRESHOLD 10
+
+// ============================================================================
+// Buffer Sizes
+// ============================================================================
+#define LAST_MEASUREMENT_BUFFER_SIZE 64
+#define LAST_BATTERY_VOLTAGE_BUFFER_SIZE 32
+#define JSON_RESPONSE_BUFFER_SIZE 512
+
+// ============================================================================
 // Debug Configuration
 // ============================================================================
 #define DEBUG_ENABLED true
