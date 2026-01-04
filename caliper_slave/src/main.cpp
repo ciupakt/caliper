@@ -5,6 +5,7 @@
 #include <shared_common.h>
 #include <error_handler.h>
 #include <MacroDebugger.h>
+#include <espnow_helper.h>
 #include <arduino-timer.h>
 
 // Module includes
@@ -161,26 +162,21 @@ bool runMeasReq(void *arg)
   DEBUG_PLOT("angleX:%u", msgSlave.angleX);
   DEBUG_PLOT("batteryVoltage:%.3f", msgSlave.batteryVoltage);
 
-  esp_err_t sendResult = esp_now_send(masterAddress, (uint8_t *)&msgSlave, sizeof(msgSlave));
-  if (sendResult == ESP_OK)
+  ErrorCode sendResult = espnow_send_with_retry(
+      masterAddress,
+      &msgSlave,
+      sizeof(msgSlave),
+      ESPNOW_MAX_RETRIES,
+      ESPNOW_RETRY_DELAY_MS
+  );
+
+  if (sendResult == ERR_NONE)
   {
     DEBUG_I("Wynik wysłany do Mastera");
   }
   else
   {
-    RECORD_ERROR(ERR_ESPNOW_SEND_FAILED, "ESP-NOW send failed: %d", (int)sendResult);
-
-    // Próba ponownego wysłania po krótkiej przerwie
-    delay(ESPNOW_RETRY_DELAY_MS);
-    sendResult = esp_now_send(masterAddress, (uint8_t *)&msgSlave, sizeof(msgSlave));
-    if (sendResult == ESP_OK)
-    {
-      DEBUG_I("Ponowne wysłanie wyniku udane");
-    }
-    else
-    {
-      RECORD_ERROR(ERR_ESPNOW_SEND_FAILED, "Retry ESP-NOW send failed: %d", (int)sendResult);
-    }
+    DEBUG_E("Błąd wysyłania wyniku do Mastera");
   }
 
   return false; // do not repeat this task
@@ -239,21 +235,14 @@ void setup()
   peerInfo.channel = ESPNOW_WIFI_CHANNEL;
   peerInfo.encrypt = false;
 
-  int peerTries = 0;
-  while (esp_now_add_peer(&peerInfo) != ESP_OK && peerTries < PEER_MAX_ATTEMPTS)
-  {
-    DEBUG_I("Próba dodania Master... %d", peerTries + 1);
-    delay(PEER_RETRY_DELAY_MS);
-    peerTries++;
-  }
-
-  if (peerTries < PEER_MAX_ATTEMPTS)
+  ErrorCode peerResult = espnow_add_peer_with_retry(&peerInfo);
+  if (peerResult == ERR_NONE)
   {
     DEBUG_I("Master dodany jako peer!");
   }
   else
   {
-    RECORD_ERROR(ERR_ESPNOW_PEER_ADD_FAILED, "Failed to add Master after %d attempts", peerTries);
+    DEBUG_E("Nie udało się dodać Mastera jako peer");
     return;
   }
 

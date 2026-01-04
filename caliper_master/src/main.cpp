@@ -10,6 +10,7 @@
 #include "communication.h"
 #include "serial_cli.h"
 #include "preferences_manager.h"
+#include "measurement_state.h"
 
 // Slave device MAC address (defined in config.h)
 uint8_t slaveAddress[] = SLAVE_MAC_ADDR;
@@ -27,12 +28,8 @@ static constexpr uint32_t DEFAULT_TIMEOUT_MS = 1000;
 
 auto timerWorker = timer_create_default();
 
-// Global variables
-// Offset kalibracji (mm) jest utrzymywany w systemStatus.calibrationOffset
-char lastMeasurement[LAST_MEASUREMENT_BUFFER_SIZE] = "Brak pomiaru";
-char lastBatteryVoltage[LAST_BATTERY_VOLTAGE_BUFFER_SIZE] = "Brak danych";
-float lastMeasurementValue = 0.0f; // Ostatnie wartości liczbowe (ułatwia logowanie / JSON)
-bool measurementReady = false;
+// Stan pomiarowy - enkapsulacja zamiast zmiennych globalnych
+static MeasurementState measurementState;
 
 void OnDataRecv(const esp_now_recv_info_t *recv_info, const uint8_t *incomingData, int len)
 {
@@ -48,7 +45,9 @@ void OnDataRecv(const esp_now_recv_info_t *recv_info, const uint8_t *incomingDat
   memcpy(&msg, incomingData, sizeof(msg));
 
   systemStatus.msgSlave = msg;
-  lastMeasurementValue = systemStatus.msgSlave.measurement;
+  measurementState.setMeasurement(systemStatus.msgSlave.measurement);
+  measurementState.setBatteryVoltage(msg.batteryVoltage);
+  measurementState.setReady(true);
 
   DEBUG_I("ODEBRANO DANE OD SLAVE");
   DEBUG_I("command:%c", (char)systemStatus.msgSlave.command);
@@ -60,11 +59,6 @@ void OnDataRecv(const esp_now_recv_info_t *recv_info, const uint8_t *incomingDat
   DEBUG_PLOT("angleX:%u", (unsigned)msg.angleX);
   DEBUG_PLOT("batteryVoltage:%.3f", (double)msg.batteryVoltage);
   DEBUG_PLOT("sessionName:%s", systemStatus.sessionName);
-
-  snprintf(lastMeasurement, sizeof(lastMeasurement), "%.3f mm", systemStatus.msgSlave.measurement);
-  snprintf(lastBatteryVoltage, sizeof(lastBatteryVoltage), "%.3f V", msg.batteryVoltage);
-
-  measurementReady = true;
 }
 
 void OnDataSent(const wifi_tx_info_t *info, esp_now_send_status_t status)
@@ -135,7 +129,7 @@ static bool waitForMeasurementReady(uint32_t timeoutMs)
 {
   const uint32_t startMs = millis();
 
-  while (!measurementReady)
+  while (!measurementState.isReady())
   {
     const uint32_t elapsedMs = millis() - startMs;
     if (elapsedMs >= timeoutMs)
@@ -157,8 +151,8 @@ ErrorCode sendTxToSlave(CommandType command, const char *commandName, bool expec
 {
   if (expectResponse)
   {
-    measurementReady = false;
-    snprintf(lastMeasurement, sizeof(lastMeasurement), "Oczekiwanie na odpowiedź...");
+    measurementState.setReady(false);
+    measurementState.setMeasurementMessage("Oczekiwanie na odpowiedź...");
   }
 
   systemStatus.msgMaster.command = command;
@@ -168,12 +162,12 @@ ErrorCode sendTxToSlave(CommandType command, const char *commandName, bool expec
   if (result == ERR_NONE)
   {
     DEBUG_I("Wyslano komendę: %s", commandName);
-    snprintf(lastMeasurement, sizeof(lastMeasurement), "Komenda: %s", commandName);
+    measurementState.setMeasurementMessage(commandName);
   }
   else
   {
     LOG_ERROR(result, "Failed to send command %s", commandName);
-    snprintf(lastMeasurement, sizeof(lastMeasurement), "BLAD: Nie można wysłać komendy");
+    measurementState.setMeasurementMessage("BLAD: Nie można wysłać komendy");
   }
 
   return result;
@@ -239,7 +233,7 @@ void handleMeasure()
 
 void handleRead()
 {
-  server.send(200, "text/plain", lastMeasurement);
+  server.send(200, "text/plain", measurementState.getMeasurement());
 }
 
 
@@ -279,7 +273,7 @@ void handleCalibrationMeasure()
   // Poczekaj na wynik (MVP: blocking jak dotychczas)
   (void)waitForMeasurementReady(calcMeasurementWaitTimeoutMs());
 
-  if (!measurementReady)
+  if (!measurementState.isReady())
   {
     server.send(504, "application/json", "{\"success\":false,\"error\":\"Brak odpowiedzi z urządzenia\"}");
     return;
@@ -473,7 +467,7 @@ void handleMeasureSession()
   (void)waitForMeasurementReady(calcMeasurementWaitTimeoutMs());
 
   // Sprawdź czy dane są gotowe przed użyciem
-  if (!measurementReady)
+  if (!measurementState.isReady())
   {
     server.send(504, "application/json", "{\"error\":\"Brak odpowiedzi z urządzenia\"}");
     return;

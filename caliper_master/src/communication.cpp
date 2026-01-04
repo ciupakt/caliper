@@ -3,12 +3,14 @@
  * @brief ESP-NOW Communication Module Implementation
  * @author System Generated
  * @date 2025-11-30
- * @version 2.0
+ * @version 2.1
  *
  * @version 2.0 - Integrated comprehensive error code system
+ * @version 2.1 - Refactored to use shared espnow_send_with_retry function
  */
 
 #include "communication.h"
+#include <espnow_helper.h>
 
 CommunicationManager::CommunicationManager() : initialized(false), lastError(ERR_NONE)
 {
@@ -65,34 +67,14 @@ ErrorCode CommunicationManager::sendMessage(const MessageMaster &message, int re
     return lastError;
   }
 
-  ErrorCode result = ERR_NONE;
-  int attempts = 0;
-
-  while (attempts < retryCount)
-  {
-    esp_err_t sendResult = esp_now_send(slaveAddress, (uint8_t *)&message, sizeof(message));
-
-    if (sendResult == ESP_OK)
-    {
-      result = ERR_NONE;
-      break;
-    }
-    else
-    {
-      attempts++;
-      if (attempts < retryCount)
-      {
-        delay(ESPNOW_RETRY_DELAY_MS);
-      }
-    }
-  }
-
-  if (attempts >= retryCount)
-  {
-    RECORD_ERROR(ERR_ESPNOW_SEND_FAILED, "Send failed after %d attempts to peer %02X:%02X:%02X:%02X:%02X:%02X",
-      attempts, slaveAddress[0], slaveAddress[1], slaveAddress[2], slaveAddress[3], slaveAddress[4], slaveAddress[5]);
-    result = ERR_ESPNOW_SEND_FAILED;
-  }
+  // Use shared retry function for consistent behavior
+  ErrorCode result = espnow_send_with_retry(
+      slaveAddress,
+      &message,
+      sizeof(message),
+      retryCount,
+      ESPNOW_RETRY_DELAY_MS
+  );
 
   lastError = result;
   return result;
