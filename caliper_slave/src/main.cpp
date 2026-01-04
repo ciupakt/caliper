@@ -24,6 +24,9 @@ BatteryMonitor battery;
 MessageMaster msgMaster;
 MessageSlave msgSlave;
 
+// Flaga blokująca przyjmowanie nowych komend podczas trwania pomiaru
+volatile bool measurementInProgress = false;
+
 bool runMeasReq(void *arg);
 bool motorStopTimeout(void *arg);
 auto timerWorker = timer_create_default();
@@ -41,6 +44,11 @@ auto timerMotorStopTimeout = timer_create_default();
  * - CMD_MEASURE: żądanie pomiaru z uruchomieniem silnika
  * - CMD_UPDATE: żądanie aktualizacji statusu bez silnika
  * - CMD_MOTORTEST: test silnika z parametrami z msgMaster
+ *
+ * Mechanizm blokowania pomiarów:
+ * - Jeśli measurementInProgress == true, wszystkie komendy są ignorowane
+ * - Flaga jest ustawiana na początku runMeasReq i zdejmowana na końcu
+ * - Zapobiega to zakłócaniu trwającego pomiaru przez nowe komendy
  *
  * Mechanizm timera:
  * - timerWorker.cancel() anuluje wszystkie zaplanowane zadania
@@ -64,6 +72,13 @@ void OnDataRecv(const esp_now_recv_info_t *recv_info, const uint8_t *incomingDat
   }
 
   memcpy(&msgMaster, incomingData, sizeof(msgMaster));
+
+  // Sprawdź czy pomiar jest w trakcie - jeśli tak, zignoruj nowe komendy
+  if (measurementInProgress)
+  {
+    DEBUG_W("Pomiar w trakcie - komenda %c zignorowana", msgMaster.command);
+    return;
+  }
 
   switch (msgMaster.command)
   {
@@ -129,15 +144,24 @@ bool MotorStopTimeout(void *arg)
  *
  * @details
  * Przepływ dla CMD_MEASURE:
- * 1. Uruchom silnik w przód (MOTOR_FORWARD) z parametrami z msgMaster
- * 2. Poczekaj msgMaster.timeout ms na ustabilizowanie silnika
- * 3. Wykonaj pomiar (updateMeasureData)
- * 4. Uruchom silnik w tył (MOTOR_REVERSE) do powrotu do pozycji
- * 5. Wyślij wynik do Mastera
+ * 1. Ustaw flagę measurementInProgress = true (blokuje nowe komendy)
+ * 2. Uruchom silnik w przód (MOTOR_FORWARD) z parametrami z msgMaster
+ * 3. Poczekaj msgMaster.timeout ms na ustabilizowanie silnika
+ * 4. Wykonaj pomiar (updateMeasureData)
+ * 5. Uruchom silnik w tył (MOTOR_REVERSE) do powrotu do pozycji
+ * 6. Wyślij wynik do Mastera
+ * 7. Zdejmij flagę measurementInProgress = false
  *
  * Przepływ dla CMD_UPDATE:
- * 1. Wykonaj pomiar bez uruchamiania silnika
- * 2. Wyślij wynik do Mastera
+ * 1. Ustaw flagę measurementInProgress = true
+ * 2. Wykonaj pomiar bez uruchamiania silnika
+ * 3. Wyślij wynik do Mastera
+ * 4. Zdejmij flagę measurementInProgress = false
+ *
+ * Mechanizm blokowania:
+ * - Flaga measurementInProgress jest ustawiana na początku funkcji
+ * - OnDataRecv sprawdza tę flagę i ignoruje komendy gdy pomiar trwa
+ * - Flaga jest zdejmowana po zakończeniu pomiaru i wysyłce wyniku
  *
  * Mechanizm retry przy błędzie wysyłki:
  * - Pierwsza próba: natychmiast po przygotowaniu danych
@@ -153,6 +177,9 @@ bool MotorStopTimeout(void *arg)
  */
 bool runMeasReq(void *arg)
 {
+  // Ustaw flagę blokującą nowe komendy
+  measurementInProgress = true;
+  
   if (msgMaster.command == CMD_MEASURE)
   {
     timerMotorStopTimeout.cancel();
@@ -189,6 +216,9 @@ bool runMeasReq(void *arg)
     DEBUG_E("Błąd wysyłania wyniku do Mastera");
   }
 
+  // Zdejmij flagę blokującą - pomiar zakończony
+  measurementInProgress = false;
+  
   return false; // do not repeat this task
 }
 
