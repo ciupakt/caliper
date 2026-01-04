@@ -3,10 +3,12 @@
  * @brief Preferences Manager for ESP32 Caliper Master
  * @author System Generated
  * @date 2025-12-26
- * @version 1.0
- * 
+ * @version 2.0
+ *
  * This module provides persistent storage for caliper settings using ESP32 Preferences library.
  * Settings are stored in NVS (Non-Volatile Storage) and persist across reboots.
+ *
+ * @version 2.0 - Integrated comprehensive error code system
  */
 
 #ifndef PREFERENCES_MANAGER_H
@@ -15,6 +17,7 @@
 #include <Arduino.h>
 #include <Preferences.h>
 #include <shared_common.h>
+#include <error_handler.h>
 
 /**
  * @brief Preferences Manager class for persistent storage
@@ -52,28 +55,44 @@ public:
 
   /**
    * @brief Save motorSpeed to NVS
-   * 
+   *
+   * Possible errors:
+   * - ERR_PREFS_SAVE_FAILED: Save operation failed
+   * - ERR_VALIDATION_OUT_OF_RANGE: Value out of valid range
+   *
    * @param value Motor speed value (0-255)
    */
   void saveMotorSpeed(uint8_t value);
 
   /**
    * @brief Save motorTorque to NVS
-   * 
+   *
+   * Possible errors:
+   * - ERR_PREFS_SAVE_FAILED: Save operation failed
+   * - ERR_VALIDATION_OUT_OF_RANGE: Value out of valid range
+   *
    * @param value Motor torque value (0-255)
    */
   void saveMotorTorque(uint8_t value);
 
   /**
    * @brief Save timeout to NVS
-   * 
+   *
+   * Possible errors:
+   * - ERR_PREFS_SAVE_FAILED: Save operation failed
+   * - ERR_VALIDATION_OUT_OF_RANGE: Value out of valid range
+   *
    * @param value Timeout value in milliseconds (0-600000)
    */
   void saveTimeout(uint32_t value);
 
   /**
    * @brief Save calibrationOffset to NVS
-   * 
+   *
+   * Possible errors:
+   * - ERR_PREFS_SAVE_FAILED: Save operation failed
+   * - ERR_VALIDATION_OUT_OF_RANGE: Value out of valid range
+   *
    * @param value Calibration offset in mm (-14.999..14.999)
    */
   void saveCalibrationOffset(float value);

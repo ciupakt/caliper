@@ -4,6 +4,7 @@
 #include <LittleFS.h>
 #include "config.h"
 #include <shared_common.h>
+#include <error_handler.h>
 #include <MacroDebugger.h>
 #include <arduino-timer.h>
 #include "communication.h"
@@ -40,7 +41,7 @@ void OnDataRecv(const esp_now_recv_info_t *recv_info, const uint8_t *incomingDat
 
   if (len != sizeof(msg))
   {
-    DEBUG_E("BLAD: Nieprawidlowa dlugosc pakietu ESP-NOW");
+    RECORD_ERROR(ERR_ESPNOW_INVALID_LENGTH, "Received packet length: %d, expected: %d", len, (int)sizeof(msg));
     return;
   }
 
@@ -68,13 +69,14 @@ void OnDataRecv(const esp_now_recv_info_t *recv_info, const uint8_t *incomingDat
 
 void OnDataSent(const wifi_tx_info_t *info, esp_now_send_status_t status)
 {
+  (void)info;
   if (status == ESP_NOW_SEND_SUCCESS)
   {
     DEBUG_I("Status wysyłki: Sukces");
   }
   else
   {
-    DEBUG_W("Status wysyłki: Błąd");
+    RECORD_ERROR(ERR_ESPNOW_SEND_FAILED, "ESP-NOW send callback reported failure");
   }
 }
 
@@ -170,7 +172,7 @@ ErrorCode sendTxToSlave(CommandType command, const char *commandName, bool expec
   }
   else
   {
-    DEBUG_E("BLAD wysylania komendy %s: %d", commandName, (int)result);
+    LOG_ERROR(result, "Failed to send command %s", commandName);
     snprintf(lastMeasurement, sizeof(lastMeasurement), "BLAD: Nie można wysłać komendy");
   }
 
@@ -500,10 +502,13 @@ void setup()
   // Initialize system status
   memset(&systemStatus, 0, sizeof(systemStatus));
   
+  // Initialize error handler
+  ERROR_HANDLER.initialize();
+  
   // Initialize Preferences Manager and load settings
   if (!prefsManager.begin())
   {
-    DEBUG_W("PreferencesManager initialization failed, using default values");
+    RECORD_ERROR(ERR_PREFS_INIT_FAILED, "PreferencesManager initialization failed, using default values");
     initDefaultTxMessage();
   }
   else
@@ -523,7 +528,7 @@ void setup()
   // Initialize LittleFS
   if (!LittleFS.begin())
   {
-    DEBUG_E("LittleFS Mount Failed!");
+    RECORD_ERROR(ERR_LITTLEFS_MOUNT_FAILED, "Failed to mount LittleFS file system");
     return;
   }
   DEBUG_I("LittleFS mounted successfully");
@@ -542,9 +547,10 @@ void setup()
   WiFi.setChannel(ESPNOW_WIFI_CHANNEL);
 
   // Initialize communication manager
-  if (commManager.initialize(slaveAddress) != ERR_NONE)
+  ErrorCode commResult = commManager.initialize(slaveAddress);
+  if (commResult != ERR_NONE)
   {
-    DEBUG_E("ESP-NOW init failed!");
+    LOG_ERROR(commResult, "Failed to initialize ESP-NOW communication");
     return;
   }
 

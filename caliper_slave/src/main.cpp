@@ -3,6 +3,7 @@
 #include <Wire.h>
 #include "config.h"
 #include <shared_common.h>
+#include <error_handler.h>
 #include <MacroDebugger.h>
 #include <arduino-timer.h>
 
@@ -52,9 +53,10 @@ auto timerWorker = timer_create_default();
  */
 void OnDataRecv(const esp_now_recv_info_t *recv_info, const uint8_t *incomingData, int len)
 {
+  (void)recv_info;
   if (len != sizeof(msgMaster))
   {
-    DEBUG_E("BLAD: Nieprawidlowa dlugosc pakietu ESP-NOW");
+    RECORD_ERROR(ERR_ESPNOW_INVALID_LENGTH, "Received packet length: %d, expected: %d", len, (int)sizeof(msgMaster));
     return;
   }
 
@@ -88,13 +90,14 @@ void OnDataRecv(const esp_now_recv_info_t *recv_info, const uint8_t *incomingDat
 
 void OnDataSent(const wifi_tx_info_t *info, esp_now_send_status_t status)
 {
+  (void)info;
   if (status == ESP_NOW_SEND_SUCCESS)
   {
     DEBUG_I("Status wysyłki: Sukces");
   }
   else
   {
-    DEBUG_W("Status wysyłki: Błąd");
+    RECORD_ERROR(ERR_ESPNOW_SEND_FAILED, "ESP-NOW send callback reported failure");
   }
 }
 
@@ -165,7 +168,7 @@ bool runMeasReq(void *arg)
   }
   else
   {
-    DEBUG_E("BŁĄD wysyłania wyniku: %d", (int)sendResult);
+    RECORD_ERROR(ERR_ESPNOW_SEND_FAILED, "ESP-NOW send failed: %d", (int)sendResult);
 
     // Próba ponownego wysłania po krótkiej przerwie
     delay(ESPNOW_RETRY_DELAY_MS);
@@ -176,7 +179,7 @@ bool runMeasReq(void *arg)
     }
     else
     {
-      DEBUG_E("Ponowne wysłanie wyniku nieudane: %d", (int)sendResult);
+      RECORD_ERROR(ERR_ESPNOW_SEND_FAILED, "Retry ESP-NOW send failed: %d", (int)sendResult);
     }
   }
 
@@ -188,13 +191,16 @@ void setup()
   DEBUG_BEGIN();
   DEBUG_I("=== ESP32 SLAVE - Suwmiarka + ESP-NOW ===");
 
+  // Initialize error handler
+  ERROR_HANDLER.initialize();
+
   // Initialize sensors
   caliper.begin();
 
   Wire.begin();
   if (!accelerometer.begin())
   {
-    DEBUG_W("Akcelerometr (ADXL345) nie został zainicjalizowany");
+    LOG_WARNING(ERR_ACCEL_INIT_FAILED, "Accelerometer not initialized - continuing without angle data");
   }
 
   WiFi.mode(WIFI_STA);
@@ -221,7 +227,7 @@ void setup()
 
   if (esp_now_init() != ESP_OK)
   {
-    DEBUG_E("BŁĄD ESP-NOW");
+    RECORD_ERROR(ERR_ESPNOW_INIT_FAILED, "ESP-NOW initialization failed");
     return;
   }
   DEBUG_I("ESP-NOW OK");
@@ -247,7 +253,7 @@ void setup()
   }
   else
   {
-    DEBUG_E("BŁĄD dodania Master! Sprawdź MAC, kanał, zasięg...");
+    RECORD_ERROR(ERR_ESPNOW_PEER_ADD_FAILED, "Failed to add Master after %d attempts", peerTries);
     return;
   }
 

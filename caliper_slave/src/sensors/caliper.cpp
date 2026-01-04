@@ -3,12 +3,15 @@
  * @brief Caliper (suwmiarka) sensor implementation for ESP32
  * @author System Generated
  * @date 2025-12-27
- * @version 1.0
+ * @version 2.0
+ *
+ * @version 2.0 - Integrated comprehensive error code system
  */
 
 #include "caliper.h"
 
 #include <MacroDebugger.h>
+#include <error_handler.h>
 
 // Static member initialization
 volatile uint8_t CaliperInterface::bitBuffer[CALIPER_BIT_BUFFER_SIZE] = {0};
@@ -242,13 +245,14 @@ float CaliperInterface::performMeasurement()
         }
         else
         {
-            DEBUG_E("BŁĄD: Nieprawidłowa wartość pomiaru!");
+            RECORD_ERROR(ERR_CALIPER_INVALID_DATA, "Measurement value: %.3f (range: %.1f to %.1f)",
+                result, MEASUREMENT_MIN_VALUE, MEASUREMENT_MAX_VALUE);
             return INVALID_MEASUREMENT_VALUE;
         }
     }
     else
     {
-        DEBUG_E("BŁĄD: Timeout!");
+        RECORD_ERROR(ERR_CALIPER_TIMEOUT, "Timeout after %u ms", MEASUREMENT_TIMEOUT_MS);
         return INVALID_MEASUREMENT_VALUE;
     }
 }

@@ -3,12 +3,15 @@
  * @brief ADXL345 accelerometer sensor implementation for ESP32
  * @author System Generated
  * @date 2025-12-27
- * @version 1.0
+ * @version 2.0
+ *
+ * @version 2.0 - Integrated comprehensive error code system
  */
 
 #include "accelerometer.h"
 
 #include <MacroDebugger.h>
+#include <error_handler.h>
 
 #define ADXL345_I2CADDR 0x53 // 0x1D if SDO = HIGH
 
@@ -18,7 +21,7 @@ bool AccelerometerInterface::begin()
     
     if (!myAcc.init())
     {
-        DEBUG_E("ADXL345 not connected!");
+        RECORD_ERROR(ERR_ACCEL_INIT_FAILED, "ADXL345 not connected at I2C address 0x%02X", ADXL345_I2CADDR);
         return false;
     }
 

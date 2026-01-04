@@ -3,7 +3,9 @@
  * @brief ESP-NOW Communication Module Implementation
  * @author System Generated
  * @date 2025-11-30
- * @version 1.0
+ * @version 2.0
+ *
+ * @version 2.0 - Integrated comprehensive error code system
  */
 
 #include "communication.h"
@@ -19,7 +21,8 @@ ErrorCode CommunicationManager::initialize(const uint8_t *slaveAddr)
 {
   if (!slaveAddr)
   {
-    lastError = ERR_INVALID_DATA;
+    RECORD_ERROR(ERR_VALIDATION_INVALID_PARAM, "Null slave address provided");
+    lastError = ERR_VALIDATION_INVALID_PARAM;
     return lastError;
   }
 
@@ -29,7 +32,8 @@ ErrorCode CommunicationManager::initialize(const uint8_t *slaveAddr)
   // Initialize ESP-NOW
   if (esp_now_init() != ESP_OK)
   {
-    lastError = ERR_ESPNOW_SEND;
+    RECORD_ERROR(ERR_ESPNOW_INIT_FAILED, "ESP-NOW initialization failed");
+    lastError = ERR_ESPNOW_INIT_FAILED;
     return lastError;
   }
 
@@ -41,7 +45,9 @@ ErrorCode CommunicationManager::initialize(const uint8_t *slaveAddr)
   // Add peer
   if (esp_now_add_peer(&peerInfo) != ESP_OK)
   {
-    lastError = ERR_ESPNOW_SEND;
+    RECORD_ERROR(ERR_ESPNOW_PEER_ADD_FAILED, "Failed to add peer: %02X:%02X:%02X:%02X:%02X:%02X",
+      slaveAddress[0], slaveAddress[1], slaveAddress[2], slaveAddress[3], slaveAddress[4], slaveAddress[5]);
+    lastError = ERR_ESPNOW_PEER_ADD_FAILED;
     return lastError;
   }
 
@@ -54,7 +60,8 @@ ErrorCode CommunicationManager::sendMessage(const MessageMaster &message, int re
 {
   if (!initialized)
   {
-    lastError = ERR_ESPNOW_SEND;
+    RECORD_ERROR(ERR_ESPNOW_SEND_FAILED, "Communication manager not initialized");
+    lastError = ERR_ESPNOW_SEND_FAILED;
     return lastError;
   }
 
@@ -82,7 +89,9 @@ ErrorCode CommunicationManager::sendMessage(const MessageMaster &message, int re
 
   if (attempts >= retryCount)
   {
-    result = ERR_ESPNOW_SEND;
+    RECORD_ERROR(ERR_ESPNOW_SEND_FAILED, "Send failed after %d attempts to peer %02X:%02X:%02X:%02X:%02X:%02X",
+      attempts, slaveAddress[0], slaveAddress[1], slaveAddress[2], slaveAddress[3], slaveAddress[4], slaveAddress[5]);
+    result = ERR_ESPNOW_SEND_FAILED;
   }
 
   lastError = result;

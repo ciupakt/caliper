@@ -3,16 +3,19 @@
  * @brief MP6550GG-Z DC Motor Controller Implementation for ESP32
  * @author System Generated
  * @date 2025-12-27
- * @version 1.0
+ * @version 2.0
  *
  * @details
  * Minimalist implementation for MP6550GG-Z single H-Bridge DC motor driver.
  * Provides basic motor control functionality with PWM.
+ *
+ * @version 2.0 - Integrated comprehensive error code system
  */
 
 #include "motor_ctrl.h"
 
 #include <MacroDebugger.h>
+#include <error_handler.h>
 
 //==============================================================================
 // Public Function Implementations
@@ -104,7 +107,7 @@ void motorCtrlRun(uint8_t speed, uint8_t torque, MotorState direction)
 
     if (direction > MOTOR_BRAKE)
     {
-        DEBUG_E("Error: Invalid motor direction");
+        RECORD_ERROR(ERR_MOTOR_INVALID_DIRECTION, "Invalid direction: %u (valid: 0-3)", (unsigned)direction);
         digitalWrite(MOTOR_IN1_PIN, LOW);
         digitalWrite(MOTOR_IN2_PIN, LOW);
         return;

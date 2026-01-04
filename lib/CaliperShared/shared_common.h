@@ -3,18 +3,21 @@
  * @brief Shared definitions and structures for ESP32 Caliper System
  * @author System Generated
  * @date 2025-12-26
- * @version 2.0
- * 
+ * @version 3.0
+ *
  * This is the unified common header file for both Master and Slave devices.
  * Use build flags to enable device-specific features:
  * - CALIPER_MASTER: Enables Master-specific structures
  * - CALIPER_SLAVE: Enables Slave-specific structures
+ *
+ * @version 3.0 - Added comprehensive error code system integration
  */
 
 #ifndef SHARED_COMMON_H
 #define SHARED_COMMON_H
 
 #include <stdint.h>
+#include "error_codes.h"
 
 /**
  * @brief Command types for ESP-NOW communication
@@ -38,17 +41,36 @@ enum MotorState : uint8_t
 };
 
 /**
- * @brief Error codes for system operations
+ * @brief Legacy error codes for backward compatibility
+ *
+ * @deprecated Use ErrorCode from error_codes.h instead
+ * This enum is kept for backward compatibility only.
+ * New code should use comprehensive error code system defined in error_codes.h.
+ *
+ * Mapping to new error codes:
+ * - ERR_LEGACY_NONE -> ERR_NONE (0x0000)
+ * - ERR_LEGACY_ESPNOW_SEND -> ERR_ESPNOW_SEND_FAILED (0x0102)
+ * - ERR_LEGACY_MEASUREMENT_TIMEOUT -> ERR_CALIPER_TIMEOUT (0x0201)
+ * - ERR_LEGACY_INVALID_DATA -> ERR_CALIPER_INVALID_DATA (0x0202)
+ * - ERR_LEGACY_ADC_READ -> ERR_ADC_READ_FAILED (0x0403)
+ * - ERR_LEGACY_INVALID_COMMAND -> ERR_VALIDATION_INVALID_COMMAND (0x0705)
  */
-enum ErrorCode : uint8_t
+enum ErrorCodeLegacy : uint8_t
 {
-  ERR_NONE = 0,             /**< No error */
-  ERR_ESPNOW_SEND,          /**< ESP-NOW send failed */
-  ERR_MEASUREMENT_TIMEOUT,  /**< Measurement timeout */
-  ERR_INVALID_DATA,         /**< Invalid data received */
-  ERR_ADC_READ,             /**< ADC read error */
-  ERR_INVALID_COMMAND       /**< Invalid command received */
+  ERR_LEGACY_NONE = 0,             /**< No error */
+  ERR_LEGACY_ESPNOW_SEND,          /**< ESP-NOW send failed */
+  ERR_LEGACY_MEASUREMENT_TIMEOUT,  /**< Measurement timeout */
+  ERR_LEGACY_INVALID_DATA,         /**< Invalid data received */
+  ERR_LEGACY_ADC_READ,             /**< ADC read error */
+  ERR_LEGACY_INVALID_COMMAND       /**< Invalid command received */
 };
+
+// Note: ErrorCode is now defined in error_codes.h as uint16_t
+// The comprehensive error code system provides:
+// - 8 error categories
+// - 10 source modules
+// - Detailed error descriptions and recovery actions
+// - Helper functions for error decoding and logging
 
 /**
  * @brief Communication message structure for ESP-NOW

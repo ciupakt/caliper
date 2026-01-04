@@ -3,7 +3,9 @@
  * @brief ESP-NOW Communication Module Header
  * @author System Generated
  * @date 2025-11-30
- * @version 1.0
+ * @version 2.0
+ *
+ * @version 2.0 - Integrated comprehensive error code system
  */
 
 #ifndef COMMUNICATION_H
@@ -11,6 +13,7 @@
 
 #include "config.h"
 #include <shared_common.h>
+#include <error_handler.h>
 #include <esp_now.h>
 #include <WiFi.h>
 
@@ -29,6 +32,10 @@ public:
    * @brief Initialize ESP-NOW communication
    * @param slaveAddr MAC address of slave device
    * @return ERR_NONE if successful, error code otherwise
+   *
+   * Possible errors:
+   * - ERR_ESPNOW_INIT_FAILED: ESP-NOW initialization failed
+   * - ERR_ESPNOW_PEER_ADD_FAILED: Peer addition failed
    */
   ErrorCode initialize(const uint8_t *slaveAddr);
 
@@ -37,6 +44,9 @@ public:
    * @param message MessageMaster payload to send
    * @param retryCount Number of retries (default: ESPNOW_MAX_RETRIES)
    * @return ERR_NONE if successful, error code otherwise
+   *
+   * Possible errors:
+   * - ERR_ESPNOW_SEND_FAILED: Send operation failed after retries
    */
   ErrorCode sendMessage(const MessageMaster &message, int retryCount = ESPNOW_MAX_RETRIES);
 
