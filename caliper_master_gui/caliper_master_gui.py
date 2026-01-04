@@ -32,7 +32,53 @@ class CaliperGUI:
         
         # Stan GUI: nazwa bieżącej sesji
         self.current_session_name: str = ""
+        
+        # Stan GUI: nazwa ostatnio zapisanej sesji (do wykrywania zmian)
+        self.last_saved_session_name: str = ""
     
+    def _create_new_session_from_serial(self, session_name: str):
+        """Create a new measurement session with CSV file from serial data.
+        
+        Args:
+            session_name: Name of the session (will be used as CSV prefix)
+        """
+        # Zamknij stary plik CSV jeśli istnieje
+        if self.csv_handler.is_open():
+            self.csv_handler.close()
+        
+        # Użyj nazwy sesji jako prefixu pliku CSV
+        filename = None
+        try:
+            filename = self.csv_handler.create_new_file(prefix=session_name)
+        except Exception as e:
+            self.calibration_tab.add_app_log(f"BLAD: Nie udalo sie utworzyc pliku CSV: {str(e)}")
+            return
+        
+        # Zaktualizuj last_saved_session_name
+        self.last_saved_session_name = session_name
+        
+        # Wyczyść historię pomiarów w GUI
+        self.measurement_tab._clear()
+        
+        # Zaktualizuj UI z informacjami o nowej sesji
+        try:
+            if filename:
+                if dpg.does_item_exist("csv_info"):
+                    dpg.set_value("csv_info", f"Plik CSV: {filename}")
+                if dpg.does_item_exist("status"):
+                    dpg.set_value("status", f"Nowa sesja: {session_name}")
+                if dpg.does_item_exist("session_name_display"):
+                    dpg.set_value("session_name_display", f"Sesja: {session_name}")
+        except Exception:
+            pass
+        
+        # Zaktualizuj session_name w measurement_tab
+        self.measurement_tab.session_name = session_name
+        self.measurement_tab.csv_prefix = session_name
+        
+        # Zaloguj utworzenie nowej sesji
+        self.calibration_tab.add_app_log(f"[SESJA] Nowa sesja utworzona: {session_name} -> {filename}")
+
     @staticmethod
     def _normalize_debug_plot_line(data: str) -> str:
         """Normalize `DEBUG_PLOT` output by stripping leading '>' and whitespace."""
@@ -206,14 +252,18 @@ class CaliperGUI:
                 if data.startswith("sessionName:"):
                     name_str = data.split(":", 1)[1].strip()
                     self.current_session_name = name_str
-                    self.calibration_tab.add_app_log(f"[SESJA] Nazwa sesji: {name_str}")
                     
-                    # Odświeżamy UI z nazwą sesji (jeśli istnieje)
-                    try:
-                        if dpg.does_item_exist("session_name_display"):
-                            dpg.set_value("session_name_display", f"Sesja: {name_str}")
-                    except Exception:
-                        pass
+                    # Sprawdź czy nazwa jest niepusta i różna od ostatnio zapisanej
+                    if name_str and name_str != self.last_saved_session_name:
+                        self._create_new_session_from_serial(name_str)
+                    else:
+                        # Tylko loguj i aktualizuj UI bez tworzenia nowej sesji
+                        self.calibration_tab.add_app_log(f"[SESJA] Nazwa sesji: {name_str}")
+                        try:
+                            if dpg.does_item_exist("session_name_display"):
+                                dpg.set_value("session_name_display", f"Sesja: {name_str}")
+                        except Exception:
+                            pass
                     return
     
                 # Inne (nie-plot) linie zostawiamy jako log (np. SILNIK)

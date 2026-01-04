@@ -49,16 +49,7 @@ void OnDataRecv(const esp_now_recv_info_t *recv_info, const uint8_t *incomingDat
   measurementState.setBatteryVoltage(msg.batteryVoltage);
   measurementState.setReady(true);
 
-  DEBUG_I("ODEBRANO DANE OD SLAVE");
-  DEBUG_I("command:%c", (char)systemStatus.msgSlave.command);
 
-  // UI (WWW/GUI) liczy korekcję po swojej stronie:
-  // corrected = measurement + calibrationOffset
-  DEBUG_PLOT("measurement:%.3f", (double)systemStatus.msgSlave.measurement);
-  DEBUG_PLOT("calibrationOffset:%.3f", (double)systemStatus.calibrationOffset);
-  DEBUG_PLOT("angleX:%u", (unsigned)msg.angleX);
-  DEBUG_PLOT("batteryVoltage:%.3f", (double)msg.batteryVoltage);
-  DEBUG_PLOT("sessionName:%s", systemStatus.sessionName);
 }
 
 void OnDataSent(const wifi_tx_info_t *info, esp_now_send_status_t status)
@@ -144,7 +135,79 @@ static bool waitForMeasurementReady(uint32_t timeoutMs)
 
   const uint32_t elapsedMs = millis() - startMs;
   DEBUG_I("Measurement ready after %u ms", (unsigned)elapsedMs);
+  DEBUG_I("command:%c", (char)systemStatus.msgSlave.command);
+
+  // UI (WWW/GUI) liczy korekcję po swojej stronie:
+  // corrected = measurement + calibrationOffset
+  DEBUG_PLOT("sessionName:%s", systemStatus.sessionName);
+  DEBUG_PLOT("measurement:%.3f", (double)systemStatus.msgSlave.measurement);
+  DEBUG_PLOT("calibrationOffset:%.3f", (double)systemStatus.calibrationOffset);
+  DEBUG_PLOT("angleX:%u", (unsigned)systemStatus.msgSlave.angleX);
+  DEBUG_PLOT("batteryVoltage:%.3f", (double)systemStatus.msgSlave.batteryVoltage);
+
   return true;
+}
+
+/**
+ * @brief Wykonuje operację pomiarową z ochroną przed wyścigiem
+ *
+ * Funkcja zapewnia atomowe wykonanie operacji CMD_MEASURE lub CMD_UPDATE
+ * z ochroną przed jednoczesnymi wywołaniami z różnych źródeł.
+ *
+ * @details
+ * Przepływ operacji:
+ * 1. Sprawdza czy operacja już trwa (measurementInProgress)
+ * 2. Jeśli tak - zwraca false (błąd: zajęte)
+ * 3. Jeśli nie - ustawia measurementInProgress = true
+ * 4. Resetuje flagę ready
+ * 5. Wysyła komendę do Slave
+ * 6. Czeka na odpowiedź z timeoutem
+ * 7. Ustawia measurementInProgress = false
+ * 8. Zwraca true (sukces) lub false (timeout/błąd)
+ *
+ * @param command Typ komendy (CMD_MEASURE lub CMD_UPDATE)
+ * @param commandName Nazwa komendy dla logowania
+ * @return true jeśli operacja zakończyła się sukcesem, false w przeciwnym razie
+ */
+static bool executeMeasurementCommand(CommandType command, const char *commandName)
+{
+  // Krok 1: Sprawdź czy operacja już trwa
+  if (measurementState.isMeasurementInProgress())
+  {
+    DEBUG_W("Measurement command %s rejected - operation already in progress", commandName);
+    return false;
+  }
+
+  // Krok 2: Zablokuj operację
+  measurementState.setMeasurementInProgress(true);
+
+  // Krok 3: Resetuj flagę gotowości
+  measurementState.setReady(false);
+  measurementState.setMeasurementMessage("Oczekiwanie na odpowiedź...");
+
+  // Krok 4: Ustaw i wyślij komendę
+  systemStatus.msgMaster.command = command;
+
+  ErrorCode result = commManager.sendMessage(systemStatus.msgMaster);
+
+  if (result != ERR_NONE)
+  {
+    LOG_ERROR(result, "Failed to send command %s", commandName);
+    measurementState.setMeasurementMessage("BLAD: Nie można wysłać komendy");
+    measurementState.setMeasurementInProgress(false);  // Zwolnij blokadę
+    return false;
+  }
+
+  DEBUG_I("Wysłano komendę: %s", commandName);
+  measurementState.setMeasurementMessage(commandName);
+
+  // Krok 5: Czekaj na odpowiedź
+  bool success = waitForMeasurementReady(calcMeasurementWaitTimeoutMs());
+
+  // Krok 6: Zwolnij blokadę (nawet przy timeout)
+  measurementState.setMeasurementInProgress(false);
+
+  return success;
 }
 
 ErrorCode sendTxToSlave(CommandType command, const char *commandName, bool expectResponse)
@@ -175,12 +238,12 @@ ErrorCode sendTxToSlave(CommandType command, const char *commandName, bool expec
 
 void requestMeasurement()
 {
-  (void)sendTxToSlave(CMD_MEASURE, "Pomiar", true);
+  executeMeasurementCommand(CMD_MEASURE, "Pomiar");
 }
 
 void requestUpdate()
 {
-  (void)sendTxToSlave(CMD_UPDATE, "Status", true);
+  executeMeasurementCommand(CMD_UPDATE, "Status");
 }
 
 void sendMotorTest()
@@ -250,8 +313,8 @@ void handleRead()
  *
  * @details
  * Przepływ operacji:
- * 1. Wysyła komendę CMD_MEASURE do Slave
- * 2. Oczekuje na odpowiedź z timeoutem obliczonym przez calcMeasurementWaitTimeoutMs()
+ * 1. Wysyła komendę CMD_MEASURE do Slave (z ochroną przed wyścigiem)
+ * 2. Jeśli operacja już trwa - zwraca błąd 503 Service Unavailable
  * 3. Jeśli timeout - zwraca błąd 504 Gateway Timeout
  * 4. Jeśli sukces - zwraca JSON z measurementRaw i calibrationOffset
  *
@@ -268,14 +331,18 @@ void handleRead()
  */
 void handleCalibrationMeasure()
 {
-  requestMeasurement();
-
-  // Poczekaj na wynik (MVP: blocking jak dotychczas)
-  (void)waitForMeasurementReady(calcMeasurementWaitTimeoutMs());
-
-  if (!measurementState.isReady())
+  // Wywołaj ujednoliconą funkcję z ochroną przed wyścigiem
+  if (!executeMeasurementCommand(CMD_MEASURE, "Pomiar"))
   {
-    server.send(504, "application/json", "{\"success\":false,\"error\":\"Brak odpowiedzi z urządzenia\"}");
+    // Sprawdź czy to timeout czy zajętość
+    if (!measurementState.isReady())
+    {
+      server.send(504, "application/json", "{\"success\":false,\"error\":\"Brak odpowiedzi z urządzenia\"}");
+    }
+    else
+    {
+      server.send(503, "application/json", "{\"success\":false,\"error\":\"Urządzenie zajęte - operacja w toku\"}");
+    }
     return;
   }
 
@@ -400,7 +467,7 @@ void handleStartSession()
   memset(systemStatus.sessionName, 0, sizeof(systemStatus.sessionName));
   strncpy(systemStatus.sessionName, sessionName.c_str(), sizeof(systemStatus.sessionName) - 1);
   
-  DEBUG_I("sessionName:%s", systemStatus.sessionName);
+  DEBUG_PLOT("sessionName:%s", systemStatus.sessionName);
 
   char response[JSON_RESPONSE_BUFFER_SIZE];
   snprintf(response, sizeof(response), "{\"sessionName\":\"%s\"}", sessionName.c_str());
@@ -422,8 +489,8 @@ void handleStartSession()
  * Przepływ operacji:
  * 1. Sprawdza czy sesja jest aktywna (sessionName != "")
  * 2. Jeśli nie - zwraca 400 Bad Request
- * 3. Wysyła komendę CMD_MEASURE do Slave
- * 4. Oczekuje na odpowiedź z timeoutem
+ * 3. Wysyła komendę CMD_MEASURE do Slave (z ochroną przed wyścigiem)
+ * 4. Jeśli operacja już trwa - zwraca błąd 503 Service Unavailable
  * 5. Jeśli timeout - zwraca 504 Gateway Timeout
  * 6. Jeśli sukces - zwraca pełne dane pomiarowe
  *
@@ -461,15 +528,18 @@ void handleMeasureSession()
     return;
   }
 
-  requestMeasurement();
-
-  // Poczekaj na wynik
-  (void)waitForMeasurementReady(calcMeasurementWaitTimeoutMs());
-
-  // Sprawdź czy dane są gotowe przed użyciem
-  if (!measurementState.isReady())
+  // Wywołaj ujednoliconą funkcję z ochroną przed wyścigiem
+  if (!executeMeasurementCommand(CMD_MEASURE, "Pomiar"))
   {
-    server.send(504, "application/json", "{\"error\":\"Brak odpowiedzi z urządzenia\"}");
+    // Sprawdź czy to timeout czy zajętość
+    if (!measurementState.isReady())
+    {
+      server.send(504, "application/json", "{\"error\":\"Brak odpowiedzi z urządzenia\"}");
+    }
+    else
+    {
+      server.send(503, "application/json", "{\"error\":\"Urządzenie zajęte - operacja w toku\"}");
+    }
     return;
   }
 
@@ -585,6 +655,7 @@ void setup()
   SerialCliContext cliCtx;
   cliCtx.systemStatus = &systemStatus;
   cliCtx.prefsManager = &prefsManager;
+  cliCtx.measurementState = &measurementState;
   cliCtx.requestMeasurement = requestMeasurement;
   cliCtx.requestUpdate = requestUpdate;
   cliCtx.sendMotorTest = sendMotorTest;

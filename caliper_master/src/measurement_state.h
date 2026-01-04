@@ -36,6 +36,7 @@ private:
     char lastBatteryVoltage[BATTERY_BUFFER_SIZE];
     float lastValue;
     bool ready;
+    bool measurementInProgress;
 
 public:
     /**
@@ -98,6 +99,20 @@ public:
      * @return true jeśli pomiar jest gotowy, false w przeciwnym razie
      */
     bool isReady() const;
+
+    /**
+     * @brief Sprawdza czy operacja pomiarowa jest w toku
+     *
+     * @return true jeśli operacja jest w toku, false w przeciwnym razie
+     */
+    bool isMeasurementInProgress() const;
+
+    /**
+     * @brief Ustawia flagę operacji pomiarowej w toku
+     *
+     * @param inProgress Stan operacji (true/false)
+     */
+    void setMeasurementInProgress(bool inProgress);
 
     /**
      * @brief Resetuje stan do wartości domyślnych

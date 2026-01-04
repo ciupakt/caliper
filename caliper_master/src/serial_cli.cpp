@@ -7,6 +7,7 @@
 #include <MacroDebugger.h>
 #include <shared_common.h>
 #include "preferences_manager.h"
+#include "measurement_state.h"
 
 bool parseIntStrict(const String &s, long &out)
 {
@@ -182,6 +183,19 @@ bool SerialCli_tick(void *arg)
       if (g_ctx.requestMeasurement)
       {
         g_ctx.requestMeasurement();
+        
+        // Loguj wynik jeśli measurementState jest dostępny
+        if (g_ctx.measurementState != nullptr)
+        {
+          if (g_ctx.measurementState->isReady())
+          {
+            DEBUG_I("Pomiar zakończony: %s", g_ctx.measurementState->getMeasurement());
+          }
+          else
+          {
+            DEBUG_W("Pomiar nieudany lub timeout");
+          }
+        }
       }
       break;
 
@@ -216,6 +230,21 @@ bool SerialCli_tick(void *arg)
       if (g_ctx.requestUpdate)
       {
         g_ctx.requestUpdate();
+        
+        // Loguj wynik jeśli measurementState jest dostępny
+        if (g_ctx.measurementState != nullptr)
+        {
+          if (g_ctx.measurementState->isReady())
+          {
+            DEBUG_I("Status zaktualizowany: %s, Bateria: %s",
+                   g_ctx.measurementState->getMeasurement(),
+                   g_ctx.measurementState->getBatteryVoltage());
+          }
+          else
+          {
+            DEBUG_W("Aktualizacja statusu nieudana lub timeout");
+          }
+        }
       }
       break;
 
@@ -341,8 +370,6 @@ bool SerialCli_tick(void *arg)
       memset(g_ctx.systemStatus->sessionName, 0, sizeof(g_ctx.systemStatus->sessionName));
       strncpy(g_ctx.systemStatus->sessionName, rest.c_str(), sizeof(g_ctx.systemStatus->sessionName) - 1);
       
-      DEBUG_I("sessionName:%s", g_ctx.systemStatus->sessionName);
-
       // Ujednolicamy kanał dla GUI (DEBUG_PLOT) — GUI może od razu zaktualizować stan.
       DEBUG_PLOT("sessionName:%s", g_ctx.systemStatus->sessionName);
       break;

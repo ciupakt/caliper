@@ -2,7 +2,7 @@
 #include <string.h>
 
 MeasurementState::MeasurementState()
-    : lastValue(0.0f), ready(false)
+    : lastValue(0.0f), ready(false), measurementInProgress(false)
 {
     // Inicjalizacja buforów tekstowych
     strncpy(lastMeasurement, "Brak pomiaru", MEASUREMENT_BUFFER_SIZE - 1);
@@ -57,10 +57,21 @@ bool MeasurementState::isReady() const
     return ready;
 }
 
+bool MeasurementState::isMeasurementInProgress() const
+{
+    return measurementInProgress;
+}
+
+void MeasurementState::setMeasurementInProgress(bool inProgress)
+{
+    measurementInProgress = inProgress;
+}
+
 void MeasurementState::reset()
 {
     lastValue = 0.0f;
     ready = false;
+    measurementInProgress = false;
     
     strncpy(lastMeasurement, "Brak pomiaru", MEASUREMENT_BUFFER_SIZE - 1);
     lastMeasurement[MEASUREMENT_BUFFER_SIZE - 1] = '\0';
