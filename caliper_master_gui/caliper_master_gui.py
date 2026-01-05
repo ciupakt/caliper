@@ -6,6 +6,7 @@ Refactored modular version
 import dearpygui.dearpygui as dpg
 import threading
 import time
+import os
 from datetime import datetime
 
 # Import application modules
@@ -352,7 +353,15 @@ class CaliperGUI:
         # DearPyGui domyślnie może nie mieć załadowanego zakresu znaków Latin Extended,
         # więc jawnie dodajemy zakresy potrzebne dla polskich znaków.
         with dpg.font_registry():
-            with dpg.font("C:/Windows/Fonts/segoeui.ttf", 22) as default_font:
+            # Wykrywanie systemu operacyjnego dla ścieżek do czcionek
+            if os.name == 'nt':  # Windows
+                font_path = "C:/Windows/Fonts/segoeui.ttf"
+                font_bold_path = "C:/Windows/Fonts/segoeuib.ttf"
+            else:  # Linux/Unix
+                font_path = "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf"
+                font_bold_path = "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf"
+
+            with dpg.font(font_path, 22) as default_font:
                 dpg.add_font_range_hint(dpg.mvFontRangeHint_Default)
                 # Latin Extended-A (m.in. ą, ć, ę, ł, ń, ó, ś, ź, ż)
                 dpg.add_font_range(0x0100, 0x017F)
@@ -360,7 +369,7 @@ class CaliperGUI:
                 dpg.add_font_range(0x0180, 0x024F)
 
             # Font pogrubiony (do akcentowania przycisków, np. "Wykonaj pomiar")
-            with dpg.font("C:/Windows/Fonts/segoeuib.ttf", 24, tag="font_bold"):
+            with dpg.font(font_bold_path, 24, tag="font_bold"):
                 dpg.add_font_range_hint(dpg.mvFontRangeHint_Default)
                 dpg.add_font_range(0x0100, 0x017F)
                 dpg.add_font_range(0x0180, 0x024F)
