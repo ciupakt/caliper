@@ -17,6 +17,9 @@
 
 bool AccelerometerInterface::begin()
 {
+    //TwoWire wirePort = Wire;
+    //wirePort.begin();
+
     myAcc = ADXL345_WE(ADXL345_I2CADDR);
     
     if (!myAcc.init())

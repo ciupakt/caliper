@@ -62,7 +62,7 @@
         #define DEBUG_TX_PIN              SER_0_PIN_TX
       #endif
       
-      #define DEBUG_BEGIN()               DEBUG_SERIAL_PORT.begin(DEBUG_SER_BAUD_RATE, SERIAL_8N1, DEBUG_RX_PIN, DEBUG_TX_PIN)
+      #define DEBUG_BEGIN()               DEBUG_SERIAL_PORT.begin(DEBUG_SER_BAUD_RATE);
       #define DEBUG(X...)                 DEBUG_SERIAL_PORT.printf(X)
       #define DEBUGLN(X...)               ( {DEBUG_SERIAL_PORT.printf(X), DEBUG_SERIAL_PORT.println();} )
     

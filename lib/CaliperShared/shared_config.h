@@ -43,20 +43,20 @@
 // ============================================================================
 // Pin Definitions - Caliper
 // ============================================================================
-#define CALIPER_CLOCK_PIN 18
-#define CALIPER_DATA_PIN 19
-#define CALIPER_TRIG_PIN 5
+#define CALIPER_CLOCK_PIN 11
+#define CALIPER_DATA_PIN 12
+#define CALIPER_TRIG_PIN 13
 
 // ============================================================================
 // Pin Definitions - Motor (MP6550GG-Z)
 // ============================================================================
-#define MOTOR_IN1_PIN 13
-#define MOTOR_IN2_PIN 12
+#define MOTOR_IN1_PIN 6
+#define MOTOR_IN2_PIN 15
 
 // ============================================================================
 // Pin Definitions - Battery
 // ============================================================================
-#define BATTERY_VOLTAGE_PIN 34
+#define BATTERY_VOLTAGE_PIN 10
 
 // ============================================================================
 // Calibration Configuration

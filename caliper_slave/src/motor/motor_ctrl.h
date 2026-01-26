@@ -24,10 +24,6 @@
 #include <shared_config.h>
 #include <error_handler.h>
 
-// Motor pin definitions
-#define MOTOR_IN2_PIN 12
-#define MOTOR_IN1_PIN 13
-
 #ifdef __cplusplus
 extern "C"
 {
