@@ -25,7 +25,7 @@
  * @brief MAC address of the Slave device
  * To find the MAC address, run the slave and check Serial output at startup.
  */
-#define SLAVE_MAC_ADDR {0x80, 0xB5, 0x4E, 0xC1, 0xC5, 0x70}
+#define SLAVE_MAC_ADDR {0x10, 0xB4, 0x1D, 0xD6, 0x40, 0xAC}
 
 // ============================================================================
 // WiFi Access Point Configuration
