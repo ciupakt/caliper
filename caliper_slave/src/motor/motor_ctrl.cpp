@@ -1,15 +1,14 @@
 /**
  * @file motor_ctrl.cpp
- * @brief MP6550GG-Z DC Motor Controller Implementation for ESP32
+ * @brief STSPIN250 DC Motor Controller Implementation for ESP32
  * @author System Generated
- * @date 2025-12-27
- * @version 2.0
+ * @date 2026-02-23
+ * @version 3.0
  *
  * @details
- * Minimalist implementation for MP6550GG-Z single H-Bridge DC motor driver.
- * Provides basic motor control functionality with PWM.
- *
- * @version 2.0 - Integrated comprehensive error code system
+ * Implementation for STSPIN250 single H-Bridge DC motor driver.
+ * Provides full motor control with speed, direction, current limiting,
+ * enable/disable, and fault detection.
  */
 
 #include "motor_ctrl.h"
@@ -23,112 +22,119 @@
 
 void motorCtrlInit(void)
 {
-    DEBUG_I("Initializing MP6550GG-Z Motor Controller...");
+    DEBUG_I("Initializing STSPIN250 Motor Controller...");
 
-    // Configure pins as outputs/inputs
-    pinMode(MOTOR_IN1_PIN, OUTPUT);
-    pinMode(MOTOR_IN2_PIN, OUTPUT);
+    // Configure output pins
+    pinMode(MOTOR_PWM_PIN, OUTPUT);
+    pinMode(MOTOR_PH_PIN, OUTPUT);
+    pinMode(MOTOR_REF_PIN, OUTPUT);
+    pinMode(MOTOR_EN_PIN, OUTPUT);
+
+    // Configure fault input with internal pull-up
+    pinMode(MOTOR_FAULT_PIN, INPUT_PULLUP);
+
+    // Initial state - disabled, stopped, zero current limit
+    digitalWrite(MOTOR_EN_PIN, LOW); // Disabled for safety
+    analogWrite(MOTOR_PWM_PIN, 0);
+    digitalWrite(MOTOR_PH_PIN, LOW);
+    analogWrite(MOTOR_REF_PIN, 0);
+
+    DEBUG_I("STSPIN250 Motor Controller initialized (disabled)");
+}
+
+void motorCtrlEnable(bool enabled)
+{
+    digitalWrite(MOTOR_EN_PIN, enabled ? HIGH : LOW);
+    DEBUG_I("Motor %s", enabled ? "enabled" : "disabled");
+}
+
+bool motorCtrlCheckFault(void)
+{
+    bool fault = (digitalRead(MOTOR_FAULT_PIN) == LOW);
+    if (fault)
+    {
+        RECORD_ERROR(ERR_MOTOR_FAULT, "Motor fault detected - overcurrent or thermal shutdown");
+    }
+    return fault;
 }
 
 /**
- * @brief Steruje silnikiem DC z użyciem PWM
- *
- * Funkcja kontroluje silnik DC MP6550GG-Z poprzez sterowanie pinami
- * IN1 i IN2 w trybie PWM Input Control.
+ * @brief Controls the DC motor with PWM and current limiting
  *
  * @details
- * Parametry:
- * - speed: prędkość silnika (0-255, gdzie 255 to maksymalna prędkość)
- * - torque: moment obrotowy (obecnie nieużywany, MP6550GG-Z nie wspiera kontroli momentu)
- * - direction: kierunek obrotów (MOTOR_STOP, MOTOR_FORWARD, MOTOR_REVERSE, MOTOR_BRAKE)
+ * STSPIN250 Truth Table (EN=1):
+ * | PH | PWM | OUT1 | OUT2 | Condition |
+ * |----|-----|------|------|-----------|
+ * | 0  |0 | GND  | GND  | Slow decay (brake) |
+ * | 0  | PWM | GND  | VS   | Reverse - current X1←X2 |
+ * | 1  |0 | GND  | GND  | Slow decay (brake) |
+ * | 1  | PWM | VS   | GND  | Forward - current X1→X2 |
  *
- * Tabela motorTable - mapowanie MotorState na stany pinów:
+ * Motor State Mapping:
+ * | MotorState | PH | PWM | Description |
+ * |------------|----|----|-------------|
+ * | MOTOR_STOP | 0  | 0  | Slow decay |
+ * | MOTOR_FORWARD | 1  | speed | Forward rotation |
+ * | MOTOR_REVERSE | 0  | speed | Reverse rotation |
+ * | MOTOR_BRAKE | 0  | 0  | Same as STOP |
  *
- * | MotorState      | IN1  | IN2  | Opis                    |
- * |-----------------|-------|-------|--------------------------|
- * | MOTOR_STOP       | 0     | 0     | Silnik zatrzymany (coast) |
- * | MOTOR_FORWARD    | PWM   | 255   | Silnik do przodu          |
- * | MOTOR_REVERSE    | 255   | PWM   | Silnik do tyłu            |
- * | MOTOR_BRAKE      | 255   | 255   | Hamowanie (brake)          |
- *
- * Logika sterowania PWM:
- * - MOTOR_FORWARD: IN1 = 255 - speed, IN2 = 255
- *   - Im mniejsze speed, tym większe napięcie na IN1 (szybciej)
- *   - IN2 jest zawsze na 255 (GND)
- *   - Inwersja PWM jest wymagana przez specyfikację MP6550GG-Z
- *
- * - MOTOR_REVERSE: IN1 = 255, IN2 = 255 - speed
- *   - Analogicznie do FORWARD, ale odwrócone piny
- *
- * - MOTOR_STOP: IN1 = 0, IN2 = 0
- *   - Oba piny w stanie LOW (silnik swobodnie się kręci)
- *
- * - MOTOR_BRAKE: IN1 = 255, IN2 = 255
- *   - Oba piny w stanie HIGH (silnik hamuje)
- *
- * Optymalizacja logowania:
- * - Funkcja loguje tylko gdy:
- *   1. Zmiana prędkości > MOTOR_SPEED_CHANGE_THRESHOLD (10)
- *   2. Zmiana kierunku
- * - Zapobiega spamowaniu logów przy drobnych zmianach prędkości
- *
- * Walidacja:
- * - speed jest ograniczony do zakresu 0-255 (constrain)
- * - torque jest ograniczony do zakresu 0-255 (ale nieużywany)
- * - direction jest walidowany - jeśli > MOTOR_BRAKE, silnik jest zatrzymywany
- *
- * Uwaga: Parametr torque jest obecnie nieużywany, ponieważ MP6550GG-Z
- * nie wspiera bezpośredniej kontroli momentu obrotowego. Jest zachowany
- * dla przyszłej kompatybilności.
- *
- * @param speed Prędkość silnika (0-255)
- * @param torque Moment obrotowy (0-255, obecnie nieużywany)
- * @param direction Kierunek obrotów (MotorState)
+ * @param speed Motor speed (0-255)
+ * @param torque Motor current limit (0-255, maps to REF pin voltage)
+ * @param direction Motor direction (MotorState enum)
  */
 void motorCtrlRun(uint8_t speed, uint8_t torque, MotorState direction)
 {
     // Clamp speed to valid range
     speed = constrain(speed, 0, PWM_MAX_VALUE);
 
-    // TODO: Currently torque parameter is unused, as MP6550GG-Z does not support torque control directly
+    // Clamp torque to valid range (controls current limit via REF pin)
     torque = constrain(torque, 0, PWM_MAX_VALUE);
 
-    // Optimized lookup table for motor control
+    // Motor state lookup table
     static const struct
     {
-        uint8_t in1, in2;
+        uint8_t ph;
         const char *name;
     } motorTable[] = {
-        {0, 0, "Stop"},      // MOTOR_STOP
-        {0, PWM_MAX_VALUE, "Forward"}, // MOTOR_FORWARD (will be modified below)
-        {PWM_MAX_VALUE, 0, "Reverse"}, // MOTOR_REVERSE (will be modified below)
-        {PWM_MAX_VALUE, PWM_MAX_VALUE, "Brake"}  // MOTOR_BRAKE
+        {0, "Stop"},        // MOTOR_STOP - PH=0, PWM=0
+        {1, "Forward"},     // MOTOR_FORWARD - PH=1, PWM=speed
+        {0, "Reverse"},     // MOTOR_REVERSE - PH=0, PWM=speed
+        {0, "Brake"}        // MOTOR_BRAKE - PH=0, PWM=0 (same as STOP)
     };
 
+    // Validate direction
     if (direction > MOTOR_BRAKE)
     {
         RECORD_ERROR(ERR_MOTOR_INVALID_DIRECTION, "Invalid direction: %u (valid: 0-3)", (unsigned)direction);
-        digitalWrite(MOTOR_IN1_PIN, LOW);
-        digitalWrite(MOTOR_IN2_PIN, LOW);
+        analogWrite(MOTOR_PWM_PIN, 0);
+        digitalWrite(MOTOR_PH_PIN, LOW);
+        analogWrite(MOTOR_REF_PIN, 0);
+        digitalWrite(MOTOR_EN_PIN, LOW); // Disable on error
         return;
     }
 
-    // Handle PWM cases with speed control
-    if (direction == MOTOR_FORWARD)
+    // Check for fault condition
+    if (motorCtrlCheckFault())
     {
-        analogWrite(MOTOR_IN1_PIN, PWM_MAX_VALUE - speed);
-        analogWrite(MOTOR_IN2_PIN, PWM_MAX_VALUE);
+        DEBUG_W("Motor fault active - command ignored");
+        return;
     }
-    else if (direction == MOTOR_REVERSE)
+
+    // Set current limit via REF pin (torque parameter)
+    // torque 0-255 maps to V_REF 0-0.43V via PWM + RC filter + voltage divider
+    analogWrite(MOTOR_REF_PIN, torque);
+
+    // Set direction via PH pin
+    digitalWrite(MOTOR_PH_PIN, motorTable[direction].ph);
+
+    // Set speed via PWM pin
+    if (direction == MOTOR_STOP || direction == MOTOR_BRAKE)
     {
-        analogWrite(MOTOR_IN1_PIN, PWM_MAX_VALUE);
-        analogWrite(MOTOR_IN2_PIN, PWM_MAX_VALUE - speed);
+        analogWrite(MOTOR_PWM_PIN, 0); // No PWM for stop/brake
     }
     else
     {
-        // Direct values for STOP and BRAKE
-        analogWrite(MOTOR_IN1_PIN, motorTable[direction].in1);
-        analogWrite(MOTOR_IN2_PIN, motorTable[direction].in2);
+        analogWrite(MOTOR_PWM_PIN, speed); // Direct PWM - no inversion!
     }
 
     // Optimized debug output (only when speed changes significantly or direction changes)
@@ -137,7 +143,11 @@ void motorCtrlRun(uint8_t speed, uint8_t torque, MotorState direction)
 
     if (abs(speed - lastSpeed) > MOTOR_SPEED_CHANGE_THRESHOLD || direction != lastDirection)
     {
-        DEBUG_I("Motor: %u/%u (%u%%) - %s", (unsigned)speed, (unsigned)PWM_MAX_VALUE, (unsigned)((speed * 100U) / PWM_MAX_VALUE), motorTable[direction].name);
+        DEBUG_I("Motor: %u/%u (%u%%) torque=%u - %s",
+                (unsigned)speed, (unsigned)PWM_MAX_VALUE,
+                (unsigned)((speed * 100U) / PWM_MAX_VALUE),
+                (unsigned)torque,
+                motorTable[direction].name);
 
         lastSpeed = speed;
         lastDirection = direction;

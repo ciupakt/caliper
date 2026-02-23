@@ -1,6 +1,6 @@
 # Caliper — bezprzewodowy system pomiarowy (ESP32 + suwmiarka)
 
-Projekt **Caliper** to zaawansowany system bezprzewodowego pomiaru długości oparty na platformie ESP32, cyfrowej suwmiarce (odczyt strumienia bitów), akcelerometrze IIS328DQ oraz sterowniku silnika MP6550GG-Z. Dane są przesyłane dwukierunkowo przez protokół **ESP-NOW**, a sterowanie odbywa się przez:
+Projekt **Caliper** to zaawansowany system bezprzewodowego pomiaru długości oparty na platformie ESP32, cyfrowej suwmiarce (odczyt strumienia bitów), akcelerometrze IIS328DQ oraz sterowniku silnika STSPIN250. Dane są przesyłane dwukierunkowo przez protokół **ESP-NOW**, a sterowanie odbywa się przez:
 
 - **Web UI** hostowane przez ESP32 Master (WiFi AP + HTTP + LittleFS)
 - **Desktop GUI** w Pythonie (Dear PyGui) komunikujące się z Master po **Serial**
@@ -30,8 +30,8 @@ Projekt **Caliper** to zaawansowany system bezprzewodowego pomiaru długości op
 - **Pomiar napięcia baterii** - monitorowanie stanu baterii przez ADC
 
 ### Sterowanie silnikiem
-- **Sterowanie silnikiem DC** przez sterownik MP6550GG-Z
-- **PWM na IN1/IN2** - precyzyjna kontrola prędkości i momentu
+- **Sterowanie silnikiem DC** przez sterownik STSPIN250
+- **PWM + PH + REF + EN + FAULT** - pełna kontrola 5-pinowa z detekcją błędów
 - **Automatyzacja pomiarów** - silnik uruchamiany automatycznie przy pomiarze
 
 ### Komunikacja
@@ -86,7 +86,7 @@ flowchart TD
             S_CAL[Suwmiarka<br/>odczyt i dekoder]
             S_ACC[IIS328DQ<br/>I2C]
             S_BATT[Bateria<br/>ADC]
-            S_MOTOR[Silnik<br/>MP6550GG-Z]
+            S_MOTOR[Silnik<br/>STSPIN250]
         end
 
         subgraph SHARED[CaliperShared]
@@ -203,9 +203,12 @@ flowchart LR
         GPIO12[GPIO12<br/>MOTOR_IN2]
     end
 
-    subgraph DRV[MP6550GG-Z]
-        DRV_IN1[IN1]
-        DRV_IN2[IN2]
+    subgraph DRV[STSPIN250]
+        DRV_PWM[PWM]
+        DRV_PH[PH]
+        DRV_REF[REF]
+        DRV_EN[EN]
+        DRV_FAULT[FAULT]
         DRV_OUT1[OUT1]
         DRV_OUT2[OUT2]
     end
@@ -237,7 +240,7 @@ flowchart LR
   - Mikrokontroler: ESP32 240MHz, 320KB RAM, 4MB Flash
 - **Cyfrowa suwmiarka** z interfejsem CLK/DATA/TRIG
 - **Akcelerometr IIS328DQ** (I2C)
-- **Sterownik silnika MP6550GG-Z**
+- **Sterownik silnika STSPIN250**
 - **Silnik DC**
 - **Bateria** z obwodem pomiaru napięcia
 - **Kable połączeniowe** zgodnie z diagramem hardware
@@ -561,7 +564,7 @@ caliper/
 │
 ├── doc/                         # Dokumentacja sprzętowa
 │   ├── ESP32-DevKit-V1-Pinout-Diagram-r0.1-CIRCUITSTATE-Electronics-2-1280x896.png
-│   ├── MP6550GG-Z.pdf
+│   ├── stspin250.pdf
 │   └── schematic.png
 │
 ├── AGENTS.md                    # Instrukcje dla AI

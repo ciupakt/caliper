@@ -123,6 +123,8 @@ const char* getErrorDescription(ErrorCode code)
       return "Motor invalid direction specified";
     case ERR_MOTOR_HARDWARE_FAILURE:
       return "Motor hardware failure detected";
+    case ERR_MOTOR_FAULT:
+      return "Motor fault detected - overcurrent or thermal shutdown";
 
     // Power Errors
     case ERR_BATTERY_READ_FAILED:
@@ -235,7 +237,9 @@ const char* getErrorRecoveryAction(ErrorCode code)
     case ERR_MOTOR_INVALID_DIRECTION:
       return "Use valid direction (STOP, FORWARD, REVERSE, BRAKE), check motor state";
     case ERR_MOTOR_HARDWARE_FAILURE:
-      return "Check motor connections, verify MP6550GG-Z driver, check power supply";
+      return "Check motor connections, verify STSPIN250 driver, check power supply";
+    case ERR_MOTOR_FAULT:
+      return "Check for short circuit, allow motor to cool, reduce load or current limit";
 
     // Power Errors
     case ERR_BATTERY_READ_FAILED:
@@ -356,6 +360,7 @@ bool isRecoverableError(ErrorCode code)
     // Hardware failures - not recoverable
     case ERR_CALIPER_HARDWARE_FAILURE:
     case ERR_MOTOR_HARDWARE_FAILURE:
+    case ERR_MOTOR_FAULT:
       return false;
 
     default:
@@ -416,6 +421,7 @@ uint8_t getErrorSeverity(ErrorCode code)
     case ERR_ESPNOW_INIT_FAILED:
     case ERR_CALIPER_HARDWARE_FAILURE:
     case ERR_MOTOR_HARDWARE_FAILURE:
+    case ERR_MOTOR_FAULT:
     case ERR_LITTLEFS_MOUNT_FAILED:
     case ERR_PREFS_INIT_FAILED:
     case ERR_WEB_SERVER_INIT_FAILED:

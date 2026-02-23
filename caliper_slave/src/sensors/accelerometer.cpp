@@ -46,7 +46,7 @@ void AccelerometerInterface::writeRegister(uint8_t reg, uint8_t value)
 bool AccelerometerInterface::begin()
 {
     Wire.begin(3, 46);
-    DEBUG_I("this3");
+
     // Check device ID
     uint8_t deviceId = readRegister(IIS328DQ_WHO_AM_I_REG);
     if (deviceId != IIS328DQ_WHO_AM_I)

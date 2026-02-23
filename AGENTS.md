@@ -97,7 +97,7 @@ caliper_slave/
 │   │   ├── caliper.h/.cpp       # Obsługa suwmiarki + dekodowanie danych
 │   │   └── accelerometer.h/.cpp # Obsługa IIS328DQ (I2C) + wyliczanie kątów
 │   ├── motor/
-│   │   └── motor_ctrl.h/.cpp    # Sterowanie silnikiem (MP6550GG-Z)
+│   │   └── motor_ctrl.h/.cpp    # Sterowanie silnikiem (STSPIN250)
 │   └── power/
 │       └── battery.h/.cpp       # Pomiar napięcia baterii (ADC)
 └── platformio.ini

@@ -147,6 +147,9 @@ enum ErrorCode : uint16_t
   
   /** Motor hardware failure detected */
   ERR_MOTOR_HARDWARE_FAILURE = 0x0302,
+  
+  /** Motor fault detected - overcurrent or thermal shutdown */
+  ERR_MOTOR_FAULT = 0x0303,
 
   // ============================================================================
   // Power Errors (0x04XX)

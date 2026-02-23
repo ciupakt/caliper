@@ -48,10 +48,13 @@
 #define CALIPER_TRIG_PIN 13
 
 // ============================================================================
-// Pin Definitions - Motor (MP6550GG-Z)
+// Pin Definitions - Motor (STSPIN250)
 // ============================================================================
-#define MOTOR_IN1_PIN 6
-#define MOTOR_IN2_PIN 15
+#define MOTOR_PWM_PIN 6    // PWM input - speed control
+#define MOTOR_PH_PIN 15    // Phase input - direction control
+#define MOTOR_REF_PIN 7    // REF input - current limit via PWM + RC filter
+#define MOTOR_EN_PIN 16    // Enable pin - HIGH = enabled
+#define MOTOR_FAULT_PIN 17 // Fault input - LOW = fault detected
 
 // ============================================================================
 // Pin Definitions - Battery
