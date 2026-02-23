@@ -225,7 +225,7 @@ const char* getErrorRecoveryAction(ErrorCode code)
     case ERR_CALIPER_HARDWARE_FAILURE:
       return "Replace caliper, check wiring, verify power supply";
     case ERR_ACCEL_INIT_FAILED:
-      return "Check I2C connection, verify ADXL345 address, check power supply";
+      return "Check I2C connection, verify IIS328DQ address, check power supply";
     case ERR_ACCEL_READ_FAILED:
       return "Retry read operation, check I2C connection, verify sensor power";
     case ERR_ACCEL_I2C_ERROR:

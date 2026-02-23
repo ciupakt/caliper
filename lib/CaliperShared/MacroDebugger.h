@@ -32,12 +32,12 @@
     #include "Arduino.h"
 
     // Hardware Serial connection pins (These could be multiplexed to most pins)
-    #define SER_0_PIN_RX                  03
-    #define SER_0_PIN_TX                  01
-    #define SER_1_PIN_RX                  17
-    #define SER_1_PIN_TX                  16
-    #define SER_2_PIN_RX                  27
-    #define SER_2_PIN_TX                  26
+    // #define SER_0_PIN_RX                  03
+    // #define SER_0_PIN_TX                  01
+    // #define SER_1_PIN_RX                  17
+    // #define SER_1_PIN_TX                  16
+    // #define SER_2_PIN_RX                  27
+    // #define SER_2_PIN_TX                  26
 
     // By default, use 115.2 Kbits/s
     #ifndef DEBUG_SER_BAUD_RATE
@@ -54,13 +54,13 @@
     #if defined(ARDUINO_ARCH_ESP32) or defined(ARDUINO_ARCH_ESP8266)
 
       // Define the Serial pins (multiplexed on the ESPs
-      #ifndef DEBUG_RX_PIN
-        #define DEBUG_RX_PIN              SER_0_PIN_RX
-      #endif
+      // #ifndef DEBUG_RX_PIN
+      //   #define DEBUG_RX_PIN              SER_0_PIN_RX
+      // #endif
   
-      #ifndef DEBUG_TX_PIN
-        #define DEBUG_TX_PIN              SER_0_PIN_TX
-      #endif
+      // #ifndef DEBUG_TX_PIN
+      //   #define DEBUG_TX_PIN              SER_0_PIN_TX
+      // #endif
       
       #define DEBUG_BEGIN()               DEBUG_SERIAL_PORT.begin(DEBUG_SER_BAUD_RATE);
       #define DEBUG(X...)                 DEBUG_SERIAL_PORT.printf(X)

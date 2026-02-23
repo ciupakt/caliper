@@ -1,6 +1,6 @@
 # Caliper — bezprzewodowy system pomiarowy (ESP32 + suwmiarka)
 
-Projekt **Caliper** to zaawansowany system bezprzewodowego pomiaru długości oparty na platformie ESP32, cyfrowej suwmiarce (odczyt strumienia bitów), akcelerometrze ADXL345 oraz sterowniku silnika MP6550GG-Z. Dane są przesyłane dwukierunkowo przez protokół **ESP-NOW**, a sterowanie odbywa się przez:
+Projekt **Caliper** to zaawansowany system bezprzewodowego pomiaru długości oparty na platformie ESP32, cyfrowej suwmiarce (odczyt strumienia bitów), akcelerometrze IIS328DQ oraz sterowniku silnika MP6550GG-Z. Dane są przesyłane dwukierunkowo przez protokół **ESP-NOW**, a sterowanie odbywa się przez:
 
 - **Web UI** hostowane przez ESP32 Master (WiFi AP + HTTP + LittleFS)
 - **Desktop GUI** w Pythonie (Dear PyGui) komunikujące się z Master po **Serial**
@@ -26,7 +26,7 @@ Projekt **Caliper** to zaawansowany system bezprzewodowego pomiaru długości op
 ### Pomiar i sensory
 - **Pomiar z cyfrowej suwmiarki** - dekodowanie danych z interfejsu CLK/DATA/TRIG
 - **Walidacja zakresów** - automatyczna walidacja pomiarów (-1000.0 do 1000.0 mm)
-- **Odczyt kąta z ADXL345** - akcelerometr I2C do pomiaru pochylenia
+- **Odczyt kąta z IIS328DQ** - akcelerometr I2C do pomiaru pochylenia
 - **Pomiar napięcia baterii** - monitorowanie stanu baterii przez ADC
 
 ### Sterowanie silnikiem
@@ -84,7 +84,7 @@ flowchart TD
         subgraph S[ESP32 Slave<br/>caliper_slave]
             S_ESPNOW[ESP-NOW<br/>RX komend / TX danych]
             S_CAL[Suwmiarka<br/>odczyt i dekoder]
-            S_ACC[ADXL345<br/>I2C]
+            S_ACC[IIS328DQ<br/>I2C]
             S_BATT[Bateria<br/>ADC]
             S_MOTOR[Silnik<br/>MP6550GG-Z]
         end
@@ -132,7 +132,7 @@ sequenceDiagram
     participant PM as PreferencesManager
     participant S as ESP32 Slave
     participant CAL as Suwmiarka
-    participant ACC as ADXL345
+    participant ACC as IIS328DQ
     participant BAT as Bateria
 
     alt Sterowanie z GUI
@@ -181,7 +181,7 @@ flowchart LR
         CAL_TRIG[TRIG]
     end
 
-    subgraph ACC[ADXL345]
+    subgraph ACC[IIS328DQ]
         ACC_I2C[I2C]
     end
 
@@ -236,7 +236,7 @@ flowchart LR
 - **2× ESP32 DOIT DEVKIT V1** (lub kompatybilne)
   - Mikrokontroler: ESP32 240MHz, 320KB RAM, 4MB Flash
 - **Cyfrowa suwmiarka** z interfejsem CLK/DATA/TRIG
-- **Akcelerometr ADXL345** (I2C)
+- **Akcelerometr IIS328DQ** (I2C)
 - **Sterownik silnika MP6550GG-Z**
 - **Silnik DC**
 - **Bateria** z obwodem pomiaru napięcia
@@ -528,7 +528,7 @@ caliper/
 │   │   ├── config.h             # Konfiguracja specyficzna dla Slave
 │   │   ├── sensors/
 │   │   │   ├── caliper.h/.cpp   # Obsługa suwmiarki
-│   │   │   └── accelerometer.h/.cpp # Obsługa ADXL345
+│   │   │   └── accelerometer.h/.cpp # Obsługa IIS328DQ
 │   │   ├── motor/
 │   │   │   └── motor_ctrl.h/.cpp # Sterowanie silnikiem
 │   │   └── power/

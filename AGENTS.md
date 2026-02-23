@@ -95,7 +95,7 @@ caliper_slave/
 │   ├── config.h                 # Konfiguracja specyficzna dla Slave (MAC, piny, stałe)
 │   ├── sensors/
 │   │   ├── caliper.h/.cpp       # Obsługa suwmiarki + dekodowanie danych
-│   │   └── accelerometer.h/.cpp # Obsługa ADXL345 (I2C) + wyliczanie kątów
+│   │   └── accelerometer.h/.cpp # Obsługa IIS328DQ (I2C) + wyliczanie kątów
 │   ├── motor/
 │   │   └── motor_ctrl.h/.cpp    # Sterowanie silnikiem (MP6550GG-Z)
 │   └── power/
@@ -142,7 +142,7 @@ lib/CaliperShared/
 
 - Platforma: Espressif 32 (ESP32 DOIT DEVKIT V1)
 - Mikrokontroler: ESP32 240MHz, 320KB RAM, 4MB Flash
-- Biblioteki: `ADXL345_WE`, `arduino-timer`
+- Biblioteki: `arduino-timer`
 
 ### `caliper_master`
 
