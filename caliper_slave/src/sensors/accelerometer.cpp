@@ -30,6 +30,7 @@ uint8_t AccelerometerInterface::readRegister(uint8_t reg)
     Wire.beginTransmission(IIS328DQ_I2CADDR);
     Wire.write(reg);
     Wire.endTransmission(false);
+    //Wire.endTransmission();
     
     Wire.requestFrom((int)IIS328DQ_I2CADDR, 1);
     return Wire.read();

@@ -40,7 +40,7 @@ struct AngleData {
 class AccelerometerInterface {
 private:
     // IIS328DQ I2C address (SA0 = VDD)
-    static constexpr uint8_t IIS328DQ_I2CADDR = 0x19;
+    static constexpr uint8_t IIS328DQ_I2CADDR = 0x18;
     
     // IIS328DQ WHO_AM_I value
     static constexpr uint8_t IIS328DQ_WHO_AM_I = 0x32;

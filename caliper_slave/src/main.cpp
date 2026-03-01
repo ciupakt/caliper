@@ -222,6 +222,43 @@ bool runMeasReq(void *arg)
   return false; // do not repeat this task
 }
 
+/**
+ * @brief Skanuje magistralę I2C i wyświetla znalezione urządzenia na Serialu
+ *
+ * Przeszukuje adresy I2C od 0x00 do 0x7F (0-127).
+ * Dla każdego adresu próbuje nawiązać transmisję i sprawdza czy urządzenie
+ * odpowiada (ACK). Znalezione urządzenia są wyświetlane w formacie hex.
+ */
+void scanI2C()
+{
+  DEBUG_I("=== Skanowanie magistrali I2C ===");
+  DEBUG_I("Skanowanie adresow 0x00 - 0x7F...");
+
+  uint8_t devicesFound = 0;
+
+  for (uint8_t address = 0x00; address <= 0x7F; address++)
+  {
+    Wire.beginTransmission(address);
+    uint8_t error = Wire.endTransmission();
+
+    if (error == 0) // Urządzenie odpowiedziało (ACK)
+    {
+      DEBUG_I("Znaleziono urzadzenie I2C pod adresem: 0x%02X (%d)", address, address);
+      devicesFound++;
+    }
+  }
+
+  if (devicesFound == 0)
+  {
+    DEBUG_W("Brak urzadzen I2C na magistrali!");
+  }
+  else
+  {
+    DEBUG_I("Liczba znalezionych urzadzen I2C: %d", devicesFound);
+  }
+  DEBUG_I("=== Koniec skanowania I2C ===");
+}
+
 void setup()
 {
   DEBUG_BEGIN();
@@ -230,10 +267,14 @@ void setup()
   // Initialize error handler
   ERROR_HANDLER.initialize();
 
+  // Initialize I2C and scan for devices
+  // SDA=GPIO3, SCL=GPIO46, clock=1kHz
+  // Wire.begin(3, 46, 1000);
+  // scanI2C();
+
   // Initialize sensors
   caliper.begin();
 
-  Wire.begin();
   if (!accelerometer.begin())
   {
     LOG_WARNING(ERR_ACCEL_INIT_FAILED, "Accelerometer not initialized - continuing without angle data");
