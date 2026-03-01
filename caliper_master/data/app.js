@@ -202,7 +202,7 @@ function measureSession() {
             document.getElementById('measurement-raw').textContent = 'Brak danych';
             document.getElementById('measurement-offset').textContent = 'Brak danych';
             document.getElementById('battery').textContent = 'Brak danych';
-            document.getElementById('angle-x').textContent = 'Brak danych';
+            document.getElementById('angle-z').textContent = 'Brak danych';
             document.getElementById('status').textContent = 'Brak świeżych danych (brak odpowiedzi z urządzenia).';
             return;
         }
@@ -228,10 +228,10 @@ function measureSession() {
             ? batt.toFixed(3) + ' V'
             : (data.batteryVoltage + ' V');
 
-        const angleX = Number(data.angleX);
-        document.getElementById('angle-x').textContent = Number.isFinite(angleX)
-            ? angleX.toFixed(2)
-            : data.angleX;
+        const angleZ = Number(data.angleZ);
+        document.getElementById('angle-z').textContent = Number.isFinite(angleZ)
+            ? angleZ.toFixed(2)
+            : data.angleZ;
 
         document.getElementById('status').textContent = 'Zaktualizowano: ' + new Date().toLocaleTimeString();
     })

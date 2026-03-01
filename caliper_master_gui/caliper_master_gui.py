@@ -173,10 +173,10 @@ class CaliperGUI:
                     self.calibration_tab.add_app_log(f"BLAD: Wartosc poza zakresem (corrected): {corrected}")
                 return
 
-            if data.startswith("angleX:"):
+            if data.startswith("angleZ:"):
                 angle_str = data.split(":", 1)[1].strip()
                 self.last_angle = angle_str
-                self.calibration_tab.add_app_log(f"[ANGLE X] {angle_str}°")
+                self.calibration_tab.add_app_log(f"[ANGLE Z] {angle_str}°")
                 return
 
             if data.startswith("batteryVoltage:"):
@@ -295,7 +295,7 @@ class CaliperGUI:
         if payload.startswith(
             (
                 "measurement:",
-                "angleX:",
+                "angleZ:",
                 "batteryVoltage:",
                 "calibrationOffset:",
                 "timeout:",

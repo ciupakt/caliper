@@ -55,8 +55,8 @@ private:
     // Sensitivity for ±2g range: 0.98 mg/LSB
     static constexpr float SENSIVITY_MG_PER_LSB = 0.98f;
     
-    // Angle data
-    AngleData angle;
+    // Angle data - initialized to zero for safety
+    AngleData angle = {0.0f, 0.0f, 0.0f};
     
     /**
      * @brief Read a single register

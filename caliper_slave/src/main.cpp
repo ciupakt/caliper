@@ -123,7 +123,11 @@ bool updateMeasureData(void *arg)
 {
   accelerometer.update();
   msgSlave.measurement = caliper.performMeasurement();
-  msgSlave.angleX = accelerometer.getAngleX();
+  
+  // Pobierz kąt Z - odchylenie od pionu (0-90 stopni)
+  float angleZ = accelerometer.getAngleZ();
+  msgSlave.angleZ = (uint8_t)angleZ;
+  
   msgSlave.batteryVoltage = battery.readVoltageNow();
   msgSlave.command = msgMaster.command;
   return false; // do not repeat this task
@@ -196,7 +200,7 @@ bool runMeasReq(void *arg)
   }
 
   DEBUG_PLOT("measurement:%.3f", msgSlave.measurement);
-  DEBUG_PLOT("angleX:%u", msgSlave.angleX);
+  DEBUG_PLOT("angleZ:%d", msgSlave.angleZ);
   DEBUG_PLOT("batteryVoltage:%.3f", msgSlave.batteryVoltage);
 
   ErrorCode sendResult = espnow_send_with_retry(

@@ -141,7 +141,7 @@ static bool waitForMeasurementReady(uint32_t timeoutMs)
   // corrected = measurement + calibrationOffset
   DEBUG_PLOT("sessionName:%s", systemStatus.sessionName);
   DEBUG_PLOT("calibrationOffset:%.3f", (double)systemStatus.calibrationOffset);
-  DEBUG_PLOT("angleX:%u", (unsigned)systemStatus.msgSlave.angleX);
+  DEBUG_PLOT("angleZ:%u", (unsigned)systemStatus.msgSlave.angleZ);
   DEBUG_PLOT("measurement:%.3f", (double)systemStatus.msgSlave.measurement);
   DEBUG_PLOT("batteryVoltage:%.3f", (double)systemStatus.msgSlave.batteryVoltage);
 
@@ -503,7 +503,7 @@ void handleStartSession()
  *   "measurementCorrected": 123.579,
  *   "valid": true,
  *   "batteryVoltage": 3.7,
- *   "angleX": 45
+ *   "angleZ": 45
  * }
  * ```
  *
@@ -514,7 +514,7 @@ void handleStartSession()
  * - measurementCorrected: skorygowana wartość (raw + offset)
  * - valid: flaga walidacji (zawsze true w tej implementacji)
  * - batteryVoltage: napięcie baterii w woltach
- * - angleX: kąt X z akcelerometru w stopniach
+ * - angleZ: odchylenie od pionu z akcelerometru w stopniach (0-90°)
  *
  * Uwaga: measurementCorrected jest obliczane po stronie Mastera
  * dla wygody UI, ale UI może też obliczyć to lokalnie.
@@ -547,13 +547,13 @@ void handleMeasureSession()
 
   char response[JSON_RESPONSE_BUFFER_SIZE];
   snprintf(response, sizeof(response),
-    "{\"sessionName\":\"%s\",\"measurementRaw\":%.3f,\"calibrationOffset\":%.3f,\"measurementCorrected\":%.3f,\"valid\":true,\"batteryVoltage\":%.3f,\"angleX\":%u}",
+    "{\"sessionName\":\"%s\",\"measurementRaw\":%.3f,\"calibrationOffset\":%.3f,\"measurementCorrected\":%.3f,\"valid\":true,\"batteryVoltage\":%.3f,\"angleZ\":%u}",
     systemStatus.sessionName,
     m.measurement,
     systemStatus.calibrationOffset,
     m.measurement + systemStatus.calibrationOffset,
     m.batteryVoltage,
-    (unsigned)m.angleX);
+    (unsigned)m.angleZ);
 
   server.send(200, "application/json", response);
 }

@@ -83,7 +83,7 @@ struct MessageSlave
   float measurement;       /**< Measurement value in mm */
   float batteryVoltage;    /**< Battery voltage in voltage */
   CommandType command;     /**< Command type */
-  uint8_t angleX;            /**< Angle X from accelerometer IIS328DQ */
+  uint8_t angleZ;            /**< Angle Z from accelerometer IIS328DQ (0-90 degrees, inclination from vertical) */
 };
 
 struct MessageMaster

@@ -158,7 +158,7 @@ sequenceDiagram
         S->>CAL: odczyt danych CLK/DATA + dekodowanie
         S->>ACC: odczyt kąta przez I2C
         S->>BAT: ADC read
-        S-->>M: ESP-NOW: MessageSlave{measurement, angleX, batteryVoltage}
+        S-->>M: ESP-NOW: MessageSlave{measurement, angleZ, batteryVoltage}
         
         M->>MS: setMeasurement(measurement + offset)
         M->>MS: setReady(true)
@@ -376,7 +376,7 @@ WiFi AP jest konfigurowane w [`caliper_master/src/config.h`](caliper_master/src/
    - Pomiar surowy
    - Offset
    - Napięcie baterii
-   - Kąt X
+   - Odchylenie od pionu (angleZ)
 
 ### Python GUI
 
@@ -445,7 +445,7 @@ POST /measure_session HTTP/1.1
   "measurementCorrected": 12.345,
   "valid": true,
   "batteryVoltage": 3.7,
-  "angleX": 5
+  "angleZ": 5
 }
 ```
 
@@ -498,7 +498,7 @@ Master wysyła dane przez Serial w formacie `DEBUG_PLOT`:
 ```
 >measurement:12.345
 >calibrationOffset:0.000
->angleX:5
+>angleZ:5
 >batteryVoltage:3.700
 >timeout:1000
 >motorSpeed:100

@@ -104,11 +104,16 @@ void AccelerometerInterface::update()
     // Pitch (Y-axis rotation) - angle around Y-axis
     angle.y = atan2(-accX, sqrt(accY * accY + accZ * accZ)) * RAD_TO_DEG;
     
-    // Z-angle (inclination from vertical)
+    // Z-angle (inclination from vertical) - this is what we want for angleZ
     float magnitude = sqrt(accX * accX + accY * accY + accZ * accZ);
     if (magnitude > 0.001f)
     {
-        angle.z = acos(accZ / magnitude) * RAD_TO_DEG;
+        angle.z = acos(fabs(accZ) / magnitude) * RAD_TO_DEG;
+        
+        // Ensure angle.z is in range 0-90 degrees (inclination from vertical)
+        // This represents deviation from vertical (0 = perfectly vertical, 90 = horizontal)
+        // Using fabs(accZ) ensures it works regardless of sensor orientation
+        if (angle.z > 90.0f) angle.z = 90.0f;
     }
     else
     {
