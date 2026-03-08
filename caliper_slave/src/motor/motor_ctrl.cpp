@@ -122,6 +122,7 @@ void motorCtrlRun(uint8_t speed, uint8_t torque, MotorState direction)
 
     // Set current limit via REF pin (torque parameter)
     // torque 0-255 maps to V_REF 0-0.43V via PWM + RC filter + voltage divider
+    analogWriteFrequency(MOTOR_REF_PIN, 50000);
     analogWrite(MOTOR_REF_PIN, torque);
 
     // Set direction via PH pin

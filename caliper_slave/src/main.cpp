@@ -334,6 +334,7 @@ void setup()
   // Initialize motor controller
   DEBUG_I("Inicjalizacja sterownika silnika...");
   motorCtrlInit();
+  motorCtrlEnable(true);
   DEBUG_I("Oczekiwanie na żądania pomiaru...");
 }
 
