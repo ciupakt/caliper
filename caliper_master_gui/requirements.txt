@@ -2,7 +2,8 @@
 # Install with: pip install -r requirements.txt
 
 # GUI Framework
-dearpygui>=1.9.0
+# NOTE: Version 2.x causes ACCESS_VIOLATION crash on Python 3.12/Windows
+dearpygui>=1.9.0,<2.0.0
 
 # Serial Communication
 pyserial>=3.5
