@@ -25,7 +25,8 @@
  * @brief MAC address of the Master device
  * To find the MAC address, run the master and check Serial output at startup.
  */
-#define MASTER_MAC_ADDR {0xA0, 0xB7, 0x65, 0x20, 0xC0, 0x8C}
+//#define MASTER_MAC_ADDR {0xA0, 0xB7, 0x65, 0x20, 0xC0, 0x8C}
+#define MASTER_MAC_ADDR {0x0C, 0x4E, 0xA0, 0x6F, 0x66, 0xD0}
 
 // ============================================================================
 // Slave-specific Pin Aliases (for backward compatibility)

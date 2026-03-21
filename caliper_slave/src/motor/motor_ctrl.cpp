@@ -97,8 +97,8 @@ void motorCtrlRun(uint8_t speed, uint8_t torque, MotorState direction)
         const char *name;
     } motorTable[] = {
         {0, "Stop"},        // MOTOR_STOP - PH=0, PWM=0
-        {1, "Forward"},     // MOTOR_FORWARD - PH=1, PWM=speed
-        {0, "Reverse"},     // MOTOR_REVERSE - PH=0, PWM=speed
+        {0, "Forward"},     // MOTOR_FORWARD - PH=0, PWM=speed
+        {1, "Reverse"},     // MOTOR_REVERSE - PH=1, PWM=speed
         {0, "Brake"}        // MOTOR_BRAKE - PH=0, PWM=0 (same as STOP)
     };
 
