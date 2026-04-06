@@ -251,6 +251,11 @@ void sendMotorTest()
   (void)sendTxToSlave(CMD_MOTORTEST, "Motor test", false);
 }
 
+void sendOTA()
+{
+  (void)sendTxToSlave(CMD_OTA, "OTA update", false);
+}
+
 // Serve static files from LittleFS
 void handleRoot()
 {
@@ -637,7 +642,6 @@ void setup()
 
   server.on("/start_session", HTTP_POST, handleStartSession);
   server.on("/measure_session", HTTP_POST, handleMeasureSession);
-
   // Handle 404 errors with proper JSON response
   server.onNotFound([]()
                     {
@@ -659,6 +663,7 @@ void setup()
   cliCtx.requestMeasurement = requestMeasurement;
   cliCtx.requestUpdate = requestUpdate;
   cliCtx.sendMotorTest = sendMotorTest;
+  cliCtx.sendOTA = sendOTA;
   SerialCli_begin(cliCtx);
 
   timerWorker.every(200, SerialCli_tick);

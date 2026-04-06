@@ -236,7 +236,19 @@ enum ErrorCode : uint16_t
   ERR_SYSTEM_UNKNOWN_ERROR = 0x0803,
   
   /** Null pointer reference */
-  ERR_SYSTEM_NULL_POINTER = 0x0804
+  ERR_SYSTEM_NULL_POINTER = 0x0804,
+
+  /** OTA initialization failed */
+  ERR_OTA_INIT_FAILED = 0x0805,
+
+  /** OTA timeout - no upload received */
+  ERR_OTA_TIMEOUT = 0x0806,
+
+  /** OTA update failed */
+  ERR_OTA_UPDATE_FAILED = 0x0807,
+
+  /** OTA WiFi AP failed to start */
+  ERR_OTA_WIFI_AP_FAILED = 0x0808
 };
 
 // ============================================================================

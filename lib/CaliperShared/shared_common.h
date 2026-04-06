@@ -27,6 +27,7 @@ enum CommandType : char
   CMD_MEASURE = 'M',   /**< Request measurement from slave */
   CMD_UPDATE = 'U',    /**< Request update status from slave */
   CMD_MOTORTEST = 'T', /**< Generic motor control command (uses motorState/motorSpeed/motorTorque) */
+  CMD_OTA = 'O',      /**< Request OTA update mode */
 };
 
 /**

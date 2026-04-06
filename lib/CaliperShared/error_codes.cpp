@@ -183,6 +183,14 @@ const char* getErrorDescription(ErrorCode code)
       return "Unknown system error";
     case ERR_SYSTEM_NULL_POINTER:
       return "Null pointer reference";
+    case ERR_OTA_INIT_FAILED:
+      return "OTA initialization failed";
+    case ERR_OTA_TIMEOUT:
+      return "OTA timeout - no upload received";
+    case ERR_OTA_UPDATE_FAILED:
+      return "OTA update failed";
+    case ERR_OTA_WIFI_AP_FAILED:
+      return "OTA WiFi AP failed to start";
 
     default:
       return "Unknown error code";
@@ -298,6 +306,14 @@ const char* getErrorRecoveryAction(ErrorCode code)
       return "Restart device, check logs, contact support if persists";
     case ERR_SYSTEM_NULL_POINTER:
       return "Check code for null references, verify pointer initialization, debug code";
+    case ERR_OTA_INIT_FAILED:
+      return "Restart device, check OTA configuration, verify ArduinoOTA library";
+    case ERR_OTA_TIMEOUT:
+      return "Restart device, retry OTA update, check WiFi connection";
+    case ERR_OTA_UPDATE_FAILED:
+      return "Check firmware file, verify WiFi signal, retry OTA update";
+    case ERR_OTA_WIFI_AP_FAILED:
+      return "Check WiFi module, verify AP configuration, restart device";
 
     default:
       return "Unknown error - check logs and contact support";
@@ -340,7 +356,8 @@ bool isRecoverableError(ErrorCode code)
     case ERR_VALIDATION_INVALID_COMMAND:
     case ERR_SYSTEM_MEMORY_ALLOC_FAILED:
     case ERR_SYSTEM_UNKNOWN_ERROR:
-      return true;
+    case ERR_OTA_TIMEOUT:
+       return true;
 
     // May require intervention
     case ERR_ESPNOW_INIT_FAILED:
@@ -355,7 +372,10 @@ bool isRecoverableError(ErrorCode code)
     case ERR_WIFI_AP_CONFIG_FAILED:
     case ERR_SYSTEM_WIFI_INIT_FAILED:
     case ERR_SYSTEM_NULL_POINTER:
-      return false;
+    case ERR_OTA_INIT_FAILED:
+    case ERR_OTA_UPDATE_FAILED:
+    case ERR_OTA_WIFI_AP_FAILED:
+       return false;
 
     // Hardware failures - not recoverable
     case ERR_CALIPER_HARDWARE_FAILURE:
@@ -415,7 +435,9 @@ uint8_t getErrorSeverity(ErrorCode code)
     case ERR_VALIDATION_INVALID_COMMAND:
     case ERR_SYSTEM_MEMORY_ALLOC_FAILED:
     case ERR_SYSTEM_UNKNOWN_ERROR:
-      return 2;
+    case ERR_OTA_INIT_FAILED:
+    case ERR_OTA_WIFI_AP_FAILED:
+       return 2;
 
     // Critical level (3)
     case ERR_ESPNOW_INIT_FAILED:
@@ -428,7 +450,8 @@ uint8_t getErrorSeverity(ErrorCode code)
     case ERR_WIFI_INIT_FAILED:
     case ERR_SYSTEM_WIFI_INIT_FAILED:
     case ERR_SYSTEM_NULL_POINTER:
-      return 3;
+    case ERR_OTA_UPDATE_FAILED:
+       return 3;
 
     default:
       return 2;

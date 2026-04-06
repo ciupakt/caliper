@@ -13,6 +13,7 @@
 #include "sensors/accelerometer.h"
 #include "power/battery.h"
 #include "motor/motor_ctrl.h"
+#include "ota/ota_update.h"
 
 // Master device MAC address (defined in config.h)
 uint8_t masterAddress[] = MASTER_MAC_ADDR;
@@ -26,6 +27,9 @@ MessageSlave msgSlave;
 
 // Flaga blokująca przyjmowanie nowych komend podczas trwania pomiaru
 volatile bool measurementInProgress = false;
+
+OTAUpdate otaUpdate;
+volatile bool otaMode = false;
 
 bool runMeasReq(void *arg);
 bool motorStopTimeout(void *arg);
@@ -100,6 +104,11 @@ void OnDataRecv(const esp_now_recv_info_t *recv_info, const uint8_t *incomingDat
   case CMD_MOTORTEST:
     DEBUG_I("CMD_MOTORTEST");
     motorCtrlRun(msgMaster.motorSpeed, msgMaster.motorTorque, msgMaster.motorState);
+    break;
+
+  case CMD_OTA:
+    DEBUG_I("CMD_OTA - entering OTA mode");
+    otaMode = true;
     break;
 
   default:
@@ -365,6 +374,8 @@ void setup()
 
   pinMode(LED_RED, OUTPUT);
   pinMode(LED_GREEN, OUTPUT);
+  digitalWrite(LED_RED, LOW);
+  digitalWrite(LED_GREEN, LOW);
   timerBattery.every(BATTERY_UPDATE_INTERVAL_MS, batteryMonitorTask);
 
   DEBUG_I("Oczekiwanie na żądania pomiaru...");
@@ -372,6 +383,15 @@ void setup()
 
 void loop()
 {
+  if (otaMode && !otaUpdate.isActive())
+  {
+    otaUpdate.startOTAMode();
+  }
+  if (otaUpdate.isActive())
+  {
+    otaUpdate.handle();
+    return;
+  }
   timerWorker.tick();
   timerMotorStopTimeout.tick();
   timerBattery.tick();

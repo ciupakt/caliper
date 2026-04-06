@@ -115,12 +115,13 @@ static void printSerialHelp()
           "q <0-255>    - Ustaw motorTorque\n"
           "s <0-255>    - Ustaw motorSpeed\n"
           "r <0-3>      - Ustaw motorState (0=STOP, 1=FORWARD, 2=REVERSE, 3=BRAKE)\n"
-          "t            - Wyślij CMD_MOTORTEST (T) z bieżącymi ustawieniami\n"
-          "c <±14.999>  - Ustaw calibrationOffset (mm) na Master (bez wyzwalania pomiaru)\n"
-          "n <nazwa>    - Ustaw nazwę sesji (maks 31 znaków, dozwolone: a-z, A-Z, 0-9, spacja, _, -)\n"
-          "g            - Odśwież ustawienia (wyślij wszystkie aktualne wartości)\n"
-          "h/?          - Wyświetl tę pomoc\n"
-          "=====================================\n");
+           "t            - Wyślij CMD_MOTORTEST (T) z bieżącymi ustawieniami\n"
+           "f            - Wyślij CMD_OTA (O) – przejdź w tryb OTA na Slave (flash)\n"
+           "c <±14.999>  - Ustaw calibrationOffset (mm) na Master (bez wyzwalania pomiaru)\n"
+           "n <nazwa>    - Ustaw nazwę sesji (maks 31 znaków, dozwolone: a-z, A-Z, 0-9, spacja, _, -)\n"
+           "g            - Odśwież ustawienia (wyślij wszystkie aktualne wartości)\n"
+           "h/?          - Wyświetl tę pomoc\n"
+           "=====================================\n");
 }
 
 void SerialCli_begin(const SerialCliContext &ctx)
@@ -354,6 +355,14 @@ bool SerialCli_tick(void *arg)
       if (g_ctx.sendMotorTest)
       {
         g_ctx.sendMotorTest();
+      }
+      break;
+
+    case 'f':
+      if (g_ctx.sendOTA)
+      {
+        g_ctx.sendOTA();
+        DEBUG_I("CMD_OTA wysłany – Slave przejdzie w tryb OTA");
       }
       break;
 

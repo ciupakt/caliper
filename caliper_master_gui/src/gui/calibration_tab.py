@@ -118,6 +118,13 @@ class CalibrationTab:
                             height=30,
                             user_data=serial_handler,
                         )
+                        dpg.add_button(
+                            label="OTA (Slave)",
+                            callback=self._send_ota,
+                            width=150,
+                            height=30,
+                            user_data=serial_handler,
+                        )
                     dpg.add_spacer(height=5)
 
                 dpg.add_spacer(width=30)
@@ -385,6 +392,14 @@ class CalibrationTab:
         if self._safe_write(serial_handler, "g"):
             self._set_status("Wysłano: g (odśwież ustawienia)")
             self.add_app_log("[GUI] Wysłano: g (odśwież ustawienia)")
+
+    def _send_ota(self, sender, app_data, user_data):
+        """Send OTA command to Slave via UART command 'f'."""
+        serial_handler = user_data
+
+        if self._safe_write(serial_handler, "f"):
+            self._set_status("Wysłano: f (OTA update)")
+            self.add_app_log("[GUI] Wysłano: f (OTA update)")
 
     def _on_log_clicked(self, sender, app_data, user_data):
         """Handle double click on log areas - clear logs on double click"""

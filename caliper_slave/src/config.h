@@ -40,4 +40,12 @@
 // Slave-specific Settings
 // ============================================================================
 
+// ============================================================================
+// OTA Configuration
+// ============================================================================
+#define OTA_SSID "CALIPER_OTA"
+#define OTA_PASSWORD "caliper123"
+#define OTA_TIMEOUT_MS 180000
+#define OTA_AP_CHANNEL 1
+
 #endif // CONFIG_SLAVE_H
