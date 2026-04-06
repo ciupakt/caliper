@@ -138,6 +138,7 @@ bool updateMeasureData(void *arg)
 bool MotorStopTimeout(void *arg)
 {
   motorCtrlRun(0, 0, MOTOR_STOP);
+  digitalWrite(LED_GREEN, LOW);
   DEBUG_I("Silnik zatrzymany po timeout");
   return false; // do not repeat this task
 }
@@ -207,10 +208,16 @@ bool runMeasReq(void *arg)
   if (msgMaster.command == CMD_MEASURE)
   {
     timerMotorStopTimeout.cancel();
+
+    digitalWrite(LED_GREEN, HIGH);
     motorCtrlRun(msgMaster.motorSpeed, msgMaster.motorTorque, MOTOR_FORWARD);
-    delay(msgMaster.timeout); // wait for motor to stabilize
     DEBUG_I("Czekanie %u ms na ustabilizowanie silnika...", msgMaster.timeout);
+    delay(msgMaster.timeout); // wait for motor to stabilize
+
+    digitalWrite(LED_GREEN, LOW);
     updateMeasureData(nullptr);
+    digitalWrite(LED_GREEN, HIGH);
+
     motorCtrlRun(msgMaster.motorSpeed, msgMaster.motorTorque, MOTOR_REVERSE);
     timerMotorStopTimeout.in(msgMaster.timeout, MotorStopTimeout);
   }
@@ -357,6 +364,7 @@ void setup()
   motorCtrlEnable(true);
 
   pinMode(LED_RED, OUTPUT);
+  pinMode(LED_GREEN, OUTPUT);
   timerBattery.every(BATTERY_UPDATE_INTERVAL_MS, batteryMonitorTask);
 
   DEBUG_I("Oczekiwanie na żądania pomiaru...");
