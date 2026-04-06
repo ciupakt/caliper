@@ -29,8 +29,10 @@ volatile bool measurementInProgress = false;
 
 bool runMeasReq(void *arg);
 bool motorStopTimeout(void *arg);
+bool batteryMonitorTask(void *arg);
 auto timerWorker = timer_create_default();
 auto timerMotorStopTimeout = timer_create_default();
+auto timerBattery = timer_create_default();
 
 /**
  * @brief Callback odbierający dane ESP-NOW od Mastera
@@ -138,6 +140,24 @@ bool MotorStopTimeout(void *arg)
   motorCtrlRun(0, 0, MOTOR_STOP);
   DEBUG_I("Silnik zatrzymany po timeout");
   return false; // do not repeat this task
+}
+
+bool batteryMonitorTask(void *arg)
+{
+  float voltage = battery.readVoltageNow();
+  DEBUG_I("Battery: %.0f mV", voltage);
+
+  if (voltage < 7000.0f)
+  {
+    digitalWrite(LED_RED, HIGH);
+  }
+  else
+  {
+    digitalWrite(LED_RED, HIGH);
+    delay(1);
+    digitalWrite(LED_RED, LOW);
+  }
+  return true;
 }
 
 /**
@@ -335,6 +355,10 @@ void setup()
   DEBUG_I("Inicjalizacja sterownika silnika...");
   motorCtrlInit();
   motorCtrlEnable(true);
+
+  pinMode(LED_RED, OUTPUT);
+  timerBattery.every(BATTERY_UPDATE_INTERVAL_MS, batteryMonitorTask);
+
   DEBUG_I("Oczekiwanie na żądania pomiaru...");
 }
 
@@ -342,4 +366,5 @@ void loop()
 {
   timerWorker.tick();
   timerMotorStopTimeout.tick();
+  timerBattery.tick();
 }

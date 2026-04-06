@@ -31,6 +31,10 @@ public:
      * @details Bypasses cache and performs immediate measurement
      */
     uint16_t readVoltageNow();
+
+private:
+    float filteredVoltage_mV = 0.0f;
+    bool filterInitialized = false;
 };
 
 #endif // BATTERY_H

@@ -11,19 +11,20 @@
 
 uint16_t BatteryMonitor::readVoltageNow()
 {
-    // Read and average multiple samples for better accuracy
-    uint32_t adcSum = 0;
+    int raw = analogRead(BATTERY_VOLTAGE_PIN);
 
-    for (int i = 0; i < ADC_SAMPLES; i++)
+    uint16_t voltage_adc_mV = (uint16_t)((raw * ADC_REFERENCE_VOLTAGE_MV) / ADC_RESOLUTION);
+    float voltage_mV = (float)((uint32_t)voltage_adc_mV * (BATTERY_DIVIDER_R1 + BATTERY_DIVIDER_R2) / BATTERY_DIVIDER_R2);
+
+    if (!filterInitialized)
     {
-        adcSum += analogRead(BATTERY_VOLTAGE_PIN);
-        delay(1); // Small delay between samples
+        filteredVoltage_mV = voltage_mV;
+        filterInitialized = true;
+    }
+    else
+    {
+        filteredVoltage_mV = filteredVoltage_mV + BATTERY_FILTER_ALPHA * (voltage_mV - filteredVoltage_mV);
     }
 
-    int adcAverage = adcSum / ADC_SAMPLES;
-
-    // Convert ADC value to millivolts using constants from config.h
-    uint16_t voltage_mV = (uint16_t)((adcAverage * ADC_REFERENCE_VOLTAGE_MV) / ADC_RESOLUTION);
-
-    return voltage_mV;
+    return (uint16_t)filteredVoltage_mV;
 }

@@ -39,6 +39,7 @@
 // ============================================================================
 #define ADC_RESOLUTION 4095
 #define ADC_REFERENCE_VOLTAGE_MV 3300
+#define BATTERY_FILTER_ALPHA 0.2f
 
 // ============================================================================
 // Pin Definitions - Caliper
@@ -60,6 +61,14 @@
 // Pin Definitions - Battery
 // ============================================================================
 #define BATTERY_VOLTAGE_PIN 10
+#define BATTERY_DIVIDER_R1 47000
+#define BATTERY_DIVIDER_R2 30000
+
+// ============================================================================
+// Pin Definitions - LED indicator
+// ============================================================================
+#define LED_RED 1
+#define LED_GREEN 4
 
 // ============================================================================
 // Calibration Configuration
