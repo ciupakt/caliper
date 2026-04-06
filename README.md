@@ -541,6 +541,7 @@ caliper/
 ├── caliper_master_gui/          # Aplikacja GUI Python
 │   ├── caliper_master_gui.py    # Entry-point GUI (Dear PyGui)
 │   ├── requirements.txt
+│   ├── INSTALL_UBUNTU.md        # Instrukcja instalacji na Ubuntu
 │   ├── src/
 │   │   ├── __init__.py
 │   │   ├── serial_handler.py    # Obsługa portu szeregowego
@@ -548,8 +549,7 @@ caliper/
 │   │   │   └── csv_handler.py   # Obsługa CSV
 │   │   └── gui/
 │   │       ├── calibration_tab.py # Zakładka kalibracji
-│   │       ├── measurement_tab.py # Zakładka pomiarów
-│   │       └── log_tab.py         # Zakładka logów
+│   │       └── measurement_tab.py # Zakładka pomiarów
 │   └── tests/
 │       └── test_serial.py       # Testy jednostkowe
 │

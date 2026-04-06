@@ -27,6 +27,7 @@ Przycisk "Zastosuj" wysyła tylko komendy o, q, s (bez r).
 
 import dearpygui.dearpygui as dpg
 from collections import deque
+import threading
 import time
 from datetime import datetime
 
@@ -88,7 +89,7 @@ class CalibrationTab:
                             "MOTOR_STOP (0)",
                             "MOTOR_FORWARD (1)",
                             "MOTOR_REVERSE (2)",
-                            "MOTOR_BRAKE (3)"
+                            "MOTOR_BRAKE (3)",
                         ],
                         default_value="MOTOR_STOP (0)",
                         width=220,
@@ -128,7 +129,11 @@ class CalibrationTab:
 
                     # Podgląd jak w WWW: surowy / aktualny offset / skorygowany
                     dpg.add_text("Surowy: n/a", tag="cal_raw_display")
-                    dpg.add_text("Aktualny offset: 0.000 mm", tag="cal_offset_display", color=(198, 40, 40))
+                    dpg.add_text(
+                        "Aktualny offset: 0.000 mm",
+                        tag="cal_offset_display",
+                        color=(198, 40, 40),
+                    )
                     dpg.add_text("Skorygowany: n/a", tag="cal_corrected_display")
                     dpg.add_spacer(height=5)
 
@@ -158,9 +163,13 @@ class CalibrationTab:
                     )
 
                     dpg.add_spacer(height=10)
-                    dpg.add_text("ESP32 Master WWW: http://192.168.4.1", color=(100, 255, 100))
+                    dpg.add_text(
+                        "ESP32 Master WWW: http://192.168.4.1", color=(100, 255, 100)
+                    )
                     # Wartości zgodne z [`config.h`](caliper_master/src/config.h:33)
-                    dpg.add_text("WiFi: Orange_WiFi (hasło: 1670$2026)", color=(100, 255, 100))
+                    dpg.add_text(
+                        "WiFi: Orange_WiFi (hasło: 1670$2026)", color=(100, 255, 100)
+                    )
 
             dpg.add_spacer(height=10)
             dpg.add_separator()
@@ -173,51 +182,86 @@ class CalibrationTab:
             with dpg.group(horizontal=True):
                 # Log komunikacji serial
                 with dpg.group():
-                    dpg.add_text("Log komunikacji serial:", color=(100, 200, 255))
-                    dpg.add_spacer(height=5)
-                    dpg.add_input_text(
-                        multiline=True,
-                        readonly=True,
-                        width=560,
-                        height=200,
-                        tag="cal_serial_log",
+                    dpg.add_text(
+                        "Log komunikacji serial (dblclick = wyczyść):",
+                        color=(100, 200, 255),
                     )
+                    dpg.add_spacer(height=5)
+                    with dpg.child_window(width=560, height=200, tag="cal_serial_log"):
+                        with dpg.group(tag="cal_serial_log_container"):
+                            pass
                     # Dodaj handler kliknięcia do czyszczenia logów
-                    with dpg.item_handler_registry():
-                        dpg.add_item_clicked_handler(callback=self._on_log_clicked, user_data="serial")
-                    dpg.bind_item_handler_registry("cal_serial_log", dpg.last_container())
+                    with dpg.item_handler_registry(tag="serial_log_click_handler"):
+                        dpg.add_item_clicked_handler(
+                            callback=self._on_log_clicked, user_data="serial"
+                        )
+                    dpg.bind_item_handler_registry(
+                        "cal_serial_log_container", "serial_log_click_handler"
+                    )
 
                 dpg.add_spacer(width=20)
 
                 # Log aplikacji
                 with dpg.group():
-                    dpg.add_text("Log aplikacji:", color=(100, 200, 255))
-                    dpg.add_spacer(height=5)
-                    dpg.add_input_text(
-                        multiline=True,
-                        readonly=True,
-                        width=560,
-                        height=200,
-                        tag="cal_app_log",
+                    dpg.add_text(
+                        "Log aplikacji (dblclick = wyczyść):", color=(100, 200, 255)
                     )
+                    dpg.add_spacer(height=5)
+                    with dpg.child_window(width=560, height=200, tag="cal_app_log"):
+                        with dpg.group(tag="cal_app_log_container"):
+                            pass
                     # Dodaj handler kliknięcia do czyszczenia logów
-                    with dpg.item_handler_registry():
-                        dpg.add_item_clicked_handler(callback=self._on_log_clicked, user_data="app")
-                    dpg.bind_item_handler_registry("cal_app_log", dpg.last_container())
+                    with dpg.item_handler_registry(tag="app_log_click_handler"):
+                        dpg.add_item_clicked_handler(
+                            callback=self._on_log_clicked, user_data="app"
+                        )
+                    dpg.bind_item_handler_registry(
+                        "cal_app_log_container", "app_log_click_handler"
+                    )
 
     def add_serial_log(self, line: str):
         """Add a line to the serial log with timestamp"""
         timestamp = datetime.now().strftime("[%H:%M:%S.%f]")[:-3]  # [HH:MM:SS.mmm]
         self.serial_log_lines.append(f"{timestamp} {line}")
-        if dpg.does_item_exist("cal_serial_log"):
-            dpg.set_value("cal_serial_log", "\n".join(list(self.serial_log_lines)))
+        if dpg.does_item_exist("cal_serial_log_container"):
+            dpg.add_text(f"{timestamp} {line}", parent="cal_serial_log_container")
+            children = dpg.get_item_children("cal_serial_log_container", 1)
+            while children is not None and len(children) > self.max_lines:
+                dpg.delete_item(children[0])
+                children = dpg.get_item_children("cal_serial_log_container", 1)
+
+            def _autoscroll():
+                try:
+                    if dpg.does_item_exist("cal_serial_log"):
+                        dpg.set_y_scroll(
+                            "cal_serial_log", dpg.get_y_scroll_max("cal_serial_log")
+                        )
+                except Exception:
+                    pass
+
+            threading.Timer(0.05, _autoscroll).start()
 
     def add_app_log(self, line: str):
         """Add a line to the app log with timestamp"""
         timestamp = datetime.now().strftime("[%H:%M:%S.%f]")[:-3]  # [HH:MM:SS.mmm]
         self.app_log_lines.append(f"{timestamp} {line}")
-        if dpg.does_item_exist("cal_app_log"):
-            dpg.set_value("cal_app_log", "\n".join(list(self.app_log_lines)))
+        if dpg.does_item_exist("cal_app_log_container"):
+            dpg.add_text(f"{timestamp} {line}", parent="cal_app_log_container")
+            children = dpg.get_item_children("cal_app_log_container", 1)
+            while children is not None and len(children) > self.max_lines:
+                dpg.delete_item(children[0])
+                children = dpg.get_item_children("cal_app_log_container", 1)
+
+            def _autoscroll():
+                try:
+                    if dpg.does_item_exist("cal_app_log"):
+                        dpg.set_y_scroll(
+                            "cal_app_log", dpg.get_y_scroll_max("cal_app_log")
+                        )
+                except Exception:
+                    pass
+
+            threading.Timer(0.05, _autoscroll).start()
 
     @staticmethod
     def _clamp_int(val: int, vmin: int, vmax: int) -> int:
@@ -289,7 +333,7 @@ class CalibrationTab:
             timeout_ms = int(dpg.get_value("tx_timeout_input"))
             torque = int(dpg.get_value("tx_torque_input"))
             speed = int(dpg.get_value("tx_speed_input"))
-            
+
             # Parsowanie motorState z combo boxa (format: "MOTOR_STOP (0)")
             state_str = dpg.get_value("tx_state_input")
             state = int(state_str.split("(")[-1].rstrip(")"))
@@ -317,7 +361,7 @@ class CalibrationTab:
     def _send_motortest(self, sender, app_data, user_data):
         """Send motor test command via UART: r <state> i t."""
         serial_handler = user_data
-        
+
         try:
             # Parsowanie motorState z combo boxa (format: "MOTOR_STOP (0)")
             state_str = dpg.get_value("tx_state_input")
@@ -325,9 +369,9 @@ class CalibrationTab:
         except Exception:
             self._set_status("BŁĄD: Nieprawidłowa wartość motorState")
             return
-        
+
         state = self._clamp_int(state, 0, 3)
-        
+
         # Wysyłamy komendę r <state> przed testem silnika
         if self._safe_write(serial_handler, f"r {state}"):
             self._set_status(f"Wysłano: r {state}, t")
@@ -337,7 +381,7 @@ class CalibrationTab:
     def _refresh_settings(self, sender, app_data, user_data):
         """Refresh all settings from Master via UART command 'g'."""
         serial_handler = user_data
-        
+
         if self._safe_write(serial_handler, "g"):
             self._set_status("Wysłano: g (odśwież ustawienia)")
             self.add_app_log("[GUI] Wysłano: g (odśwież ustawienia)")
@@ -345,20 +389,20 @@ class CalibrationTab:
     def _on_log_clicked(self, sender, app_data, user_data):
         """Handle double click on log areas - clear logs on double click"""
         current_time = time.time()
-        
+
         # Sprawdź, czy to podwójne kliknięcie
         if current_time - self.last_click_time < self.double_click_threshold:
             # To podwójne kliknięcie - wyczyść odpowiednie logi
             log_type = user_data
             if log_type == "serial":
                 self.serial_log_lines.clear()
-                if dpg.does_item_exist("cal_serial_log"):
-                    dpg.set_value("cal_serial_log", "")
+                if dpg.does_item_exist("cal_serial_log_container"):
+                    dpg.delete_item("cal_serial_log_container", children_only=True)
             elif log_type == "app":
                 self.app_log_lines.clear()
-                if dpg.does_item_exist("cal_app_log"):
-                    dpg.set_value("cal_app_log", "")
-        
+                if dpg.does_item_exist("cal_app_log_container"):
+                    dpg.delete_item("cal_app_log_container", children_only=True)
+
         # Zaktualizuj czas ostatniego kliknięcia
         self.last_click_time = current_time
 
@@ -366,7 +410,7 @@ class CalibrationTab:
         """Clear all log lines"""
         self.serial_log_lines.clear()
         self.app_log_lines.clear()
-        if dpg.does_item_exist("cal_serial_log"):
-            dpg.set_value("cal_serial_log", "")
-        if dpg.does_item_exist("cal_app_log"):
-            dpg.set_value("cal_app_log", "")
+        if dpg.does_item_exist("cal_serial_log_container"):
+            dpg.delete_item("cal_serial_log_container", children_only=True)
+        if dpg.does_item_exist("cal_app_log_container"):
+            dpg.delete_item("cal_app_log_container", children_only=True)

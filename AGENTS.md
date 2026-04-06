@@ -75,11 +75,13 @@ cd caliper_master && C:\Users\tiim\.platformio\penv\Scripts\platformio.exe run -
 ```
 caliper_master/
 ├── src/
-│   ├── main.cpp              # Główna logika: AP WiFi + HTTP + ESP-NOW + obsługa LittleFS
-│   ├── config.h              # Konfiguracja specyficzna dla Master (SSID, hasło, MAC, stałe)
-│   ├── communication.h/.cpp  # Menedżer komunikacji ESP-NOW (wysyłanie komend + retry)
-│   ├── serial_cli.h/.cpp     # Proste CLI po Serial (komendy serwisowe/diagnostyczne)
-├── data/                     # Pliki LittleFS (HTML/CSS/JS)
+│   ├── main.cpp                    # Główna logika: AP WiFi + HTTP + ESP-NOW + obsługa LittleFS
+│   ├── config.h                    # Konfiguracja specyficzna dla Master (SSID, hasło, MAC, stałe)
+│   ├── communication.h/.cpp        # Menedżer komunikacji ESP-NOW (wysyłanie komend + retry)
+│   ├── serial_cli.h/.cpp           # Proste CLI po Serial (komendy serwisowe/diagnostyczne)
+│   ├── measurement_state.h/.cpp    # Zarządzanie stanem pomiarowym z buforami tekstowymi
+│   └── preferences_manager.h/.cpp  # Przechowywanie ustawień w NVS (Preferences)
+├── data/                           # Pliki LittleFS (HTML/CSS/JS)
 │   ├── index.html
 │   ├── style.css
 │   └── app.js
@@ -91,15 +93,15 @@ caliper_master/
 ```
 caliper_slave/
 ├── src/
-│   ├── main.cpp                 # Główna logika: ESP-NOW + harmonogram (timery) + spinanie modułów
-│   ├── config.h                 # Konfiguracja specyficzna dla Slave (MAC, piny, stałe)
+│   ├── main.cpp                    # Główna logika: ESP-NOW + harmonogram (timery) + spinanie modułów
+│   ├── config.h                    # Konfiguracja specyficzna dla Slave (MAC, piny, stałe)
 │   ├── sensors/
-│   │   ├── caliper.h/.cpp       # Obsługa suwmiarki + dekodowanie danych
-│   │   └── accelerometer.h/.cpp # Obsługa IIS328DQ (I2C) + wyliczanie kątów
+│   │   ├── caliper.h/.cpp          # Obsługa suwmiarki + dekodowanie danych (interrupt-based)
+│   │   └── accelerometer.h/.cpp    # Obsługa IIS328DQ (I2C) + wyliczanie kątów
 │   ├── motor/
-│   │   └── motor_ctrl.h/.cpp    # Sterowanie silnikiem (STSPIN250)
+│   │   └── motor_ctrl.h/.cpp       # Sterowanie silnikiem STSPIN250 (PWM, PH, REF, EN, FAULT)
 │   └── power/
-│       └── battery.h/.cpp       # Pomiar napięcia baterii (ADC)
+│       └── battery.h/.cpp          # Pomiar napięcia baterii (ADC)
 └── platformio.ini
 ```
 
@@ -109,31 +111,34 @@ Uwaga: plik wejściowy aplikacji to `caliper_master_gui.py` (modularna wersja), 
 
 ```
 caliper_master_gui/
-├── caliper_master_gui.py      # Entry-point GUI (Dear PyGui)
-├── requirements.txt
+├── caliper_master_gui.py      # Entry-point GUI (Dear PyGui) – klasa CaliperGUI
+├── requirements.txt           # Zależności Python (dearpygui, pyserial)
+├── INSTALL_UBUNTU.md          # Instrukcja instalacji na Ubuntu
 ├── src/
 │   ├── __init__.py
-│   ├── app.py                 # Klasa stanu aplikacji (CaliperApp)
-│   ├── serial_handler.py      # Obsługa portu szeregowego
+│   ├── serial_handler.py      # Obsługa portu szeregowego (wrapper pyserial)
 │   ├── gui/
 │   │   ├── __init__.py
-│   │   ├── calibration_tab.py  # Zakładka kalibracji
-│   │   ├── measurement_tab.py # Zakładka pomiarów
-│   │   └── log_tab.py         # Zakładka logów
+│   │   ├── calibration_tab.py  # Zakładka kalibracji (motor, offset, logi)
+│   │   └── measurement_tab.py # Zakładka pomiarów (historia, wykres, sesje)
 │   └── utils/
 │       ├── __init__.py
-│       └── csv_handler.py     # Obsługa CSV
+│       └── csv_handler.py     # Obsługa CSV (zapis pomiarów)
 └── tests/
-    └── test_serial.py         # Testy jednostkowe
+    └── test_serial.py         # Testy jednostkowe SerialHandler
 ```
 
 ### `lib/CaliperShared`
 
 ```
 lib/CaliperShared/
-├── shared_common.h    # Wspólne definicje typów/struktur/protokołu (np. Message, CommandType)
-├── shared_config.h    # Wspólna konfiguracja (piny, stałe)
-└── MacroDebugger.h    # Makra debug/log/plot (używane w Master i Slave)
+├── shared_common.h        # Wspólne definicje typów/struktur/protokołu (CommandType, MotorState, MessageMaster, MessageSlave, SystemStatus)
+├── shared_config.h        # Wspólna konfiguracja (piny, stałe, limity walidacji)
+├── MacroDebugger.h        # Makra debug/log/plot (DEBUG_I, DEBUG_E, DEBUG_W, DEBUG_PLOT)
+├── error_codes.h/.cpp     # System kodów błędów (8 kategorii, 10 modułów, ~50+ kodów)
+├── error_handler.h        # Makra logowania błędów i klasa ErrorHandler (RECORD_ERROR, CHECK_ERROR, HANDLE_ERROR)
+├── espnow_helper.h/.cpp   # Funkcje pomocnicze ESP-NOW z retry (espnow_send_with_retry)
+└── ERROR_HANDLING.md      # Dokumentacja systemu obsługi błędów
 ```
 
 ## Informacje o sprzęcie

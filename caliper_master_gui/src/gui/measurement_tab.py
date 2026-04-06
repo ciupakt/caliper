@@ -9,11 +9,12 @@ from datetime import datetime
 import threading
 import time
 import re
+import threading
 
 
 class MeasurementTab:
     """Measurement tab component for displaying measurements and controls"""
-    
+
     def __init__(self, max_history: int = 1000, max_plot_points: int = 500):
         self.max_history = max_history
         self.max_plot_points = max_plot_points
@@ -33,7 +34,7 @@ class MeasurementTab:
         # Auto-pomiar (wątek wysyłający cyklicznie komendę "m")
         self._auto_event = threading.Event()
         self._auto_thread: threading.Thread | None = None
-    
+
     def create(self, parent: int, serial_handler, csv_handler):
         """Create the measurement tab UI"""
         with dpg.tab(label="Pomiary", parent=parent):
@@ -71,7 +72,9 @@ class MeasurementTab:
                     if not dpg.does_item_exist("measure_button_theme"):
                         with dpg.theme(tag="measure_button_theme"):
                             with dpg.theme_component(dpg.mvButton):
-                                dpg.add_theme_color(dpg.mvThemeCol_Text, (0, 200, 0, 255))
+                                dpg.add_theme_color(
+                                    dpg.mvThemeCol_Text, (0, 200, 0, 255)
+                                )
 
                     dpg.bind_item_theme(measure_btn, "measure_button_theme")
 
@@ -81,26 +84,74 @@ class MeasurementTab:
 
                     # Nazewnictwo jak w WWW: nowa sesja pomiarowa.
                     # Plik CSV tworzymy z nazwą sesji jako prefixem.
-                    new_session_btn = dpg.add_button(label="Nowa sesja pomiarowa", width=200, height=30)
-                    with dpg.popup(new_session_btn, mousebutton=dpg.mvMouseButton_Left, modal=True, tag="new_session_popup"):
-                        dpg.add_text("Podaj nazwę sesji (maks 31 znaków, dozwolone: a-z, A-Z, 0-9, spacja, _, -)")
-                        dpg.add_text("Zostanie utworzony plik: <nazwa_sesji>_YYYYMMDD_HHMMSS.csv")
+                    new_session_btn = dpg.add_button(
+                        label="Nowa sesja pomiarowa", width=200, height=30
+                    )
+                    with dpg.popup(
+                        new_session_btn,
+                        mousebutton=dpg.mvMouseButton_Left,
+                        modal=True,
+                        tag="new_session_popup",
+                    ):
+                        dpg.add_text(
+                            "Podaj nazwę sesji (maks 31 znaków, dozwolone: a-z, A-Z, 0-9, spacja, _, -)"
+                        )
+                        dpg.add_text(
+                            "Zostanie utworzony plik: <nazwa_sesji>_YYYYMMDD_HHMMSS.csv"
+                        )
                         dpg.add_spacer(height=5)
-                        dpg.add_input_text(tag="session_name_input", default_value=self.session_name, width=360)
+                        dpg.add_input_text(
+                            tag="session_name_input",
+                            default_value=self.session_name,
+                            width=360,
+                        )
                         dpg.add_spacer(height=8)
                         with dpg.group(horizontal=True):
-                            dpg.add_button(label="Utwórz", callback=self._confirm_new_session, width=120, height=30, user_data=(serial_handler, csv_handler))
-                            dpg.add_button(label="Anuluj", callback=lambda: dpg.configure_item("new_session_popup", show=False), width=120, height=30)
+                            dpg.add_button(
+                                label="Utwórz",
+                                callback=self._confirm_new_session,
+                                width=120,
+                                height=30,
+                                user_data=(serial_handler, csv_handler),
+                            )
+                            dpg.add_button(
+                                label="Anuluj",
+                                callback=lambda: dpg.configure_item(
+                                    "new_session_popup", show=False
+                                ),
+                                width=120,
+                                height=30,
+                            )
 
                     dpg.add_spacer(height=5)
                     dpg.add_text("", tag="session_name_display")
 
                     dpg.add_spacer(height=5)
-                    dpg.add_checkbox(label="Auto-pomiar", tag="auto_checkbox", callback=self._set_auto, user_data=serial_handler)
-                    dpg.add_input_int(label="Interwał (ms)", tag="interval_ms", default_value=1000, min_value=500, enabled=False, width=150)
+                    dpg.add_checkbox(
+                        label="Auto-pomiar",
+                        tag="auto_checkbox",
+                        callback=self._set_auto,
+                        user_data=serial_handler,
+                    )
+                    dpg.add_input_int(
+                        label="Interwał (ms)",
+                        tag="interval_ms",
+                        default_value=1000,
+                        min_value=500,
+                        enabled=False,
+                        width=150,
+                    )
                     dpg.add_spacer(height=5)
-                    dpg.add_checkbox(label="Dodaj znacznik czasu", callback=self._timestamp_checkbox, tag="timestamp_cb")
-                    dpg.add_checkbox(label="Dodaj znacznik kąta", callback=self._angle_checkbox, tag="angle_cb")
+                    dpg.add_checkbox(
+                        label="Dodaj znacznik czasu",
+                        callback=self._timestamp_checkbox,
+                        tag="timestamp_cb",
+                    )
+                    dpg.add_checkbox(
+                        label="Dodaj znacznik kąta",
+                        callback=self._angle_checkbox,
+                        tag="angle_cb",
+                    )
 
                 dpg.add_spacer(width=30)
 
@@ -113,8 +164,20 @@ class MeasurementTab:
                     if ports_list:
                         dpg.set_value("port_combo", ports_list[0])
                     dpg.add_spacer(height=5)
-                    dpg.add_button(label="Odśwież porty", callback=self._refresh_ports, width=150, height=30, user_data=serial_handler)
-                    dpg.add_button(label="Otwórz port", callback=self._open_port, width=150, height=30, user_data=(serial_handler, csv_handler))
+                    dpg.add_button(
+                        label="Odśwież porty",
+                        callback=self._refresh_ports,
+                        width=150,
+                        height=30,
+                        user_data=serial_handler,
+                    )
+                    dpg.add_button(
+                        label="Otwórz port",
+                        callback=self._open_port,
+                        width=150,
+                        height=30,
+                        user_data=(serial_handler, csv_handler),
+                    )
                     dpg.add_spacer(height=5)
                     dpg.add_text("Status: brak połączenia", tag="status")
                     dpg.add_text("", tag="csv_info")
@@ -128,8 +191,10 @@ class MeasurementTab:
                 dpg.add_plot_legend()
                 dpg.add_plot_axis(dpg.mvXAxis, label="Nr pomiaru", tag="x_axis")
                 dpg.add_plot_axis(dpg.mvYAxis, label="Wartość", tag="y_axis")
-                dpg.add_line_series([], [], label="Pomiar", parent="y_axis", tag="plot_data")
-    
+                dpg.add_line_series(
+                    [], [], label="Pomiar", parent="y_axis", tag="plot_data"
+                )
+
     def _refresh_ports(self, sender, app_data, user_data):
         """Refresh the list of available ports"""
         serial_handler = user_data
@@ -137,7 +202,7 @@ class MeasurementTab:
         dpg.configure_item("port_combo", items=ports)
         if ports:
             dpg.set_value("port_combo", ports[0])
-    
+
     def _open_port(self, sender, app_data, user_data):
         """Open the selected serial port"""
         serial_handler, csv_handler = user_data
@@ -150,20 +215,26 @@ class MeasurementTab:
             # Jeśli był otwarty poprzedni plik, zamykamy go, żeby nowa sesja zawsze
             # tworzyła nowy plik po podaniu prefixu.
             try:
-                if csv_handler is not None and hasattr(csv_handler, "is_open") and csv_handler.is_open():
+                if (
+                    csv_handler is not None
+                    and hasattr(csv_handler, "is_open")
+                    and csv_handler.is_open()
+                ):
                     csv_handler.close()
             except Exception:
                 pass
 
-            dpg.set_value("csv_info", "Plik CSV: (brak — kliknij 'Nowa sesja pomiarowa')")
+            dpg.set_value(
+                "csv_info", "Plik CSV: (brak — kliknij 'Nowa sesja pomiarowa')"
+            )
         else:
             dpg.set_value("status", "BŁĄD: Nie udało się otworzyć portu")
-    
+
     def _trigger(self, sender, app_data, user_data):
         """Send trigger command"""
         serial_handler = user_data
         serial_handler.write("m")
-    
+
     def _clear(self, sender=None, app_data=None, user_data=None):
         """Clear all measurements (local GUI state only)."""
         self.meas_history.clear()
@@ -172,7 +243,7 @@ class MeasurementTab:
         self.measurement_count = 0
         dpg.set_value("plot_data", [list(self.plot_x), list(self.plot_y)])
         self._show_measurements()
-    
+
     def _confirm_new_session(self, sender, app_data, user_data):
         """Create new CSV file with session name as prefix and clear history."""
         serial_handler, csv_handler = user_data
@@ -196,7 +267,11 @@ class MeasurementTab:
 
         # Wysyłanie komendy 'n' do ESP32 Master
         try:
-            if serial_handler is not None and hasattr(serial_handler, "is_open") and serial_handler.is_open():
+            if (
+                serial_handler is not None
+                and hasattr(serial_handler, "is_open")
+                and serial_handler.is_open()
+            ):
                 serial_handler.write(f"n {session_name}")
                 # Zapisz do logu aplikacji (przez callback w main)
             else:
@@ -249,8 +324,14 @@ class MeasurementTab:
             # szybka informacja w statusie (UI thread)
             try:
                 if dpg.does_item_exist("status"):
-                    if serial_handler is None or not hasattr(serial_handler, "is_open") or not serial_handler.is_open():
-                        dpg.set_value("status", "Auto-pomiar: włączony (port nieotwarty)")
+                    if (
+                        serial_handler is None
+                        or not hasattr(serial_handler, "is_open")
+                        or not serial_handler.is_open()
+                    ):
+                        dpg.set_value(
+                            "status", "Auto-pomiar: włączony (port nieotwarty)"
+                        )
                     else:
                         dpg.set_value("status", "Auto-pomiar: włączony")
             except Exception:
@@ -291,10 +372,10 @@ class MeasurementTab:
     @staticmethod
     def _validate_session_name(name: str) -> bool:
         """Walidacja nazwy sesji.
-        
+
         Args:
             name: Nazwa sesji do walidacji
-            
+
         Returns:
             True jeśli nazwa jest prawidłowa
         """
@@ -307,12 +388,12 @@ class MeasurementTab:
             return False
 
         # Dozwolone znaki: litery (a-z, A-Z), cyfry (0-9), spacje, podkreślenia (_), myślniki (-)
-        allowed_pattern = r'^[a-zA-Z0-9 _-]+$'
+        allowed_pattern = r"^[a-zA-Z0-9 _-]+$"
         if not re.match(allowed_pattern, name):
             return False
 
         return True
-    
+
     def _auto_loop(self, serial_handler):
         """Worker loop for auto-measure.
 
@@ -329,27 +410,33 @@ class MeasurementTab:
 
             # wysyłamy tylko gdy port otwarty; jeśli nie, po prostu czekamy
             try:
-                if serial_handler is not None and hasattr(serial_handler, "is_open") and serial_handler.is_open():
+                if (
+                    serial_handler is not None
+                    and hasattr(serial_handler, "is_open")
+                    and serial_handler.is_open()
+                ):
                     serial_handler.write("m")
             except Exception:
                 # nie wywalaj wątku – najwyżej pomiń iterację
                 pass
 
             time.sleep(interval / 1000.0)
-    
+
     def _timestamp_checkbox(self, sender, app_data, user_data):
         """Toggle timestamp inclusion"""
         self.include_timestamp = app_data
         self._show_measurements()
-    
+
     def _angle_checkbox(self, sender, app_data, user_data):
         """Toggle angle inclusion"""
         self.include_angle = app_data
         self._show_measurements()
-    
-    def add_measurement(self, timestamp: str, value: str, numeric_value: float, angle: str = ""):
+
+    def add_measurement(
+        self, timestamp: str, value: str, numeric_value: float, angle: str = ""
+    ):
         """Add a measurement to history and plot
-        
+
         Args:
             timestamp: Timestamp string
             value: Measurement value string
@@ -358,25 +445,25 @@ class MeasurementTab:
         """
         self.meas_history.append((timestamp, value, angle))
         self.measurement_count += 1
-        
+
         # Update plot
         self.plot_x.append(self.measurement_count)
         self.plot_y.append(numeric_value)
-        
+
         # Update GUI
         dpg.set_value("plot_data", [list(self.plot_x), list(self.plot_y)])
         self._update_plot_axes()
         self._show_measurements()
-    
+
     def _show_measurements(self):
         """Display measurements in the history view"""
         if dpg.does_item_exist("meas_container"):
             dpg.delete_item("meas_container", children_only=True)
-        
+
         # Pokazujemy więcej wpisów (historia jest teraz wysoką kolumną po lewej stronie)
         recent_measurements = list(self.meas_history)[-200:]
         start_idx = max(1, len(self.meas_history) - len(recent_measurements) + 1)
-        
+
         for idx, (t, v, a) in enumerate(recent_measurements, start=start_idx):
             parts = [v]  # Always show measurement first
             if self.include_angle:
@@ -385,25 +472,37 @@ class MeasurementTab:
                 parts.append(t)
             line = f"{idx}: {' '.join(parts)}"
             dpg.add_text(line, parent="meas_container")
-        
+
         if len(self.meas_history) > 0:
-            dpg.set_y_scroll("meas_scroll", dpg.get_y_scroll_max("meas_scroll"))
-    
+
+            def _autoscroll():
+                try:
+                    if dpg.does_item_exist("meas_scroll"):
+                        dpg.set_y_scroll(
+                            "meas_scroll", dpg.get_y_scroll_max("meas_scroll")
+                        )
+                except Exception:
+                    pass
+
+            threading.Timer(0.05, _autoscroll).start()
+
     def _update_plot_axes(self):
         """Update plot axis limits"""
         if len(self.plot_y) == 0:
             return
-        
+
         y_min = min(self.plot_y)
         y_max = max(self.plot_y)
         y_range = y_max - y_min
-        
+
         if y_range < 0.001:
             margin = 0.1
         else:
             margin = y_range * 0.1
-        
+
         dpg.set_axis_limits("y_axis", y_min - margin, y_max + margin)
-        
+
         if len(self.plot_x) > 0:
-            dpg.set_axis_limits("x_axis", min(self.plot_x) - 0.5, max(self.plot_x) + 0.5)
+            dpg.set_axis_limits(
+                "x_axis", min(self.plot_x) - 0.5, max(self.plot_x) + 0.5
+            )
