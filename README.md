@@ -5,6 +5,7 @@ Projekt **Caliper** to zaawansowany system bezprzewodowego pomiaru długości op
 - **Web UI** hostowane przez ESP32 Master (WiFi AP + HTTP + LittleFS)
 - **Desktop GUI** w Pythonie (Dear PyGui) komunikujące się z Master po **Serial**
 - **Serial CLI** - interfejs wiersza poleceń przez port szeregowy
+- **RC (Pilot)** - bezprzewodowy pilot z dwoma przyciskami (ESP-NOW → Master)
 
 ## 📑 Spis treści
 
@@ -36,6 +37,7 @@ Projekt **Caliper** to zaawansowany system bezprzewodowego pomiaru długości op
 
 ### Komunikacja
 - **ESP-NOW** - dwukierunkowa komunikacja bezprzewodowa Master↔Slave
+- **ESP-NOW RC→Master** - pilot RC wysyła komendy TRIG_MEAS / DROP_MEAS
 - **HTTP API** - REST API dla Web UI
 - **Serial CLI** - interfejs wiersza poleceń dla diagnostyki i konfiguracji
 - **Retry mechanism** - automatyczne ponawianie wysyłek przy błędach
@@ -94,6 +96,13 @@ flowchart TD
             SH_HELPER[ESP-NOW Helper<br/>retry mechanism]
         end
 
+        subgraph RC[ESP32-C3 RC<br/>caliper_rc]
+            RC_ESPNOW[ESP-NOW<br/>TX MessageRC]
+            RC_BTN1[Przycisk TRIG<br/>GPIO8]
+            RC_BTN2[Przycisk DROP<br/>GPIO9]
+            RC_LED[LED<br/>feedback]
+        end
+
         WEB[Przeglądarka<br/>Web UI]
         GUI[Python GUI<br/>Dear PyGui]
     end
@@ -103,6 +112,10 @@ flowchart TD
     GUI <--> |USB Serial| M_SERIAL
 
     M_ESPNOW <--> |ESP-NOW| S_ESPNOW
+    RC_ESPNOW --> |ESP-NOW<br/>CMD_TRIG_MEAS / CMD_DROP_MEAS| M_ESPNOW
+    RC_BTN1 --> RC_ESPNOW
+    RC_BTN2 --> RC_ESPNOW
+    RC_ESPNOW --> RC_LED
     S_CAL --> S_ESPNOW
     S_ACC --> S_ESPNOW
     S_BATT --> S_ESPNOW
@@ -126,6 +139,7 @@ sequenceDiagram
     participant U as Użytkownik
     participant GUI as GUI przez Serial
     participant WEB as Web UI przez HTTP
+    participant RC as RC Pilot
     participant M as ESP32 Master
     participant EH as ErrorHandler
     participant MS as MeasurementState
@@ -136,11 +150,14 @@ sequenceDiagram
     participant BAT as Bateria
 
     alt Sterowanie z GUI
-        U->>GUI: „Pomiar” (m)
+        U->>GUI: „Pomiar" (m)
         GUI->>M: Serial: m + LF
     else Sterowanie z Web UI
-        U->>WEB: klik „Wykonaj pomiar”
+        U->>WEB: klik „Wykonaj pomiar"
         WEB->>M: HTTP /measure albo /measure_session
+    else Sterowanie z RC
+        U->>RC: przycisk TRIG_MEAS
+        RC->>M: ESP-NOW: MessageRC{CMD_TRIG_MEAS}
     end
 
     M->>PM: loadSettings()
@@ -238,6 +255,8 @@ flowchart LR
 ### Wymagania sprzętowe
 - **2× ESP32 DOIT DEVKIT V1** (lub kompatybilne)
   - Mikrokontroler: ESP32 240MHz, 320KB RAM, 4MB Flash
+- **1× ESP32-C3 Super Mini** (lub kompatybilny) — dla pilota RC
+  - Mikrokontroler: ESP32-C3 160MHz, 320KB RAM, 4MB Flash
 - **Cyfrowa suwmiarka** z interfejsem CLK/DATA/TRIG
 - **Akcelerometr IIS328DQ** (I2C)
 - **Sterownik silnika STSPIN250**
@@ -280,7 +299,11 @@ C:\Users\tiim\.platformio\penv\Scripts\platformio.exe run --environment esp32doi
 
 # Master
 cd ..\caliper_master
-C:\Users\tiim\.platformio\penv\Scripts\platformio.exe run --environment esp32doit-devkit-v1
+C:\Users\tiim\.platformio\penv\Scripts\platformio.exe run --environment caliper_master
+
+# RC (pilot)
+cd ..\caliper_rc
+C:\Users\tiim\.platformio\penv\Scripts\platformio.exe run --environment caliper_rc
 ```
 
 ### 4. Wgrywanie firmware
@@ -291,7 +314,11 @@ C:\Users\tiim\.platformio\penv\Scripts\platformio.exe run --target upload -s --e
 
 # Master (COM7)
 cd ..\caliper_master
-C:\Users\tiim\.platformio\penv\Scripts\platformio.exe run --target upload -s --environment esp32doit-devkit-v1 --upload-port COM7
+C:\Users\tiim\.platformio\penv\Scripts\platformio.exe run --target upload -s --environment caliper_master --upload-port COM7
+
+# RC (COM9)
+cd ..\caliper_rc
+C:\Users\tiim\.platformio\penv\Scripts\platformio.exe run --target upload -s --environment caliper_rc --upload-port COM9
 ```
 
 ### 5. Wgrywanie Web UI (LittleFS)
@@ -300,8 +327,7 @@ cd caliper_master
 C:\Users\tiim\.platformio\penv\Scripts\platformio.exe run --target uploadfs -s --environment esp32doit-devkit-v1 --upload-port COM7
 ```
 
-### 6. Uruchomienie GUI
-```powershell
+### 6. Uruchomienie GUI```powershell
 cd caliper_master_gui
 python caliper_master_gui.py
 ```
@@ -337,11 +363,17 @@ Adresy MAC są zdefiniowane w plikach konfiguracyjnych:
 **Master** ([`caliper_master/src/config.h`](caliper_master/src/config.h:28)):
 ```cpp
 #define SLAVE_MAC_ADDR {0xA0, 0xB7, 0x65, 0x21, 0x77, 0x5C}
+#define RC_MAC_ADDR {0x00, 0x00, 0x00, 0x00, 0x00, 0x00}  // Uzupełnij po odczycie z RC
 ```
 
 **Slave** ([`caliper_slave/src/config.h`](caliper_slave/src/config.h:28)):
 ```cpp
 #define MASTER_MAC_ADDR {0xA0, 0xB7, 0x65, 0x20, 0xC0, 0x8C}
+```
+
+**RC** ([`caliper_rc/src/config.h`](caliper_rc/src/config.h)):
+```cpp
+#define MASTER_MAC_ADDR {0x10, 0xB4, 0x1D, 0xD6, 0x40, 0xBB}
 ```
 
 Aby znaleźć adres MAC urządzenia, uruchom firmware i sprawdź wyjście Serial przy starcie.
@@ -414,6 +446,27 @@ Podłącz Master przez USB Serial i użyj terminala (np. PuTTY, Arduino Serial M
 | `n <nazwa>` | Ustaw nazwę sesji (maks 31 znaków) |
 | `h` | Pomoc |
 | `d` | Wyświetl stan systemu |
+
+### RC Pilot (caliper_rc)
+
+Pilot bezprzewodowy z dwoma przyciskami komunikujący się z Masterem przez ESP-NOW.
+
+#### Przyciski
+| Przycisk | Pin | Komenda ESP-NOW | Efekt |
+|----------|-----|-----------------|-------|
+| TRIG | GPIO8 | `CMD_TRIG_MEAS` ('R') | Wyzwala pomiar (jak komenda "m") |
+| DROP | GPIO9 | `CMD_DROP_MEAS` ('D') | Usuwa ostatni pomiar z GUI + CSV |
+
+#### Komunikacja
+- RC → Master: struktura `MessageRC` (1 pole: `CommandType command`)
+- Master rozpoznaje pakiety RC po rozmiarze `sizeof(MessageRC)` vs `sizeof(MessageSlave)`
+- LED na płytce miga krótko przy wysłaniu komendy (100 ms)
+
+#### Konfiguracja
+1. Odczytaj MAC adres RC z Serial output przy starcie
+2. Wpisz MAC do `RC_MAC_ADDR` w [`caliper_master/src/config.h`](caliper_master/src/config.h)
+3. Wpisz MAC Mastera do `MASTER_MAC_ADDR` w [`caliper_rc/src/config.h`](caliper_rc/src/config.h)
+4. Skompiluj i wgraj oba firmware
 
 ## 🔌 Dokumentacja API
 
@@ -497,6 +550,7 @@ POST /start_session?sessionName=moja_sesja HTTP/1.1
 Master wysyła dane przez Serial w formacie `DEBUG_PLOT`:
 ```
 >measurement:12.345
+>dropMeas:1
 >calibrationOffset:0.000
 >angleZ:5
 >batteryVoltage:3.700
@@ -506,6 +560,8 @@ Master wysyła dane przez Serial w formacie `DEBUG_PLOT`:
 >motorState:0
 >sessionName:moja_sesja
 ```
+
+**Klucz `dropMeas:1`** — wysyłany gdy RC naciska przycisk DROP_MEAS. GUI usuwa ostatni pomiar z historii, wykresu i pliku CSV.
 
 ## 📁 Struktura projektu
 
@@ -538,6 +594,13 @@ caliper/
 │   │       └── battery.h/.cpp   # Pomiar napięcia baterii
 │   └── platformio.ini
 │
+├── caliper_rc/                  # Firmware RC Pilot (ESP32-C3)
+│   ├── src/
+│   │   ├── main.cpp             # Główna logika: przyciski + ESP-NOW
+│   │   ├── config.h             # Konfiguracja RC (piny, MAC)
+│   │   └── communication.h/.cpp # Menedżer komunikacji ESP-NOW (MessageRC)
+│   └── platformio.ini
+│
 ├── caliper_master_gui/          # Aplikacja GUI Python
 │   ├── caliper_master_gui.py    # Entry-point GUI (Dear PyGui)
 │   ├── requirements.txt
@@ -554,7 +617,7 @@ caliper/
 │       └── test_serial.py       # Testy jednostkowe
 │
 ├── lib/CaliperShared/           # Współdzielona biblioteka
-│   ├── shared_common.h          # Wspólne definicje typów/struktur
+│   ├── shared_common.h          # Wspólne definicje typów/struktur (MessageMaster, MessageSlave, MessageRC, CommandType)
 │   ├── shared_config.h          # Wspólna konfiguracja (piny, stałe)
 │   ├── MacroDebugger.h          # Makra debug/log/plot
 │   ├── error_codes.h/.cpp       # System kodów błędów (8 kategorii, 10 modułów)
@@ -712,6 +775,24 @@ prefsManager.resetToDefaults();
 #define ADC_SAMPLES 8
 ```
 
+### Konfiguracja RC ([`caliper_rc/src/config.h`](caliper_rc/src/config.h:1))
+
+#### Przyciski i LED
+```cpp
+#define BUTTON_TRIG_PIN 8   // Przycisk TRIG_MEAS
+#define BUTTON_DROP_PIN 9   // Przycisk DROP_MEAS
+#define DEBOUNCE_DELAY_MS 50
+#define LED_PIN LED_GREEN   // LED4 na ESP32-C3 Super Mini
+```
+
+#### Struktura komunikacji RC
+```cpp
+// shared_common.h
+struct MessageRC {
+  CommandType command;  // CMD_TRIG_MEAS ('R') lub CMD_DROP_MEAS ('D')
+};
+```
+
 ## 🔧 Rozwiązywanie problemów
 
 ### Problemy z ESP-NOW
@@ -723,6 +804,14 @@ prefsManager.resetToDefaults();
 2. Upewnij się, że oba urządzenia są na tym samym kanale WiFi (kanał 1)
 3. Sprawdź zasięg między urządzeniami
 4. Uruchom ponownie oba urządzenia
+
+**Problem:** Master nie reaguje na pilot RC
+
+**Rozwiązania:**
+1. Upewnij się, że `RC_MAC_ADDR` w `caliper_master/src/config.h` jest uzupełniony prawidłowym MAC adresem RC (nie placeholderem `{0x00,...}`)
+2. Upewnij się, że `MASTER_MAC_ADDR` w `caliper_rc/src/config.h` jest uzupełniony MAC adresem Mastera
+3. Sprawdź, że RC i Master są na tym samym kanale WiFi (kanał 1)
+4. Odczytaj MAC RC z Serial output przy starcie urządzenia
 
 ### Problemy z kompilacją
 
@@ -803,6 +892,6 @@ Projekt hobbystyczny/edukacyjny.
 
 ---
 
-**Wersja:** 3.0
-**Data aktualizacji:** 2026-01-04
-**Platforma:** ESP32 DOIT DEVKIT V1
+**Wersja:** 3.1
+**Data aktualizacji:** 2026-05-04
+**Platforma:** ESP32 DOIT DEVKIT V1 + ESP32-C3 Super Mini (RC)

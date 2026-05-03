@@ -455,6 +455,24 @@ class MeasurementTab:
         self._update_plot_axes()
         self._show_measurements()
 
+    def drop_last_measurement(self):
+        """Remove the most recent measurement from history and plot"""
+        if not self.meas_history:
+            return False
+
+        self.meas_history.pop()
+        if self.plot_x:
+            self.plot_x.pop()
+        if self.plot_y:
+            self.plot_y.pop()
+        if self.measurement_count > 0:
+            self.measurement_count -= 1
+
+        dpg.set_value("plot_data", [list(self.plot_x), list(self.plot_y)])
+        self._update_plot_axes()
+        self._show_measurements()
+        return True
+
     def _show_measurements(self):
         """Display measurements in the history view"""
         if dpg.does_item_exist("meas_container"):

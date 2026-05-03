@@ -24,10 +24,12 @@
  */
 enum CommandType : char
 {
-  CMD_MEASURE = 'M',   /**< Request measurement from slave */
-  CMD_UPDATE = 'U',    /**< Request update status from slave */
-  CMD_MOTORTEST = 'T', /**< Generic motor control command (uses motorState/motorSpeed/motorTorque) */
-  CMD_OTA = 'O',      /**< Request OTA update mode */
+  CMD_MEASURE = 'M',     /**< Request measurement from slave */
+  CMD_UPDATE = 'U',      /**< Request update status from slave */
+  CMD_MOTORTEST = 'T',   /**< Generic motor control command (uses motorState/motorSpeed/motorTorque) */
+  CMD_OTA = 'O',         /**< Request OTA update mode */
+  CMD_TRIG_MEAS = 'R',   /**< RC: trigger measurement on master (same as serial 'm') */
+  CMD_DROP_MEAS = 'D',   /**< RC: drop last measurement in GUI */
 };
 
 /**
@@ -94,6 +96,11 @@ struct MessageMaster
   MotorState motorState;  /**< Current motor state */
   uint8_t motorSpeed;    /**< Motor speed (PWM value 0-255) */
   uint8_t motorTorque;   /**< Motor torque (PWM value 0-255) */
+};
+
+struct MessageRC
+{
+  CommandType command;
 };
 
 #ifdef CALIPER_MASTER

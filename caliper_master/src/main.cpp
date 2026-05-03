@@ -14,6 +14,7 @@
 
 // Slave device MAC address (defined in config.h)
 uint8_t slaveAddress[] = SLAVE_MAC_ADDR;
+uint8_t rcAddress[] = RC_MAC_ADDR;
 // TODO: Wypisz MAC Address Mastera
 WebServer server(WEB_SERVER_PORT);
 CommunicationManager commManager;
@@ -31,25 +32,47 @@ auto timerWorker = timer_create_default();
 // Stan pomiarowy - enkapsulacja zamiast zmiennych globalnych
 static MeasurementState measurementState;
 
+static void requestMeasurement();
+
 void OnDataRecv(const esp_now_recv_info_t *recv_info, const uint8_t *incomingData, int len)
 {
   (void)recv_info;
-  MessageSlave msg{};
 
-  if (len != sizeof(msg))
+  if (len == sizeof(MessageSlave))
   {
-    RECORD_ERROR(ERR_ESPNOW_INVALID_LENGTH, "Received packet length: %d, expected: %d", len, (int)sizeof(msg));
-    return;
+    MessageSlave msg{};
+    memcpy(&msg, incomingData, sizeof(msg));
+
+    systemStatus.msgSlave = msg;
+    measurementState.setMeasurement(systemStatus.msgSlave.measurement);
+    measurementState.setBatteryVoltage(msg.batteryVoltage);
+    measurementState.setReady(true);
   }
+  else if (len == sizeof(MessageRC))
+  {
+    MessageRC msg{};
+    memcpy(&msg, incomingData, sizeof(msg));
 
-  memcpy(&msg, incomingData, sizeof(msg));
+    DEBUG_I("RC komenda: %c", (char)msg.command);
 
-  systemStatus.msgSlave = msg;
-  measurementState.setMeasurement(systemStatus.msgSlave.measurement);
-  measurementState.setBatteryVoltage(msg.batteryVoltage);
-  measurementState.setReady(true);
-
-
+    if (msg.command == CMD_TRIG_MEAS)
+    {
+      requestMeasurement();
+    }
+    else if (msg.command == CMD_DROP_MEAS)
+    {
+      DEBUG_PLOT("dropMeas:1");
+      DEBUG_I("RC: DROP_MEAS -> dropMeas:1");
+    }
+    else
+    {
+      DEBUG_W("RC: nieznana komenda: %c", (char)msg.command);
+    }
+  }
+  else
+  {
+    RECORD_ERROR(ERR_ESPNOW_INVALID_LENGTH, "Received packet length: %d, expected: %d (Slave) or %d (RC)", len, (int)sizeof(MessageSlave), (int)sizeof(MessageRC));
+  }
 }
 
 void OnDataSent(const wifi_tx_info_t *info, esp_now_send_status_t status)
@@ -626,6 +649,23 @@ void setup()
   // Set callbacks
   commManager.setReceiveCallback(OnDataRecv);
   commManager.setSendCallback(OnDataSent);
+
+  // Add RC device as ESP-NOW peer
+  {
+    esp_now_peer_info_t rcPeerInfo{};
+    memcpy(rcPeerInfo.peer_addr, rcAddress, 6);
+    rcPeerInfo.channel = ESPNOW_WIFI_CHANNEL;
+    rcPeerInfo.encrypt = false;
+    if (esp_now_add_peer(&rcPeerInfo) == ESP_OK)
+    {
+      DEBUG_I("RC peer dodany: %02X:%02X:%02X:%02X:%02X:%02X",
+        rcAddress[0], rcAddress[1], rcAddress[2], rcAddress[3], rcAddress[4], rcAddress[5]);
+    }
+    else
+    {
+      DEBUG_W("Nie udalo sie dodac RC peer (MAC placeholder?)");
+    }
+  }
 
   // Setup web server routes - static files
   server.on("/", handleRoot);

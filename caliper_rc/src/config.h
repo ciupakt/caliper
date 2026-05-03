@@ -1,49 +1,35 @@
 /**
  * @file config.h
- * @brief Configuration file for ESP32 Caliper Master
- * @author System Generated
- * @date 2025-12-26
- * @version 2.0
- * 
- * This file contains Master-specific configuration.
- * Common settings are inherited from shared/config_base.h
+ * @brief Configuration file for ESP32 Caliper RC
+ * @date 2026-05-03
+ * @version 1.0
  */
 
-#ifndef CONFIG_MASTER_H
-#define CONFIG_MASTER_H
+#ifndef CONFIG_RC_H
+#define CONFIG_RC_H
 
 #include <Arduino.h>
 
-// Include shared base configuration
 #include <shared_config.h>
 
 // ============================================================================
 // Device MAC Address Configuration
 // ============================================================================
 
-/**
- * @brief MAC address of the Slave device
- * To find the MAC address, run the slave and check Serial output at startup.
- */
 #define MASTER_MAC_ADDR {0x10, 0xB4, 0x1D, 0xD6, 0x40, 0xBB}
 
 // ============================================================================
-// WiFi Access Point Configuration
+// Button Pin Configuration (ESP32-C3 Super Mini)
 // ============================================================================
-#define WIFI_SSID "Orange_WiFi"
-#define WIFI_PASSWORD "1670$2026"
-#define WIFI_AP_IP IPAddress(192, 168, 4, 1)
+
+#define BUTTON_TRIG_PIN 8
+#define BUTTON_DROP_PIN 9
+#define DEBOUNCE_DELAY_MS 50
 
 // ============================================================================
-// Web Server Configuration
+// LED Indicator
 // ============================================================================
-#define WEB_SERVER_PORT 80
-#define HTML_BUFFER_SIZE 2048
-#define WEB_UPDATE_INTERVAL_MS 10
 
-// ============================================================================
-// Master-specific Settings
-// ============================================================================
-#define MAX_LOG_ENTRIES 200
+#define LED_PIN LED_GREEN
 
-#endif // CONFIG_MASTER_H
+#endif // CONFIG_RC_H

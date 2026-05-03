@@ -93,3 +93,32 @@ class CSVHandler:
     def is_open(self) -> bool:
         """Check if a CSV file is open"""
         return self.file is not None
+
+    def remove_last_row(self) -> bool:
+        """Remove the last row from the CSV file.
+
+        Closes the file, rewrites it without the last line, then reopens in append mode.
+        Returns True if a row was removed, False if the file was empty or not open.
+        """
+        if not self.filename:
+            return False
+
+        was_open = self.file is not None
+        if was_open:
+            self.close()
+
+        try:
+            with open(self.filename, "r", newline="") as f:
+                lines = f.readlines()
+
+            if not lines:
+                return False
+
+            with open(self.filename, "w", newline="") as f:
+                f.writelines(lines[:-1])
+
+            self.file = open(self.filename, "a", newline="")
+            self.writer = csv.writer(self.file)
+            return True
+        except Exception:
+            return False

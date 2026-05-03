@@ -271,6 +271,17 @@ class CaliperGUI:
                         pass
                 return
 
+            # --- DROP_MEAS (z RC przez Master)
+            if data.startswith("dropMeas:"):
+                val_str = data.split(":", 1)[1].strip()
+                if val_str == "1":
+                    if self.measurement_tab.drop_last_measurement():
+                        self.csv_handler.remove_last_row()
+                        self.calibration_tab.add_app_log("[RC] DROP_MEAS: usunięto ostatni pomiar")
+                    else:
+                        self.calibration_tab.add_app_log("[RC] DROP_MEAS: brak pomiarów do usunięcia")
+                return
+
             # Inne (nie-plot) linie zostawiamy jako log (np. SILNIK)
             if "SILNIK" in data.upper() or "blad silnika" in data.lower():
                 self.calibration_tab.add_app_log(f"[SILNIK] {data}")
@@ -303,6 +314,7 @@ class CaliperGUI:
                 "motorSpeed:",
                 "motorState:",
                 "sessionName:",
+                "dropMeas:",
             )
         ):
             self.process_measurement_data(payload)

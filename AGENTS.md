@@ -2,12 +2,13 @@
 
 ## Przegląd projektu
 
-Projekt Caliper składa się z dwóch podprojektów PlatformIO oraz aplikacji GUI:
+Projekt Caliper składa się z trzech podprojektów PlatformIO oraz aplikacji GUI:
 
 - `caliper_master` – główny sterownik (ESP32) z AP WiFi + HTTP + ESP-NOW + LittleFS (UI web w `data/`)
 - `caliper_slave` – sterownik (ESP32) suwmiarki + akcelerometru + silnika + baterii + ESP-NOW
+- `caliper_rc` – pilot bezprzewodowy (ESP32-C3) z dwoma przyciskami (TRIG_MEAS / DROP_MEAS) + ESP-NOW
 - `caliper_master_gui` – aplikacja GUI w Pythonie (Dear PyGui) do sterowania i wizualizacji
-- `lib/CaliperShared` – współdzielona biblioteka dla Master i Slave (wspólne typy/stałe + makra debug)
+- `lib/CaliperShared` – współdzielona biblioteka dla Master, Slave i RC (wspólne typy/stałe + makra debug)
 
 ## Wymagania
 
@@ -18,6 +19,8 @@ Projekt Caliper składa się z dwóch podprojektów PlatformIO oraz aplikacji GU
 ## Kompilacja projektu (PlatformIO)
 
 Używany environment w obu projektach: `esp32doit-devkit-v1`.
+
+Wyjątek: `caliper_rc` używa environment `caliper_rc` z płytką `nologo_esp32c3_super_mini`.
 
 Uwaga: w poniższych poleceniach używany jest bezpośrednio `platformio.exe` z venv PlatformIO. Jeśli masz `pio` w `PATH`, możesz zamienić `C:\Users\tiim\.platformio\penv\Scripts\platformio.exe` na `pio`.
 
@@ -30,7 +33,13 @@ cd caliper_slave && C:\Users\tiim\.platformio\penv\Scripts\platformio.exe run --
 ### Kompilacja `caliper_master`
 
 ```powershell
-cd caliper_master && C:\Users\tiim\.platformio\penv\Scripts\platformio.exe run --environment esp32doit-devkit-v1
+cd caliper_master && C:\Users\tiim\.platformio\penv\Scripts\platformio.exe run --environment caliper_master
+```
+
+### Kompilacja `caliper_rc`
+
+```powershell
+cd caliper_rc && C:\Users\tiim\.platformio\penv\Scripts\platformio.exe run --environment caliper_rc
 ```
 
 ## Wgrywanie programu na urządzenie
@@ -38,6 +47,7 @@ cd caliper_master && C:\Users\tiim\.platformio\penv\Scripts\platformio.exe run -
 Uwaga: porty są domyślnie ustawione w `platformio.ini` przez `monitor_port`:
 - Master: `COM7`
 - Slave: `COM8`
+- RC: `COM9`
 
 Jeśli port upload jest inny, dodaj `--upload-port COMx`.
 
@@ -50,7 +60,13 @@ cd caliper_slave && C:\Users\tiim\.platformio\penv\Scripts\platformio.exe run --
 ### Wgranie `caliper_master`
 
 ```powershell
-cd caliper_master && C:\Users\tiim\.platformio\penv\Scripts\platformio.exe run --target upload -s --environment esp32doit-devkit-v1 --upload-port COM7
+cd caliper_master && C:\Users\tiim\.platformio\penv\Scripts\platformio.exe run --target upload -s --environment caliper_master --upload-port COM7
+```
+
+### Wgranie `caliper_rc`
+
+```powershell
+cd caliper_rc && C:\Users\tiim\.platformio\penv\Scripts\platformio.exe run --target upload -s --environment caliper_rc --upload-port COM9
 ```
 
 ### Wgranie systemu plików LittleFS (UI web) – tylko `caliper_master`
@@ -58,7 +74,7 @@ cd caliper_master && C:\Users\tiim\.platformio\penv\Scripts\platformio.exe run -
 Pliki UI web znajdują się w `caliper_master/data/` i są flashowane do LittleFS.
 
 ```powershell
-cd caliper_master && C:\Users\tiim\.platformio\penv\Scripts\platformio.exe run --target uploadfs -s --environment esp32doit-devkit-v1 --upload-port COM7
+cd caliper_master && C:\Users\tiim\.platformio\penv\Scripts\platformio.exe run --target uploadfs -s --environment caliper_master --upload-port COM7
 ```
 
 ## Czyszczenie plików kompilacji
@@ -105,6 +121,17 @@ caliper_slave/
 └── platformio.ini
 ```
 
+### `caliper_rc`
+
+```
+caliper_rc/
+├── src/
+│   ├── main.cpp                    # Główna logika: przyciski + ESP-NOW (MessageRC) + LED feedback
+│   ├── config.h                    # Konfiguracja RC (MAC Mastera, piny przycisków, LED, debounce)
+│   └── communication.h/.cpp        # Menedżer komunikacji ESP-NOW (wysyłanie MessageRC + retry)
+└── platformio.ini
+```
+
 ### `caliper_master_gui`
 
 Uwaga: plik wejściowy aplikacji to `caliper_master_gui.py` (modularna wersja), która importuje kod z katalogu `src/`.
@@ -132,7 +159,7 @@ caliper_master_gui/
 
 ```
 lib/CaliperShared/
-├── shared_common.h        # Wspólne definicje typów/struktur/protokołu (CommandType, MotorState, MessageMaster, MessageSlave, SystemStatus)
+├── shared_common.h        # Wspólne definicje typów/struktur/protokołu (CommandType, MotorState, MessageMaster, MessageSlave, MessageRC, SystemStatus)
 ├── shared_config.h        # Wspólna konfiguracja (piny, stałe, limity walidacji)
 ├── MacroDebugger.h        # Makra debug/log/plot (DEBUG_I, DEBUG_E, DEBUG_W, DEBUG_PLOT)
 ├── error_codes.h/.cpp     # System kodów błędów (8 kategorii, 10 modułów, ~50+ kodów)
@@ -154,6 +181,14 @@ lib/CaliperShared/
 - Platforma: Espressif 32 (ESP32 DOIT DEVKIT V1)
 - Mikrokontroler: ESP32 240MHz, 320KB RAM, 4MB Flash
 - LittleFS: UI web jest serwowane z pamięci flash (folder `data/`)
+
+### `caliper_rc`
+
+- Platforma: Espressif 32 (ESP32-C3 Super Mini / nologo_esp32c3_super_mini)
+- Mikrokontroler: ESP32-C3 160MHz, 320KB RAM, 4MB Flash
+- Biblioteki: `arduino-timer`
+- Przyciski: TRIG (GPIO8), DROP (GPIO9) z INPUT_PULLUP + debounce
+- LED: GPIO4 (LED_GREEN) — krótki pulse przy wysyłce ESP-NOW
 
 ## Uruchamianie aplikacji Python GUI
 
