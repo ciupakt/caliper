@@ -206,57 +206,63 @@ flowchart LR
         BATT_V[Vbat]
     end
 
-    subgraph SL[ESP32 Slave]
-        GPIO18[GPIO18<br/>CALIPER_CLOCK]
-        GPIO19[GPIO19<br/>CALIPER_DATA]
-        GPIO5[GPIO5<br/>CALIPER_TRIG]
+subgraph SL[ESP32 Slave]
+         GPIO11[GPIO11<br/>CALIPER_CLOCK]
+         GPIO12[GPIO12<br/>CALIPER_DATA]
+         GPIO13[GPIO13<br/>CALIPER_TRIG]
 
-        GPIO21[GPIO21<br/>I2C SDA]
-        GPIO22[GPIO22<br/>I2C SCL]
+         GPIO21[GPIO21<br/>I2C SDA]
+         GPIO22[GPIO22<br/>I2C SCL]
 
-        GPIO34[GPIO34<br/>BATTERY_ADC]
+         GPIO10[GPIO10<br/>BATTERY_ADC]
 
-        GPIO13[GPIO13<br/>MOTOR_IN1]
-        GPIO12[GPIO12<br/>MOTOR_IN2]
-    end
+         GPIO6[GPIO6<br/>MOTOR_PWM]
+         GPIO15[GPIO15<br/>MOTOR_PH]
+         GPIO7[GPIO7<br/>MOTOR_REF]
+         GPIO16[GPIO16<br/>MOTOR_EN]
+         GPIO17[GPIO17<br/>MOTOR_FAULT]
+     end
 
-    subgraph DRV[STSPIN250]
-        DRV_PWM[PWM]
-        DRV_PH[PH]
-        DRV_REF[REF]
-        DRV_EN[EN]
-        DRV_FAULT[FAULT]
-        DRV_OUT1[OUT1]
-        DRV_OUT2[OUT2]
-    end
+     subgraph DRV[STSPIN250]
+         DRV_PWM[PWM]
+         DRV_PH[PH]
+         DRV_REF[REF]
+         DRV_EN[EN]
+         DRV_FAULT[FAULT]
+         DRV_OUT1[OUT1]
+         DRV_OUT2[OUT2]
+     end
 
-    subgraph MOT[Silnik DC]
-        MOT_A[Motor +]
-        MOT_B[Motor -]
-    end
+     subgraph MOT[Silnik DC]
+         MOT_A[Motor +]
+         MOT_B[Motor -]
+     end
 
-    CAL_CLK -->|CLK| GPIO18
-    CAL_DATA -->|DATA| GPIO19
-    GPIO5 -->|TRIG| CAL_TRIG
+     CAL_CLK -->|CLK| GPIO11
+     CAL_DATA -->|DATA| GPIO12
+     GPIO13 -->|TRIG| CAL_TRIG
 
-    GPIO21 <--> |SDA| ACC_I2C
-    GPIO22 <--> |SCL| ACC_I2C
+     GPIO21 <--> |SDA| ACC_I2C
+     GPIO22 <--> |SCL| ACC_I2C
 
-    BATT_V -->|ADC| GPIO34
+     BATT_V -->|ADC| GPIO10
 
-    GPIO13 -->|IN1| DRV_IN1
-    GPIO12 -->|IN2| DRV_IN2
-    DRV_OUT1 --> MOT_A
-    DRV_OUT2 --> MOT_B
+     GPIO6 -->|PWM| DRV_PWM
+     GPIO15 -->|PH| DRV_PH
+     GPIO7 -->|REF| DRV_REF
+     GPIO16 -->|EN| DRV_EN
+     GPIO17 -->|FAULT| DRV_FAULT
+     DRV_OUT1 --> MOT_A
+     DRV_OUT2 --> MOT_B
 ```
 
 ## 📋 Wymagania
 
 ### Wymagania sprzętowe
-- **2× ESP32 DOIT DEVKIT V1** (lub kompatybilne)
-  - Mikrokontroler: ESP32 240MHz, 320KB RAM, 4MB Flash
-- **1× ESP32-C3 Super Mini** (lub kompatybilny) — dla pilota RC
-  - Mikrokontroler: ESP32-C3 160MHz, 320KB RAM, 4MB Flash
+- **1× ESP32-S3 DevKitC** — Slave (suwmiarka + akcelerometr + silnik)
+- **1× ESP32-C3 Super Mini** — Master (AP WiFi + HTTP + ESP-NOW)
+- **1× ESP32-C3 Super Mini** — RC Pilot (bezprzewodowy pilot)
+   - Mikrokontroler: ESP32-C3 160MHz, 320KB RAM, 4MB Flash
 - **Cyfrowa suwmiarka** z interfejsem CLK/DATA/TRIG
 - **Akcelerometr IIS328DQ** (I2C)
 - **Sterownik silnika STSPIN250**
@@ -266,9 +272,47 @@ flowchart LR
 
 ### Wymagania programowe
 - **PlatformIO** - do kompilacji firmware ESP32
-  - Ścieżka do skryptów: `C:\Users\tiim\.platformio\penv\Scripts`
+   - Ścieżka do skryptów (Windows): `C:\Users\tiim\.platformio\penv\Scripts`
+   - Alternatywnie: `pio` w PATH (po instalacji `pip install platformio`)
 - **Python 3.x** - do uruchomienia GUI
 - **Visual Studio Code** (zalecane) z rozszerzeniem PlatformIO
+
+#### Kompilacja na Linux/macOS
+```bash
+# Slave
+cd caliper_slave
+pio run --environment caliper_slave
+
+# Master
+cd ../caliper_master
+pio run --environment caliper_master
+
+# RC
+cd ../caliper_rc
+pio run --environment caliper_rc
+```
+
+#### Wgrywanie firmware na Linux/macOS
+```bash
+# Slave (port np. /dev/ttyUSB0)
+cd caliper_slave
+pio run --target upload --environment caliper_slave --upload-port /dev/ttyUSB0
+
+# Master (port np. /dev/ttyUSB0)
+cd ../caliper_master
+pio run --target upload --environment caliper_master --upload-port /dev/ttyUSB0
+
+# RC (port np. /dev/ttyUSB0)
+cd ../caliper_rc
+pio run --target upload --environment caliper_rc --upload-port /dev/ttyUSB0
+```
+
+#### Wgrywanie Web UI (LittleFS)
+```bash
+# Linux/macOS
+cd caliper_master
+pio run --target uploadfs --environment caliper_master --upload-port /dev/ttyUSB0
+```
 
 ### Zależności Python
 Zobacz [`caliper_master_gui/requirements.txt`](caliper_master_gui/requirements.txt:1):
@@ -295,7 +339,7 @@ python -m pip install -r requirements.txt
 ```powershell
 # Slave
 cd caliper_slave
-C:\Users\tiim\.platformio\penv\Scripts\platformio.exe run --environment esp32doit-devkit-v1
+C:\Users\tiim\.platformio\penv\Scripts\platformio.exe run --environment caliper_slave
 
 # Master
 cd ..\caliper_master
@@ -310,7 +354,7 @@ C:\Users\tiim\.platformio\penv\Scripts\platformio.exe run --environment caliper_
 ```powershell
 # Slave (COM8)
 cd caliper_slave
-C:\Users\tiim\.platformio\penv\Scripts\platformio.exe run --target upload -s --environment esp32doit-devkit-v1 --upload-port COM8
+C:\Users\tiim\.platformio\penv\Scripts\platformio.exe run --target upload -s --environment caliper_slave --upload-port COM8
 
 # Master (COM7)
 cd ..\caliper_master
@@ -324,7 +368,7 @@ C:\Users\tiim\.platformio\penv\Scripts\platformio.exe run --target upload -s --e
 ### 5. Wgrywanie Web UI (LittleFS)
 ```powershell
 cd caliper_master
-C:\Users\tiim\.platformio\penv\Scripts\platformio.exe run --target uploadfs -s --environment esp32doit-devkit-v1 --upload-port COM7
+C:\Users\tiim\.platformio\penv\Scripts\platformio.exe run --target uploadfs -s --environment caliper_master --upload-port COM7
 ```
 
 ### 6. Uruchomienie GUI```powershell
@@ -350,9 +394,9 @@ python caliper_master_gui.py
 
 ### Konfiguracja portów COM
 
-Domyślne porty są zdefiniowane w [`platformio.ini`](caliper_master/platformio.ini:1):
-- **Master**: `COM7`
-- **Slave**: `COM8`
+Domyślne porty są zdefiniowane w plikach `platformio.ini`:
+- **Master**: `COM7` ([`caliper_master/platformio.ini`](caliper_master/platformio.ini:1))
+- **Slave**: `COM8` ([`caliper_slave/platformio.ini`](caliper_slave/platformio.ini:1))
 
 Aby zmienić port, dodaj `--upload-port COMx` do komendy upload.
 
@@ -362,13 +406,13 @@ Adresy MAC są zdefiniowane w plikach konfiguracyjnych:
 
 **Master** ([`caliper_master/src/config.h`](caliper_master/src/config.h:28)):
 ```cpp
-#define SLAVE_MAC_ADDR {0xA0, 0xB7, 0x65, 0x21, 0x77, 0x5C}
+#define SLAVE_MAC_ADDR {0x10, 0xB4, 0x1D, 0xD6, 0x40, 0xAC}
 #define RC_MAC_ADDR {0x00, 0x00, 0x00, 0x00, 0x00, 0x00}  // Uzupełnij po odczycie z RC
 ```
 
-**Slave** ([`caliper_slave/src/config.h`](caliper_slave/src/config.h:28)):
+**Slave** ([`caliper_slave/src/config.h`](caliper_slave/src/config.h:29)):
 ```cpp
-#define MASTER_MAC_ADDR {0xA0, 0xB7, 0x65, 0x20, 0xC0, 0x8C}
+#define MASTER_MAC_ADDR {0x0C, 0x4E, 0xA0, 0x6F, 0x66, 0xD0}
 ```
 
 **RC** ([`caliper_rc/src/config.h`](caliper_rc/src/config.h)):
@@ -380,7 +424,7 @@ Aby znaleźć adres MAC urządzenia, uruchom firmware i sprawdź wyjście Serial
 
 ### Konfiguracja WiFi
 
-WiFi AP jest konfigurowane w [`caliper_master/src/config.h`](caliper_master/src/config.h:33):
+WiFi AP jest konfigurowane w [`caliper_master/src/config.h`](caliper_master/src/config.h:35):
 ```cpp
 #define WIFI_SSID "Orange_WiFi"
 #define WIFI_PASSWORD "1670$2026"
@@ -684,16 +728,19 @@ RETURN_IF_NOT_OK(errorCode, "Szczegóły...");
 #### Piny
 ```cpp
 // Suwmiarka
-#define CALIPER_CLOCK_PIN 18
-#define CALIPER_DATA_PIN 19
-#define CALIPER_TRIG_PIN 5
+#define CALIPER_CLOCK_PIN 11
+#define CALIPER_DATA_PIN 12
+#define CALIPER_TRIG_PIN 13
 
-// Silnik
-#define MOTOR_IN1_PIN 13
-#define MOTOR_IN2_PIN 12
+// Silnik (STSPIN250)
+#define MOTOR_PWM_PIN 6      // PWM input - speed control
+#define MOTOR_PH_PIN 15      // Phase input - direction control
+#define MOTOR_REF_PIN 7      // REF input - current limit
+#define MOTOR_EN_PIN 16      // Enable pin - HIGH = enabled
+#define MOTOR_FAULT_PIN 17   // Fault input - LOW = fault detected
 
 // Bateria
-#define BATTERY_VOLTAGE_PIN 34
+#define BATTERY_VOLTAGE_PIN 10
 ```
 
 #### Walidacja pomiarów
