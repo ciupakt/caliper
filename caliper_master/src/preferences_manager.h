@@ -97,6 +97,14 @@ public:
    */
   void saveCalibrationOffset(float value);
 
+  bool saveSlaveMac(const uint8_t mac[6]);
+  bool loadSlaveMac(uint8_t mac[6]);
+  void clearSlaveMac();
+
+  bool saveRcMac(const uint8_t mac[6]);
+  bool loadRcMac(uint8_t mac[6]);
+  void clearRcMac();
+
   /**
    * @brief Reset all settings to default values
    * 
@@ -125,6 +133,8 @@ private:
   static constexpr const char *KEY_MOTOR_TORQUE = "motorTorque";
   static constexpr const char *KEY_TIMEOUT = "timeout";
   static constexpr const char *KEY_CALIBRATION_OFFSET = "calibrationOffset";
+  static constexpr const char *KEY_SLAVE_MAC = "slaveMac";
+  static constexpr const char *KEY_RC_MAC = "rcMac";
 
   // Default values
   static constexpr uint8_t DEFAULT_MOTOR_SPEED = 100;

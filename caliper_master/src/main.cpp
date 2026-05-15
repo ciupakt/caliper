@@ -15,6 +15,12 @@
 // Slave device MAC address (defined in config.h)
 uint8_t slaveAddress[] = SLAVE_MAC_ADDR;
 uint8_t rcAddress[] = RC_MAC_ADDR;
+
+static bool pairingMode = false;
+static uint32_t pairingModeStartMs = 0;
+static uint32_t lastPairBroadcastMs = 0;
+static uint8_t pairedRcAddress[6] = {};
+static bool hasPairedRc = false;
 // TODO: Wypisz MAC Address Mastera
 WebServer server(WEB_SERVER_PORT);
 CommunicationManager commManager;
@@ -34,14 +40,65 @@ static MeasurementState measurementState;
 
 static void requestMeasurement();
 
+static void enterPairingMode()
+{
+  pairingMode = true;
+  pairingModeStartMs = millis();
+  lastPairBroadcastMs = 0;
+
+  esp_now_peer_info_t broadcastPeer{};
+  uint8_t broadcastAddr[] = BROADCAST_MAC_ADDR;
+  memcpy(broadcastPeer.peer_addr, broadcastAddr, 6);
+  broadcastPeer.channel = ESPNOW_WIFI_CHANNEL;
+  broadcastPeer.encrypt = false;
+  esp_now_add_peer(&broadcastPeer);
+
+  DEBUG_I("Pairing mode active (10s)");
+  DEBUG_PLOT("pairing:1");
+}
+
+static void exitPairingMode()
+{
+  pairingMode = false;
+
+  uint8_t broadcastAddr[] = BROADCAST_MAC_ADDR;
+  esp_now_del_peer(broadcastAddr);
+
+  DEBUG_I("Tryb parowania zakończony");
+  DEBUG_PLOT("pairing:0");
+}
+
+static bool isMacUnset(const uint8_t mac[6])
+{
+  for (int i = 0; i < 6; i++)
+  {
+    if (mac[i] != 0x00) return false;
+  }
+  return true;
+}
+
 void OnDataRecv(const esp_now_recv_info_t *recv_info, const uint8_t *incomingData, int len)
 {
-  (void)recv_info;
+  uint8_t src_addr[6];
+  memcpy(src_addr, recv_info->src_addr, 6);
 
   if (len == sizeof(MessageSlave))
   {
     MessageSlave msg{};
     memcpy(&msg, incomingData, sizeof(msg));
+
+    if (pairingMode)
+    {
+      commManager.updatePeerAddress(src_addr);
+      prefsManager.saveSlaveMac(src_addr);
+      memcpy(slaveAddress, src_addr, 6);
+
+      systemStatus.msgMaster.command = CMD_PAIR_ACK;
+      commManager.sendMessage(systemStatus.msgMaster);
+
+      DEBUG_I("Nowy Slave sparowany: %02X:%02X:%02X:%02X:%02X:%02X",
+        src_addr[0], src_addr[1], src_addr[2], src_addr[3], src_addr[4], src_addr[5]);
+    }
 
     systemStatus.msgSlave = msg;
     measurementState.setMeasurement(systemStatus.msgSlave.measurement);
@@ -52,6 +109,25 @@ void OnDataRecv(const esp_now_recv_info_t *recv_info, const uint8_t *incomingDat
   {
     MessageRC msg{};
     memcpy(&msg, incomingData, sizeof(msg));
+
+    if (pairingMode && msg.command == CMD_PAIR)
+    {
+      memcpy(pairedRcAddress, src_addr, 6);
+      hasPairedRc = true;
+
+      esp_now_del_peer(src_addr);
+      commManager.addRcPeer(src_addr);
+
+      prefsManager.saveRcMac(src_addr);
+
+      MessageMaster ackMsg{};
+      ackMsg.command = CMD_PAIR_ACK;
+      commManager.sendMessage(ackMsg);
+
+      DEBUG_I("Nowy RC sparowany: %02X:%02X:%02X:%02X:%02X:%02X",
+        src_addr[0], src_addr[1], src_addr[2], src_addr[3], src_addr[4], src_addr[5]);
+      return;
+    }
 
     DEBUG_I("RC komenda: %c", (char)msg.command);
 
@@ -64,7 +140,7 @@ void OnDataRecv(const esp_now_recv_info_t *recv_info, const uint8_t *incomingDat
       DEBUG_PLOT("dropMeas:1");
       DEBUG_I("RC: DROP_MEAS -> dropMeas:1");
     }
-    else
+    else if (msg.command != CMD_PAIR && msg.command != CMD_PAIR_ACK)
     {
       DEBUG_W("RC: nieznana komenda: %c", (char)msg.command);
     }
@@ -605,14 +681,33 @@ void setup()
   }
   else
   {
-    // Load settings from NVS
     prefsManager.loadSettings(&systemStatus);
     
-    // Ensure motorState is set to default (not stored in Preferences)
     systemStatus.msgMaster.motorState = DEFAULT_MOTOR_STATE;
-    
-    // Ensure calibrationOffset is initialized if not loaded
-    // (loadSettings handles this with default value)
+
+    uint8_t nvsSlaveMac[6];
+    if (prefsManager.loadSlaveMac(nvsSlaveMac))
+    {
+      memcpy(slaveAddress, nvsSlaveMac, 6);
+      DEBUG_I("Slave MAC z NVS: %02X:%02X:%02X:%02X:%02X:%02X",
+        slaveAddress[0], slaveAddress[1], slaveAddress[2], slaveAddress[3], slaveAddress[4], slaveAddress[5]);
+    }
+    else
+    {
+      DEBUG_W("Brak Slave MAC w NVS — używam fallback z config.h");
+    }
+
+    uint8_t nvsRcMac[6];
+    if (prefsManager.loadRcMac(nvsRcMac))
+    {
+      memcpy(rcAddress, nvsRcMac, 6);
+      DEBUG_I("RC MAC z NVS: %02X:%02X:%02X:%02X:%02X:%02X",
+        rcAddress[0], rcAddress[1], rcAddress[2], rcAddress[3], rcAddress[4], rcAddress[5]);
+    }
+    else
+    {
+      DEBUG_W("Brak RC MAC w NVS — używam fallback z config.h");
+    }
   }
   
   // sessionName jest już zainicjalizowany na pusty string przez memset
@@ -650,7 +745,8 @@ void setup()
   commManager.setReceiveCallback(OnDataRecv);
   commManager.setSendCallback(OnDataSent);
 
-  // Add RC device as ESP-NOW peer
+  // Add RC device as ESP-NOW peer (only if MAC is not unset)
+  if (!isMacUnset(rcAddress))
   {
     esp_now_peer_info_t rcPeerInfo{};
     memcpy(rcPeerInfo.peer_addr, rcAddress, 6);
@@ -660,11 +756,17 @@ void setup()
     {
       DEBUG_I("RC peer dodany: %02X:%02X:%02X:%02X:%02X:%02X",
         rcAddress[0], rcAddress[1], rcAddress[2], rcAddress[3], rcAddress[4], rcAddress[5]);
+      memcpy(pairedRcAddress, rcAddress, 6);
+      hasPairedRc = true;
     }
     else
     {
-      DEBUG_W("Nie udalo sie dodac RC peer (MAC placeholder?)");
+      DEBUG_W("Nie udalo sie dodac RC peer");
     }
+  }
+  else
+  {
+    DEBUG_I("RC MAC unset — RC peer nie zostanie dodany (użyj parowania)");
   }
 
   // Setup web server routes - static files
@@ -704,6 +806,7 @@ void setup()
   cliCtx.requestUpdate = requestUpdate;
   cliCtx.sendMotorTest = sendMotorTest;
   cliCtx.sendOTA = sendOTA;
+  cliCtx.enterPairingMode = enterPairingMode;
   SerialCli_begin(cliCtx);
 
   timerWorker.every(200, SerialCli_tick);
@@ -711,6 +814,36 @@ void setup()
 
 void loop()
 {
+  if (pairingMode)
+  {
+    uint32_t now = millis();
+    uint32_t elapsed = now - pairingModeStartMs;
+
+    if (elapsed >= PAIRING_MODE_TIMEOUT_MS)
+    {
+      exitPairingMode();
+    }
+    else
+    {
+      static uint8_t lastCountdownSec = 255;
+      uint8_t remainingSec = (PAIRING_MODE_TIMEOUT_MS - elapsed) / 1000;
+      if (remainingSec != lastCountdownSec)
+      {
+        lastCountdownSec = remainingSec;
+        DEBUG_PLOT("pairingCountdown:%u", (unsigned)remainingSec);
+      }
+
+      if (now - lastPairBroadcastMs >= PAIRING_BROADCAST_INTERVAL_MS)
+      {
+        lastPairBroadcastMs = now;
+        MessageMaster pairMsg{};
+        pairMsg.command = CMD_PAIR;
+        uint8_t broadcastAddr[] = BROADCAST_MAC_ADDR;
+        esp_now_send(broadcastAddr, (const uint8_t *)&pairMsg, sizeof(pairMsg));
+      }
+    }
+  }
+
   server.handleClient();
   timerWorker.tick();
 }

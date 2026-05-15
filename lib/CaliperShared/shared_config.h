@@ -119,6 +119,19 @@
 #define JSON_RESPONSE_BUFFER_SIZE 512
 
 // ============================================================================
+// ESP-NOW Pairing Configuration
+// ============================================================================
+#define PAIRING_MODE_TIMEOUT_MS       10000
+#define PAIRING_BROADCAST_INTERVAL_MS 500
+#define PAIRING_WINDOW_MS             10000
+
+#define DEVICE_TYPE_SLAVE 0
+#define DEVICE_TYPE_RC    1
+
+#define BROADCAST_MAC_ADDR {0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF}
+#define MAC_ADDR_UNSET    {0x00, 0x00, 0x00, 0x00, 0x00, 0x00}
+
+// ============================================================================
 // Debug Configuration
 // ============================================================================
 #define DEBUG_ENABLED true

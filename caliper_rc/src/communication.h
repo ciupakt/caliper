@@ -29,6 +29,8 @@ public:
 
   ErrorCode sendMessage(const MessageRC &message, int retryCount = ESPNOW_MAX_RETRIES);
 
+  ErrorCode updatePeerAddress(const uint8_t *newAddr);
+
   bool isInitialized() const { return initialized; }
 
   ErrorCode getLastError() const { return lastError; }

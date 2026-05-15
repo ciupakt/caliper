@@ -117,6 +117,7 @@ static void printSerialHelp()
           "r <0-3>      - Ustaw motorState (0=STOP, 1=FORWARD, 2=REVERSE, 3=BRAKE)\n"
            "t            - Wyślij CMD_MOTORTEST (T) z bieżącymi ustawieniami\n"
            "f            - Wyślij CMD_OTA (O) – przejdź w tryb OTA na Slave (flash)\n"
+            "p            - Tryb parowania (30s broadcast CMD_PAIR)\n"
            "c <±14.999>  - Ustaw calibrationOffset (mm) na Master (bez wyzwalania pomiaru)\n"
            "n <nazwa>    - Ustaw nazwę sesji (maks 31 znaków, dozwolone: a-z, A-Z, 0-9, spacja, _, -)\n"
            "g            - Odśwież ustawienia (wyślij wszystkie aktualne wartości)\n"
@@ -363,6 +364,13 @@ bool SerialCli_tick(void *arg)
       {
         g_ctx.sendOTA();
         DEBUG_I("CMD_OTA wysłany – Slave przejdzie w tryb OTA");
+      }
+      break;
+
+    case 'p':
+      if (g_ctx.enterPairingMode)
+      {
+        g_ctx.enterPairingMode();
       }
       break;
 

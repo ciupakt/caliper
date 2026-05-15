@@ -1,6 +1,7 @@
 #include <esp_now.h>
 #include <WiFi.h>
 #include <Wire.h>
+#include <Preferences.h>
 #include "config.h"
 #include <shared_common.h>
 #include <error_handler.h>
@@ -15,9 +16,9 @@
 #include "motor/motor_ctrl.h"
 #include "ota/ota_update.h"
 
-// Master device MAC address (defined in config.h)
-uint8_t masterAddress[] = MASTER_MAC_ADDR;
-// TODO: Wypisz MAC Address Mastera
+uint8_t masterAddress[6] = {0x00, 0x00, 0x00, 0x00, 0x00, 0x00};
+
+Preferences slavePrefs;
 esp_now_peer_info_t peerInfo;
 CaliperInterface caliper;
 AccelerometerInterface accelerometer;
@@ -25,11 +26,14 @@ BatteryMonitor battery;
 MessageMaster msgMaster;
 MessageSlave msgSlave;
 
-// Flaga blokująca przyjmowanie nowych komend podczas trwania pomiaru
 volatile bool measurementInProgress = false;
 
 OTAUpdate otaUpdate;
 volatile bool otaMode = false;
+
+static bool pairingMode = false;
+static uint32_t pairingModeStartMs = 0;
+static bool hasStoredMasterMac = false;
 
 bool runMeasReq(void *arg);
 bool motorStopTimeout(void *arg);
@@ -37,6 +41,40 @@ bool batteryMonitorTask(void *arg);
 auto timerWorker = timer_create_default();
 auto timerMotorStopTimeout = timer_create_default();
 auto timerBattery = timer_create_default();
+
+static bool isMacUnset(const uint8_t mac[6])
+{
+  for (int i = 0; i < 6; i++)
+  {
+    if (mac[i] != 0x00) return false;
+  }
+  return true;
+}
+
+static void enterPairingMode()
+{
+  pairingMode = true;
+  pairingModeStartMs = millis();
+
+  esp_now_peer_info_t broadcastPeer{};
+  uint8_t broadcastAddr[] = BROADCAST_MAC_ADDR;
+  memcpy(broadcastPeer.peer_addr, broadcastAddr, 6);
+  broadcastPeer.channel = ESPNOW_WIFI_CHANNEL;
+  broadcastPeer.encrypt = false;
+  esp_now_add_peer(&broadcastPeer);
+
+  DEBUG_I("Slave: tryb parowania aktywny");
+}
+
+static void exitPairingMode()
+{
+  pairingMode = false;
+
+  uint8_t broadcastAddr[] = BROADCAST_MAC_ADDR;
+  esp_now_del_peer(broadcastAddr);
+
+  DEBUG_I("Slave: tryb parowania zakończony");
+}
 
 /**
  * @brief Callback odbierający dane ESP-NOW od Mastera
@@ -70,50 +108,98 @@ auto timerBattery = timer_create_default();
  */
 void OnDataRecv(const esp_now_recv_info_t *recv_info, const uint8_t *incomingData, int len)
 {
-  (void)recv_info;
-  if (len != sizeof(msgMaster))
+  uint8_t src_addr[6];
+  memcpy(src_addr, recv_info->src_addr, 6);
+
+  if (len == sizeof(MessageMaster))
   {
-    RECORD_ERROR(ERR_ESPNOW_INVALID_LENGTH, "Received packet length: %d, expected: %d", len, (int)sizeof(msgMaster));
-    return;
+    MessageMaster tmpMsg{};
+    memcpy(&tmpMsg, incomingData, sizeof(tmpMsg));
+
+    if (pairingMode && tmpMsg.command == CMD_PAIR)
+    {
+      if (hasStoredMasterMac)
+      {
+        esp_now_del_peer(masterAddress);
+      }
+      memcpy(masterAddress, src_addr, 6);
+
+      memset(&peerInfo, 0, sizeof(peerInfo));
+      memcpy(peerInfo.peer_addr, masterAddress, 6);
+      peerInfo.channel = ESPNOW_WIFI_CHANNEL;
+      peerInfo.encrypt = false;
+      espnow_add_peer_with_retry(&peerInfo);
+
+      slavePrefs.putBytes("masterMac", src_addr, 6);
+      hasStoredMasterMac = true;
+
+      MessageSlave pairResp{};
+      pairResp.command = CMD_PAIR;
+      pairResp.measurement = 0;
+      pairResp.batteryVoltage = 0;
+      pairResp.angleZ = 0;
+      espnow_send_with_retry(masterAddress, &pairResp, sizeof(pairResp), ESPNOW_MAX_RETRIES, ESPNOW_RETRY_DELAY_MS);
+
+      exitPairingMode();
+
+      DEBUG_I("Otrzymano CMD_PAIR od Mastera: %02X:%02X:%02X:%02X:%02X:%02X",
+        src_addr[0], src_addr[1], src_addr[2], src_addr[3], src_addr[4], src_addr[5]);
+      return;
+    }
+
+    if (tmpMsg.command == CMD_PAIR_ACK)
+    {
+      slavePrefs.putBytes("masterMac", src_addr, 6);
+      hasStoredMasterMac = true;
+      exitPairingMode();
+      DEBUG_I("Parowanie zakończone");
+      return;
+    }
+
+    memcpy(&msgMaster, &tmpMsg, sizeof(msgMaster));
+
+    if (measurementInProgress)
+    {
+      DEBUG_W("Pomiar w trakcie - komenda %c zignorowana", msgMaster.command);
+      return;
+    }
+
+    switch (msgMaster.command)
+    {
+    case CMD_MEASURE:
+      DEBUG_I("CMD_MEASURE");
+      timerWorker.cancel();
+      timerWorker.in(TIMER_DELAY_MS, runMeasReq);
+      break;
+
+    case CMD_UPDATE:
+      DEBUG_I("CMD_UPDATE");
+      timerWorker.cancel();
+      timerWorker.in(TIMER_DELAY_MS, runMeasReq);
+      break;
+
+    case CMD_MOTORTEST:
+      DEBUG_I("CMD_MOTORTEST");
+      motorCtrlRun(msgMaster.motorSpeed, msgMaster.motorTorque, msgMaster.motorState);
+      break;
+
+    case CMD_OTA:
+      DEBUG_I("CMD_OTA - entering OTA mode");
+      otaMode = true;
+      break;
+
+    case CMD_PAIR:
+    case CMD_PAIR_ACK:
+      break;
+
+    default:
+      DEBUG_W("Nieznana komenda: %c", msgMaster.command);
+      break;
+    }
   }
-
-  memcpy(&msgMaster, incomingData, sizeof(msgMaster));
-
-  // Sprawdź czy pomiar jest w trakcie - jeśli tak, zignoruj nowe komendy
-  if (measurementInProgress)
+  else
   {
-    DEBUG_W("Pomiar w trakcie - komenda %c zignorowana", msgMaster.command);
-    return;
-  }
-
-  switch (msgMaster.command)
-  {
-  case CMD_MEASURE: // Measurement request
-    DEBUG_I("CMD_MEASURE");
-    timerWorker.cancel();
-    timerWorker.in(TIMER_DELAY_MS, runMeasReq);
-    break;
-
-  case CMD_UPDATE: // Status update request
-    DEBUG_I("CMD_UPDATE");
-    timerWorker.cancel();
-    timerWorker.in(TIMER_DELAY_MS, runMeasReq);
-    break;
-
-  // Motor control (generic)
-  case CMD_MOTORTEST:
-    DEBUG_I("CMD_MOTORTEST");
-    motorCtrlRun(msgMaster.motorSpeed, msgMaster.motorTorque, msgMaster.motorState);
-    break;
-
-  case CMD_OTA:
-    DEBUG_I("CMD_OTA - entering OTA mode");
-    otaMode = true;
-    break;
-
-  default:
-    DEBUG_W("Nieznana komenda: %c", msgMaster.command);
-    break;
+    RECORD_ERROR(ERR_ESPNOW_INVALID_LENGTH, "Received packet length: %d, expected: %d", len, (int)sizeof(MessageMaster));
   }
 }
 
@@ -304,15 +390,27 @@ void setup()
   DEBUG_BEGIN();
   DEBUG_I("=== ESP32 SLAVE - Suwmiarka + ESP-NOW ===");
 
-  // Initialize error handler
   ERROR_HANDLER.initialize();
 
-  // Initialize I2C and scan for devices
-  // SDA=GPIO3, SCL=GPIO46, clock=1kHz
-  // Wire.begin(3, 46, 1000);
-  // scanI2C();
+  slavePrefs.begin("caliper_slave", false);
 
-  // Initialize sensors
+  uint8_t storedMasterMac[6];
+  memset(storedMasterMac, 0, 6);
+  slavePrefs.getBytes("masterMac", storedMasterMac, 6);
+
+  if (!isMacUnset(storedMasterMac))
+  {
+    memcpy(masterAddress, storedMasterMac, 6);
+    hasStoredMasterMac = true;
+    DEBUG_I("Master MAC z NVS: %02X:%02X:%02X:%02X:%02X:%02X",
+      masterAddress[0], masterAddress[1], masterAddress[2], masterAddress[3], masterAddress[4], masterAddress[5]);
+  }
+  else
+  {
+    DEBUG_I("Brak Master MAC w NVS — oczekiwanie na parowanie");
+    hasStoredMasterMac = false;
+  }
+
   caliper.begin();
 
   if (!accelerometer.begin())
@@ -352,22 +450,29 @@ void setup()
   esp_now_register_recv_cb(OnDataRecv);
   esp_now_register_send_cb(OnDataSent);
 
-  memcpy(peerInfo.peer_addr, masterAddress, 6);
-  peerInfo.channel = ESPNOW_WIFI_CHANNEL;
-  peerInfo.encrypt = false;
-
-  ErrorCode peerResult = espnow_add_peer_with_retry(&peerInfo);
-  if (peerResult == ERR_NONE)
+  if (hasStoredMasterMac)
   {
-    DEBUG_I("Master dodany jako peer!");
+    memcpy(peerInfo.peer_addr, masterAddress, 6);
+    peerInfo.channel = ESPNOW_WIFI_CHANNEL;
+    peerInfo.encrypt = false;
+
+    ErrorCode peerResult = espnow_add_peer_with_retry(&peerInfo);
+    if (peerResult == ERR_NONE)
+    {
+      DEBUG_I("Master dodany jako peer! MAC: %02X:%02X:%02X:%02X:%02X:%02X",
+        masterAddress[0], masterAddress[1], masterAddress[2], masterAddress[3], masterAddress[4], masterAddress[5]);
+    }
+    else
+    {
+      DEBUG_E("Nie udało się dodać Mastera jako peer");
+      return;
+    }
   }
   else
   {
-    DEBUG_E("Nie udało się dodać Mastera jako peer");
-    return;
+    DEBUG_I("Brak Master MAC — pomijam dodawanie peera, czekam na parowanie");
   }
 
-  // Initialize motor controller
   DEBUG_I("Inicjalizacja sterownika silnika...");
   motorCtrlInit();
   motorCtrlEnable(true);
@@ -377,6 +482,8 @@ void setup()
   digitalWrite(LED_RED, LOW);
   digitalWrite(LED_GREEN, LOW);
   timerBattery.every(BATTERY_UPDATE_INTERVAL_MS, batteryMonitorTask);
+
+  enterPairingMode();
 
   DEBUG_I("Oczekiwanie na żądania pomiaru...");
 }
@@ -392,6 +499,26 @@ void loop()
     otaUpdate.handle();
     return;
   }
+
+  if (pairingMode)
+  {
+    if (!hasStoredMasterMac)
+    {
+      // Continuous pairing — blink green LED as visual indicator
+      uint32_t blink = (millis() / 100) % 2;
+      digitalWrite(LED_GREEN, blink ? HIGH : LOW);
+    }
+    else
+    {
+      digitalWrite(LED_GREEN, LOW);
+      uint32_t elapsed = millis() - pairingModeStartMs;
+      if (elapsed >= PAIRING_WINDOW_MS)
+      {
+        exitPairingMode();
+      }
+    }
+  }
+
   timerWorker.tick();
   timerMotorStopTimeout.tick();
   timerBattery.tick();

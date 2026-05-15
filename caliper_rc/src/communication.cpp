@@ -85,3 +85,36 @@ void CommunicationManager::setSendCallback(esp_now_send_cb_t callback)
     esp_now_register_send_cb(callback);
   }
 }
+
+ErrorCode CommunicationManager::updatePeerAddress(const uint8_t *newAddr)
+{
+  if (!newAddr)
+  {
+    RECORD_ERROR(ERR_VALIDATION_INVALID_PARAM, "Null master address provided for update");
+    lastError = ERR_VALIDATION_INVALID_PARAM;
+    return lastError;
+  }
+
+  esp_now_del_peer(masterAddress);
+
+  memcpy(masterAddress, newAddr, 6);
+
+  memset(&peerInfo, 0, sizeof(peerInfo));
+  memcpy(peerInfo.peer_addr, masterAddress, 6);
+  peerInfo.channel = ESPNOW_WIFI_CHANNEL;
+  peerInfo.encrypt = false;
+
+  ErrorCode result = espnow_add_peer_with_retry(&peerInfo);
+  if (result != ERR_NONE)
+  {
+    RECORD_ERROR(ERR_ESPNOW_PEER_ADD_FAILED, "Failed to update master peer: %02X:%02X:%02X:%02X:%02X:%02X",
+      masterAddress[0], masterAddress[1], masterAddress[2], masterAddress[3], masterAddress[4], masterAddress[5]);
+    lastError = ERR_ESPNOW_PEER_ADD_FAILED;
+    return lastError;
+  }
+
+  DEBUG_I("CommunicationManager: Updated master peer to %02X:%02X:%02X:%02X:%02X:%02X",
+    masterAddress[0], masterAddress[1], masterAddress[2], masterAddress[3], masterAddress[4], masterAddress[5]);
+  lastError = ERR_NONE;
+  return lastError;
+}

@@ -30,6 +30,8 @@ enum CommandType : char
   CMD_OTA = 'O',         /**< Request OTA update mode */
   CMD_TRIG_MEAS = 'R',   /**< RC: trigger measurement on master (same as serial 'm') */
   CMD_DROP_MEAS = 'D',   /**< RC: drop last measurement in GUI */
+  CMD_PAIR     = 'P',   /**< Master broadcast - pairing mode */
+  CMD_PAIR_ACK = 'A',   /**< Master → Slave/RC pairing acknowledgment */
 };
 
 /**

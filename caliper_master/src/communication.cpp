@@ -53,6 +53,9 @@ ErrorCode CommunicationManager::initialize(const uint8_t *slaveAddr)
     return lastError;
   }
 
+  DEBUG_I("Slave peer dodany: %02X:%02X:%02X:%02X:%02X:%02X",
+    slaveAddress[0], slaveAddress[1], slaveAddress[2], slaveAddress[3], slaveAddress[4], slaveAddress[5]);
+
   initialized = true;
   lastError = ERR_NONE;
   return lastError;
@@ -94,4 +97,73 @@ void CommunicationManager::setSendCallback(esp_now_send_cb_t callback)
   {
     esp_now_register_send_cb(callback);
   }
+}
+
+ErrorCode CommunicationManager::updatePeerAddress(const uint8_t *newAddr)
+{
+  if (!newAddr)
+  {
+    RECORD_ERROR(ERR_VALIDATION_INVALID_PARAM, "Null address provided for peer update");
+    lastError = ERR_VALIDATION_INVALID_PARAM;
+    return lastError;
+  }
+
+  esp_now_del_peer(slaveAddress);
+
+  memcpy(slaveAddress, newAddr, 6);
+
+  memset(&peerInfo, 0, sizeof(peerInfo));
+  memcpy(peerInfo.peer_addr, slaveAddress, 6);
+  peerInfo.channel = ESPNOW_WIFI_CHANNEL;
+  peerInfo.encrypt = false;
+
+  ErrorCode result = espnow_add_peer_with_retry(&peerInfo);
+  if (result != ERR_NONE)
+  {
+    RECORD_ERROR(ERR_ESPNOW_PEER_ADD_FAILED, "Failed to update peer: %02X:%02X:%02X:%02X:%02X:%02X",
+      slaveAddress[0], slaveAddress[1], slaveAddress[2], slaveAddress[3], slaveAddress[4], slaveAddress[5]);
+    lastError = ERR_ESPNOW_PEER_ADD_FAILED;
+    return lastError;
+  }
+
+  DEBUG_I("CommunicationManager: Updated slave peer to %02X:%02X:%02X:%02X:%02X:%02X",
+    slaveAddress[0], slaveAddress[1], slaveAddress[2], slaveAddress[3], slaveAddress[4], slaveAddress[5]);
+  lastError = ERR_NONE;
+  return lastError;
+}
+
+ErrorCode CommunicationManager::addRcPeer(const uint8_t *rcAddr)
+{
+  if (!rcAddr)
+  {
+    RECORD_ERROR(ERR_VALIDATION_INVALID_PARAM, "Null RC address provided");
+    lastError = ERR_VALIDATION_INVALID_PARAM;
+    return lastError;
+  }
+
+  esp_now_peer_info_t rcPeerInfo{};
+  memcpy(rcPeerInfo.peer_addr, rcAddr, 6);
+  rcPeerInfo.channel = ESPNOW_WIFI_CHANNEL;
+  rcPeerInfo.encrypt = false;
+
+  esp_now_del_peer(rcAddr);
+
+  ErrorCode result = espnow_add_peer_with_retry(&rcPeerInfo);
+  if (result != ERR_NONE)
+  {
+    RECORD_ERROR(ERR_ESPNOW_PEER_ADD_FAILED, "Failed to add RC peer: %02X:%02X:%02X:%02X:%02X:%02X",
+      rcAddr[0], rcAddr[1], rcAddr[2], rcAddr[3], rcAddr[4], rcAddr[5]);
+    lastError = ERR_ESPNOW_PEER_ADD_FAILED;
+    return lastError;
+  }
+
+  DEBUG_I("CommunicationManager: Added RC peer: %02X:%02X:%02X:%02X:%02X:%02X",
+    rcAddr[0], rcAddr[1], rcAddr[2], rcAddr[3], rcAddr[4], rcAddr[5]);
+  lastError = ERR_NONE;
+  return lastError;
+}
+
+void CommunicationManager::removeRcPeer()
+{
+  // RC peer is not tracked in this class; caller manages it via esp_now directly
 }

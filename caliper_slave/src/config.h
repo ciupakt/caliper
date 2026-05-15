@@ -23,6 +23,7 @@
 
 /**
  * @brief MAC address of the Master device
+ * Default/fallback — overridden by NVS if paired.
  * To find the MAC address, run the master and check Serial output at startup.
  */
 //#define MASTER_MAC_ADDR {0xA0, 0xB7, 0x65, 0x20, 0xC0, 0x8C}

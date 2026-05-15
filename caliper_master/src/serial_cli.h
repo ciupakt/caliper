@@ -24,6 +24,7 @@ struct SerialCliContext
   void (*requestUpdate)() = nullptr;
   void (*sendMotorTest)() = nullptr;
   void (*sendOTA)() = nullptr;
+  void (*enterPairingMode)() = nullptr;
 };
 
 // Inicjalizacja kontekstu. Należy wywołać w setup() przed startem timera.

@@ -23,10 +23,15 @@
 
 /**
  * @brief MAC address of the Slave device
+ * Default/fallback MAC — overridden by NVS if paired.
  * To find the MAC address, run the slave and check Serial output at startup.
  */
 #define SLAVE_MAC_ADDR {0x10, 0xB4, 0x1D, 0xD6, 0x40, 0xAC}
 
+/**
+ * @brief MAC address of the RC device
+ * Default/fallback MAC — overridden by NVS if paired.
+ */
 #define RC_MAC_ADDR {0x00, 0x00, 0x00, 0x00, 0x00, 0x00}
 
 // ============================================================================

@@ -16,6 +16,10 @@
 // Device MAC Address Configuration
 // ============================================================================
 
+/**
+ * @brief MAC address of the Master device
+ * Default/fallback — overridden by NVS if paired.
+ */
 #define MASTER_MAC_ADDR {0x10, 0xB4, 0x1D, 0xD6, 0x40, 0xBB}
 
 // ============================================================================

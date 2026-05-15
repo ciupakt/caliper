@@ -45,7 +45,7 @@ class CalibrationTab:
 
     def create(self, parent: int, serial_handler):
         """Create the calibration tab UI"""
-        with dpg.tab(label="Kalibracja", parent=parent):
+        with dpg.tab(label="Calibration", parent=parent):
             dpg.add_spacer(height=5)
 
             # Status tylko dla tej zakładki (żeby feedback był widoczny nawet gdy user nie jest w 'Pomiary')
@@ -55,7 +55,7 @@ class CalibrationTab:
             with dpg.group(horizontal=True):
                 # --- Konfiguracja pomiaru
                 with dpg.group():
-                    dpg.add_text("Konfiguracja pomiaru:", color=(100, 200, 255))
+                    dpg.add_text("Measurement Configuration:", color=(100, 200, 255))
                     dpg.add_spacer(height=5)
 
                     dpg.add_input_int(
@@ -98,7 +98,7 @@ class CalibrationTab:
                     dpg.add_spacer(height=5)
                     with dpg.group(horizontal=True):
                         dpg.add_button(
-                            label="Zastosuj",
+                            label="Apply",
                             callback=self._apply_measurement_config,
                             width=150,
                             height=30,
@@ -112,12 +112,13 @@ class CalibrationTab:
                             user_data=serial_handler,
                         )
                         dpg.add_button(
-                            label="Odśwież ustawienia",
+                            label="Refresh Settings",
                             callback=self._refresh_settings,
                             width=150,
                             height=30,
                             user_data=serial_handler,
                         )
+                    with dpg.group(horizontal=True):
                         dpg.add_button(
                             label="OTA (Slave)",
                             callback=self._send_ota,
@@ -125,23 +126,31 @@ class CalibrationTab:
                             height=30,
                             user_data=serial_handler,
                         )
+                        dpg.add_button(
+                            label="Pairing",
+                            callback=self._send_pairing,
+                            width=150,
+                            height=30,
+                            user_data=serial_handler,
+                        )
                     dpg.add_spacer(height=5)
+                    dpg.add_text("", tag="pairing_status")
 
                 dpg.add_spacer(width=30)
 
                 # --- Kalibracja
                 with dpg.group():
-                    dpg.add_text("Kalibracja (Master lokalnie):", color=(100, 200, 255))
+                    dpg.add_text("Calibration (Master local):", color=(100, 200, 255))
                     dpg.add_spacer(height=5)
 
                     # Podgląd jak w WWW: surowy / aktualny offset / skorygowany
-                    dpg.add_text("Surowy: n/a", tag="cal_raw_display")
+                    dpg.add_text("Raw: n/a", tag="cal_raw_display")
                     dpg.add_text(
-                        "Aktualny offset: 0.000 mm",
+                        "Current offset: 0.000 mm",
                         tag="cal_offset_display",
                         color=(198, 40, 40),
                     )
-                    dpg.add_text("Skorygowany: n/a", tag="cal_corrected_display")
+                    dpg.add_text("Corrected: n/a", tag="cal_corrected_display")
                     dpg.add_spacer(height=5)
 
                     dpg.add_input_float(
@@ -155,14 +164,14 @@ class CalibrationTab:
                     )
 
                     dpg.add_button(
-                        label="Pobierz bieżący pomiar",
+                        label="Get Current Measurement",
                         callback=self._calibration_measure,
                         width=220,
                         height=30,
                         user_data=serial_handler,
                     )
                     dpg.add_button(
-                        label="Zastosuj offset",
+                        label="Apply Offset",
                         callback=self._apply_calibration_offset,
                         width=220,
                         height=30,
@@ -171,11 +180,11 @@ class CalibrationTab:
 
                     dpg.add_spacer(height=10)
                     dpg.add_text(
-                        "ESP32 Master WWW: http://192.168.4.1", color=(100, 255, 100)
+                        "ESP32 Master Web: http://192.168.4.1", color=(100, 255, 100)
                     )
                     # Wartości zgodne z [`config.h`](caliper_master/src/config.h:33)
                     dpg.add_text(
-                        "WiFi: Orange_WiFi (hasło: 1670$2026)", color=(100, 255, 100)
+                        "WiFi: Orange_WiFi (password: 1670$2026)", color=(100, 255, 100)
                     )
 
             dpg.add_spacer(height=10)
@@ -190,7 +199,7 @@ class CalibrationTab:
                 # Log komunikacji serial
                 with dpg.group():
                     dpg.add_text(
-                        "Log komunikacji serial (dblclick = wyczyść):",
+                        "Serial Communication Log (dblclick = clear):",
                         color=(100, 200, 255),
                     )
                     dpg.add_spacer(height=5)
@@ -211,7 +220,7 @@ class CalibrationTab:
                 # Log aplikacji
                 with dpg.group():
                     dpg.add_text(
-                        "Log aplikacji (dblclick = wyczyść):", color=(100, 200, 255)
+                        "App Log (dblclick = clear):", color=(100, 200, 255)
                     )
                     dpg.add_spacer(height=5)
                     with dpg.child_window(width=560, height=200, tag="cal_app_log"):
@@ -289,11 +298,11 @@ class CalibrationTab:
     def _safe_write(self, serial_handler, data: str) -> bool:
         """Write to serial only when port is open; update status otherwise."""
         if serial_handler is None or not hasattr(serial_handler, "is_open"):
-            self._set_status("BŁĄD: Brak SerialHandler")
+            self._set_status("ERROR: No SerialHandler")
             return False
 
         if not serial_handler.is_open():
-            self._set_status("BŁĄD: Port nie jest otwarty")
+            self._set_status("ERROR: Port not open")
             return False
 
         serial_handler.write(data)
@@ -315,7 +324,7 @@ class CalibrationTab:
             pass
 
         if self._safe_write(serial_handler, "m"):
-            self._set_status("Wysłano: m (pobierz bieżący pomiar)")
+            self._set_status("Sent: m (get current measurement)")
 
     def _apply_calibration_offset(self, sender, app_data, user_data):
         """Zastosuj offset (jak w WWW) – UART: c <±14.999>."""
@@ -323,14 +332,14 @@ class CalibrationTab:
         try:
             val = float(dpg.get_value("cal_offset_input"))
         except Exception:
-            self._set_status("BŁĄD: Nieprawidłowy calibrationOffset")
+            self._set_status("ERROR: Invalid calibrationOffset")
             return
 
         val = self._clamp_float(val, -14.999, 14.999)
         dpg.set_value("cal_offset_input", val)
 
         if self._safe_write(serial_handler, f"c {val:.3f}"):
-            self._set_status(f"Wysłano: c {val:.3f} (zastosuj offset)")
+            self._set_status(f"Sent: c {val:.3f} (apply offset)")
 
     def _apply_measurement_config(self, sender, app_data, user_data):
         """Apply msgMaster config fields on Master via UART commands: o/q/s."""
@@ -345,7 +354,7 @@ class CalibrationTab:
             state_str = dpg.get_value("tx_state_input")
             state = int(state_str.split("(")[-1].rstrip(")"))
         except Exception:
-            self._set_status("BŁĄD: Nieprawidłowe wartości konfiguracji")
+            self._set_status("ERROR: Invalid configuration values")
             return
 
         timeout_ms = self._clamp_int(timeout_ms, 0, 600000)
@@ -363,7 +372,7 @@ class CalibrationTab:
         self._safe_write(serial_handler, f"q {torque}")
         self._safe_write(serial_handler, f"s {speed}")
 
-        self._set_status(f"Wysłano: o {timeout_ms}, q {torque}, s {speed}")
+        self._set_status(f"Sent: o {timeout_ms}, q {torque}, s {speed}")
 
     def _send_motortest(self, sender, app_data, user_data):
         """Send motor test command via UART: r <state> i t."""
@@ -374,15 +383,15 @@ class CalibrationTab:
             state_str = dpg.get_value("tx_state_input")
             state = int(state_str.split("(")[-1].rstrip(")"))
         except Exception:
-            self._set_status("BŁĄD: Nieprawidłowa wartość motorState")
+            self._set_status("ERROR: Invalid motorState value")
             return
 
         state = self._clamp_int(state, 0, 3)
 
         # Wysyłamy komendę r <state> przed testem silnika
         if self._safe_write(serial_handler, f"r {state}"):
-            self._set_status(f"Wysłano: r {state}, t")
-            self.add_app_log(f"[GUI] Wysłano: r {state}, t")
+            self._set_status(f"Sent: r {state}, t")
+            self.add_app_log(f"[GUI] Sent: r {state}, t")
             self._safe_write(serial_handler, "t")
 
     def _refresh_settings(self, sender, app_data, user_data):
@@ -390,16 +399,24 @@ class CalibrationTab:
         serial_handler = user_data
 
         if self._safe_write(serial_handler, "g"):
-            self._set_status("Wysłano: g (odśwież ustawienia)")
-            self.add_app_log("[GUI] Wysłano: g (odśwież ustawienia)")
+            self._set_status("Sent: g (refresh settings)")
+            self.add_app_log("[GUI] Sent: g (refresh settings)")
 
     def _send_ota(self, sender, app_data, user_data):
         """Send OTA command to Slave via UART command 'f'."""
         serial_handler = user_data
 
         if self._safe_write(serial_handler, "f"):
-            self._set_status("Wysłano: f (OTA update)")
-            self.add_app_log("[GUI] Wysłano: f (OTA update)")
+            self._set_status("Sent: f (OTA update)")
+            self.add_app_log("[GUI] Sent: f (OTA update)")
+
+    def _send_pairing(self, sender, app_data, user_data):
+        """Send pairing command via UART command 'p'."""
+        serial_handler = user_data
+
+        if self._safe_write(serial_handler, "p"):
+            self._set_status("Sent: p (pairing mode)")
+            self.add_app_log("[GUI] Sent: p (pairing mode)")
 
     def _on_log_clicked(self, sender, app_data, user_data):
         """Handle double click on log areas - clear logs on double click"""

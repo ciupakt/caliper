@@ -37,7 +37,7 @@ class MeasurementTab:
 
     def create(self, parent: int, serial_handler, csv_handler):
         """Create the measurement tab UI"""
-        with dpg.tab(label="Pomiary", parent=parent):
+        with dpg.tab(label="Measurements", parent=parent):
             # Układ 3-kolumnowy:
             # - lewa kolumna: historia pomiarów (żeby było widać więcej wpisów)
             # - środek: sterowanie pomiarem (pozostaje "po środku")
@@ -45,7 +45,7 @@ class MeasurementTab:
             with dpg.group(horizontal=True):
                 # --- Measurement History (left column)
                 with dpg.group():
-                    dpg.add_text("Historia pomiarów:", color=(100, 200, 255))
+                    dpg.add_text("Measurement History:", color=(100, 200, 255))
                     dpg.add_spacer(height=5)
                     # Większa wysokość = więcej widocznych pomiarów bez scrollowania
                     # (wyższa kolumna = więcej widocznych pomiarów)
@@ -56,12 +56,12 @@ class MeasurementTab:
 
                 # --- Measurement Controls (center column)
                 with dpg.group():
-                    dpg.add_text("Sterowanie pomiarem:", color=(100, 200, 255))
+                    dpg.add_text("Measurement Controls:", color=(100, 200, 255))
                     dpg.add_spacer(height=5)
 
                     # Główny przycisk: większy + czerwony, pogrubiony napis
                     measure_btn = dpg.add_button(
-                        label="Wykonaj pomiar (p)",
+                        label="Measure (p)",
                         callback=self._trigger,
                         width=200,
                         height=55,
@@ -85,7 +85,7 @@ class MeasurementTab:
                     # Nazewnictwo jak w WWW: nowa sesja pomiarowa.
                     # Plik CSV tworzymy z nazwą sesji jako prefixem.
                     new_session_btn = dpg.add_button(
-                        label="Nowa sesja pomiarowa", width=200, height=30
+                        label="New Session", width=200, height=30
                     )
                     with dpg.popup(
                         new_session_btn,
@@ -94,10 +94,10 @@ class MeasurementTab:
                         tag="new_session_popup",
                     ):
                         dpg.add_text(
-                            "Podaj nazwę sesji (maks 31 znaków, dozwolone: a-z, A-Z, 0-9, spacja, _, -)"
+                            "Enter session name (max 31 chars, allowed: a-z, A-Z, 0-9, space, _, -)"
                         )
                         dpg.add_text(
-                            "Zostanie utworzony plik: <nazwa_sesji>_YYYYMMDD_HHMMSS.csv"
+                            "File will be created: <session_name>_YYYYMMDD_HHMMSS.csv"
                         )
                         dpg.add_spacer(height=5)
                         dpg.add_input_text(
@@ -108,14 +108,14 @@ class MeasurementTab:
                         dpg.add_spacer(height=8)
                         with dpg.group(horizontal=True):
                             dpg.add_button(
-                                label="Utwórz",
+                                label="Create",
                                 callback=self._confirm_new_session,
                                 width=120,
                                 height=30,
                                 user_data=(serial_handler, csv_handler),
                             )
                             dpg.add_button(
-                                label="Anuluj",
+                                label="Cancel",
                                 callback=lambda: dpg.configure_item(
                                     "new_session_popup", show=False
                                 ),
@@ -128,13 +128,13 @@ class MeasurementTab:
 
                     dpg.add_spacer(height=5)
                     dpg.add_checkbox(
-                        label="Auto-pomiar",
+                        label="Auto-measure",
                         tag="auto_checkbox",
                         callback=self._set_auto,
                         user_data=serial_handler,
                     )
                     dpg.add_input_int(
-                        label="Interwał (ms)",
+                        label="Interval (ms)",
                         tag="interval_ms",
                         default_value=1000,
                         min_value=500,
@@ -143,12 +143,12 @@ class MeasurementTab:
                     )
                     dpg.add_spacer(height=5)
                     dpg.add_checkbox(
-                        label="Dodaj znacznik czasu",
+                        label="Include timestamp",
                         callback=self._timestamp_checkbox,
                         tag="timestamp_cb",
                     )
                     dpg.add_checkbox(
-                        label="Dodaj znacznik kąta",
+                        label="Include angle",
                         callback=self._angle_checkbox,
                         tag="angle_cb",
                     )
@@ -157,7 +157,7 @@ class MeasurementTab:
 
                 # --- Port Configuration (right column)
                 with dpg.group():
-                    dpg.add_text("Konfiguracja portu COM:", color=(100, 200, 255))
+                    dpg.add_text("COM Port Configuration:", color=(100, 200, 255))
                     dpg.add_spacer(height=5)
                     ports_list = serial_handler.list_ports()
                     dpg.add_combo(ports_list, tag="port_combo", width=250)
@@ -165,34 +165,34 @@ class MeasurementTab:
                         dpg.set_value("port_combo", ports_list[0])
                     dpg.add_spacer(height=5)
                     dpg.add_button(
-                        label="Odśwież porty",
+                        label="Refresh Ports",
                         callback=self._refresh_ports,
                         width=150,
                         height=30,
                         user_data=serial_handler,
                     )
                     dpg.add_button(
-                        label="Otwórz port",
+                        label="Open Port",
                         callback=self._open_port,
                         width=150,
                         height=30,
                         user_data=(serial_handler, csv_handler),
                     )
                     dpg.add_spacer(height=5)
-                    dpg.add_text("Status: brak połączenia", tag="status")
+                    dpg.add_text("Status: not connected", tag="status")
                     dpg.add_text("", tag="csv_info")
 
             dpg.add_separator()
             dpg.add_spacer(height=10)
 
             # Live Plot
-            dpg.add_text("Wykres na żywo:")
-            with dpg.plot(label="Pomiary", height=260, width=1120):
+            dpg.add_text("Live Plot:")
+            with dpg.plot(label="Measurements", height=260, width=1120):
                 dpg.add_plot_legend()
-                dpg.add_plot_axis(dpg.mvXAxis, label="Nr pomiaru", tag="x_axis")
-                dpg.add_plot_axis(dpg.mvYAxis, label="Wartość", tag="y_axis")
+                dpg.add_plot_axis(dpg.mvXAxis, label="Measurement #", tag="x_axis")
+                dpg.add_plot_axis(dpg.mvYAxis, label="Value", tag="y_axis")
                 dpg.add_line_series(
-                    [], [], label="Pomiar", parent="y_axis", tag="plot_data"
+                    [], [], label="Measurement", parent="y_axis", tag="plot_data"
                 )
 
     def _refresh_ports(self, sender, app_data, user_data):
@@ -209,7 +209,7 @@ class MeasurementTab:
         port = dpg.get_value("port_combo")
 
         if serial_handler.open_port(port):
-            dpg.set_value("status", f"Połączono z {port}")
+            dpg.set_value("status", f"Connected to {port}")
 
             # Zgodnie z wymaganiem: plik CSV NIE jest tworzony przy otwieraniu portu.
             # Jeśli był otwarty poprzedni plik, zamykamy go, żeby nowa sesja zawsze
@@ -225,10 +225,10 @@ class MeasurementTab:
                 pass
 
             dpg.set_value(
-                "csv_info", "Plik CSV: (brak — kliknij 'Nowa sesja pomiarowa')"
+                "csv_info", "CSV file: (none — click 'New Session')"
             )
         else:
-            dpg.set_value("status", "BŁĄD: Nie udało się otworzyć portu")
+            dpg.set_value("status", "ERROR: Failed to open port")
 
     def _trigger(self, sender, app_data, user_data):
         """Send trigger command"""
@@ -258,7 +258,7 @@ class MeasurementTab:
         if not self._validate_session_name(session_name):
             try:
                 if dpg.does_item_exist("status"):
-                    dpg.set_value("status", "BŁĄD: Nazwa sesji jest nieprawidłowa")
+                    dpg.set_value("status", "ERROR: Invalid session name")
             except Exception:
                 pass
             return
@@ -277,14 +277,14 @@ class MeasurementTab:
             else:
                 try:
                     if dpg.does_item_exist("status"):
-                        dpg.set_value("status", "BŁĄD: Port nie jest otwarty")
+                        dpg.set_value("status", "ERROR: Port not open")
                 except Exception:
                     pass
                 return
         except Exception:
             try:
                 if dpg.does_item_exist("status"):
-                    dpg.set_value("status", "BŁĄD: Nie udało się wysłać nazwy sesji")
+                    dpg.set_value("status", "ERROR: Failed to send session name")
             except Exception:
                 pass
             return
@@ -304,9 +304,9 @@ class MeasurementTab:
 
         if filename:
             dpg.set_value("csv_info", f"Plik CSV: {filename}")
-            dpg.set_value("status", f"Nowa sesja pomiarowa: {session_name}")
+            dpg.set_value("status", f"New session: {session_name}")
         else:
-            dpg.set_value("status", "BŁĄD: Nie udało się utworzyć pliku CSV")
+            dpg.set_value("status", "ERROR: Failed to create CSV file")
 
         try:
             dpg.configure_item("new_session_popup", show=False)
@@ -330,10 +330,10 @@ class MeasurementTab:
                         or not serial_handler.is_open()
                     ):
                         dpg.set_value(
-                            "status", "Auto-pomiar: włączony (port nieotwarty)"
+                            "status", "Auto-measure: enabled (port not open)"
                         )
                     else:
-                        dpg.set_value("status", "Auto-pomiar: włączony")
+                        dpg.set_value("status", "Auto-measure: enabled")
             except Exception:
                 pass
 
@@ -361,7 +361,7 @@ class MeasurementTab:
 
             try:
                 if dpg.does_item_exist("status"):
-                    dpg.set_value("status", "Auto-pomiar: wyłączony")
+                    dpg.set_value("status", "Auto-measure: disabled")
             except Exception:
                 pass
 

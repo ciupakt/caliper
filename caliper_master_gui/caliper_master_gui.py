@@ -55,7 +55,7 @@ class CaliperGUI:
         try:
             filename = self.csv_handler.create_new_file(prefix=session_name)
         except Exception as e:
-            self.calibration_tab.add_app_log(f"BLAD: Nie udalo sie utworzyc pliku CSV: {str(e)}")
+            self.calibration_tab.add_app_log(f"ERROR: Failed to create CSV file: {str(e)}")
             return
         
         # Zaktualizuj last_saved_session_name
@@ -68,11 +68,11 @@ class CaliperGUI:
         try:
             if filename:
                 if dpg.does_item_exist("csv_info"):
-                    dpg.set_value("csv_info", f"Plik CSV: {filename}")
+                    dpg.set_value("csv_info", f"CSV file: {filename}")
                 if dpg.does_item_exist("status"):
-                    dpg.set_value("status", f"Nowa sesja: {session_name}")
+                    dpg.set_value("status", f"New session: {session_name}")
                 if dpg.does_item_exist("session_name_display"):
-                    dpg.set_value("session_name_display", f"Sesja: {session_name}")
+                    dpg.set_value("session_name_display", f"Session: {session_name}")
         except Exception:
             pass
         
@@ -81,7 +81,7 @@ class CaliperGUI:
         self.measurement_tab.csv_prefix = session_name
         
         # Zaloguj utworzenie nowej sesji
-        self.calibration_tab.add_app_log(f"[SESJA] Nowa sesja utworzona: {session_name} -> {filename}")
+        self.calibration_tab.add_app_log(f"[SESSION] New session created: {session_name} -> {filename}")
 
     @staticmethod
     def _normalize_debug_plot_line(data: str) -> str:
@@ -108,20 +108,20 @@ class CaliperGUI:
                     self.current_calibration_offset = float(val_str)
                 except Exception:
                     # jeśli nie da się sparsować, logujemy tylko tekst
-                    self.calibration_tab.add_app_log(f"[KALIBRACJA] Offset (parse err): {val_str}")
+                    self.calibration_tab.add_app_log(f"[CALIBRATION] Offset (parse err): {val_str}")
                     return
 
-                self.calibration_tab.add_app_log(f"[KALIBRACJA] Offset: {self.current_calibration_offset:.3f} mm")
+                self.calibration_tab.add_app_log(f"[CALIBRATION] Offset: {self.current_calibration_offset:.3f} mm")
 
                 # Odświeżamy UI kalibracji (jeśli istnieje)
                 try:
                     if dpg.does_item_exist("cal_offset_display"):
-                        dpg.set_value("cal_offset_display", f"Aktualny offset: {self.current_calibration_offset:.3f} mm")
+                        dpg.set_value("cal_offset_display", f"Current offset: {self.current_calibration_offset:.3f} mm")
 
                     # Jeśli mamy ostatni surowy pomiar, odświeżamy też skorygowany
                     if self.last_measurement_raw is not None and dpg.does_item_exist("cal_corrected_display"):
                         corrected = float(self.last_measurement_raw) + float(self.current_calibration_offset) if float(self.last_measurement_raw) < 0 else float(self.last_measurement_raw) - float(self.current_calibration_offset)
-                        dpg.set_value("cal_corrected_display", f"Skorygowany: {corrected:.3f} mm")
+                        dpg.set_value("cal_corrected_display", f"Corrected: {corrected:.3f} mm")
                 except Exception:
                     pass
 
@@ -153,11 +153,11 @@ class CaliperGUI:
                 # Odświeżamy UI kalibracji (jeśli istnieje)
                 try:
                     if dpg.does_item_exist("cal_raw_display"):
-                        dpg.set_value("cal_raw_display", f"Surowy: {raw:.3f} mm")
+                        dpg.set_value("cal_raw_display", f"Raw: {raw:.3f} mm")
                     if dpg.does_item_exist("cal_offset_display"):
-                        dpg.set_value("cal_offset_display", f"Aktualny offset: {self.current_calibration_offset:.3f} mm")
+                        dpg.set_value("cal_offset_display", f"Current offset: {self.current_calibration_offset:.3f} mm")
                     if dpg.does_item_exist("cal_corrected_display"):
-                        dpg.set_value("cal_corrected_display", f"Skorygowany: {corrected:.3f} mm")
+                        dpg.set_value("cal_corrected_display", f"Corrected: {corrected:.3f} mm")
                 except Exception:
                     pass
 
@@ -170,7 +170,7 @@ class CaliperGUI:
                     if self.csv_handler.is_open():
                         self.csv_handler.write_measurement(measurement_str, ts if self.measurement_tab.include_timestamp else None, self.last_angle if self.measurement_tab.include_angle else None)
                 else:
-                    self.calibration_tab.add_app_log(f"BLAD: Wartosc poza zakresem (corrected): {corrected}")
+                    self.calibration_tab.add_app_log(f"ERROR: Value out of range (corrected): {corrected}")
                 return
 
             if data.startswith("angleZ:"):
@@ -181,7 +181,7 @@ class CaliperGUI:
 
             if data.startswith("batteryVoltage:"):
                 voltage_str = data.split(":", 1)[1].strip()
-                self.calibration_tab.add_app_log(f"[BATERIA] {voltage_str} V")
+                self.calibration_tab.add_app_log(f"[BATTERY] {voltage_str} V")
                 return
 
             # --- Konfiguracja pomiaru (wysyłane przez DEBUG_PLOT przy zmianie o/q/s/r)
@@ -189,7 +189,7 @@ class CaliperGUI:
                 val_str = data.split(":", 1)[1].strip()
                 try:
                     timeout_val = int(val_str)
-                    self.calibration_tab.add_app_log(f"[KONFIG] timeout: {timeout_val} ms")
+                    self.calibration_tab.add_app_log(f"[CONFIG] timeout: {timeout_val} ms")
                     # Odświeżamy UI kalibracji (jeśli istnieje)
                     try:
                         if dpg.does_item_exist("tx_timeout_input"):
@@ -197,14 +197,14 @@ class CaliperGUI:
                     except Exception:
                         pass
                 except Exception:
-                    self.calibration_tab.add_app_log(f"[KONFIG] timeout (parse err): {val_str}")
+                    self.calibration_tab.add_app_log(f"[CONFIG] timeout (parse err): {val_str}")
                 return
 
             if data.startswith("motorTorque:"):
                 val_str = data.split(":", 1)[1].strip()
                 try:
                     torque_val = int(val_str)
-                    self.calibration_tab.add_app_log(f"[KONFIG] motorTorque: {torque_val}")
+                    self.calibration_tab.add_app_log(f"[CONFIG] motorTorque: {torque_val}")
                     # Odświeżamy UI kalibracji (jeśli istnieje)
                     try:
                         if dpg.does_item_exist("tx_torque_input"):
@@ -212,14 +212,14 @@ class CaliperGUI:
                     except Exception:
                         pass
                 except Exception:
-                    self.calibration_tab.add_app_log(f"[KONFIG] motorTorque (parse err): {val_str}")
+                    self.calibration_tab.add_app_log(f"[CONFIG] motorTorque (parse err): {val_str}")
                 return
 
             if data.startswith("motorSpeed:"):
                 val_str = data.split(":", 1)[1].strip()
                 try:
                     speed_val = int(val_str)
-                    self.calibration_tab.add_app_log(f"[KONFIG] motorSpeed: {speed_val}")
+                    self.calibration_tab.add_app_log(f"[CONFIG] motorSpeed: {speed_val}")
                     # Odświeżamy UI kalibracji (jeśli istnieje)
                     try:
                         if dpg.does_item_exist("tx_speed_input"):
@@ -227,7 +227,7 @@ class CaliperGUI:
                     except Exception:
                         pass
                 except Exception:
-                    self.calibration_tab.add_app_log(f"[KONFIG] motorSpeed (parse err): {val_str}")
+                    self.calibration_tab.add_app_log(f"[CONFIG] motorSpeed (parse err): {val_str}")
                 return
 
             if data.startswith("motorState:"):
@@ -241,7 +241,7 @@ class CaliperGUI:
                         3: "MOTOR_BRAKE (3)"
                     }
                     state_name = state_names.get(state_val, f"UNKNOWN({state_val})")
-                    self.calibration_tab.add_app_log(f"[KONFIG] motorState: {state_name}")
+                    self.calibration_tab.add_app_log(f"[CONFIG] motorState: {state_name}")
                     
                     # Odświeżamy UI kalibracji (jeśli istnieje)
                     try:
@@ -250,7 +250,7 @@ class CaliperGUI:
                     except Exception:
                         pass
                 except Exception:
-                    self.calibration_tab.add_app_log(f"[KONFIG] motorState (parse err): {val_str}")
+                    self.calibration_tab.add_app_log(f"[CONFIG] motorState (parse err): {val_str}")
                 return
 
             # --- Nazwa sesji (wysyłane przez DEBUG_PLOT przy zmianie nazwy sesji)
@@ -263,10 +263,10 @@ class CaliperGUI:
                     self._create_new_session_from_serial(name_str)
                 else:
                     # Tylko loguj i aktualizuj UI bez tworzenia nowej sesji
-                    self.calibration_tab.add_app_log(f"[SESJA] Nazwa sesji: {name_str}")
+                    self.calibration_tab.add_app_log(f"[SESSION] Session name: {name_str}")
                     try:
                         if dpg.does_item_exist("session_name_display"):
-                            dpg.set_value("session_name_display", f"Sesja: {name_str}")
+                            dpg.set_value("session_name_display", f"Session: {name_str}")
                     except Exception:
                         pass
                 return
@@ -277,19 +277,44 @@ class CaliperGUI:
                 if val_str == "1":
                     if self.measurement_tab.drop_last_measurement():
                         self.csv_handler.remove_last_row()
-                        self.calibration_tab.add_app_log("[RC] DROP_MEAS: usunięto ostatni pomiar")
+                        self.calibration_tab.add_app_log("[RC] DROP_MEAS: last measurement removed")
                     else:
-                        self.calibration_tab.add_app_log("[RC] DROP_MEAS: brak pomiarów do usunięcia")
+                        self.calibration_tab.add_app_log("[RC] DROP_MEAS: no measurements to remove")
+                return
+
+            # --- Pairing status
+            if data.startswith("pairing:"):
+                val_str = data.split(":", 1)[1].strip()
+                try:
+                    if dpg.does_item_exist("pairing_status"):
+                        if val_str == "1":
+                            dpg.set_value("pairing_status", "Pairing: ACTIVE 10s")
+                            self.calibration_tab.add_app_log("[PAIRING] Pairing mode active")
+                        else:
+                            dpg.set_value("pairing_status", "Pairing: inactive")
+                            self.calibration_tab.add_app_log("[PAIRING] Pairing mode ended")
+                except Exception:
+                    pass
+                return
+
+            # --- Pairing countdown
+            if data.startswith("pairingCountdown:"):
+                val_str = data.split(":", 1)[1].strip()
+                try:
+                    if dpg.does_item_exist("pairing_status"):
+                        dpg.set_value("pairing_status", f"Pairing: ACTIVE {val_str}s")
+                except Exception:
+                    pass
                 return
 
             # Inne (nie-plot) linie zostawiamy jako log (np. SILNIK)
-            if "SILNIK" in data.upper() or "blad silnika" in data.lower():
-                self.calibration_tab.add_app_log(f"[SILNIK] {data}")
+            if "MOTOR" in data.upper() or "motor error" in data.lower():
+                self.calibration_tab.add_app_log(f"[MOTOR] {data}")
 
         except ValueError as val_err:
-            self.calibration_tab.add_app_log(f"BLAD: Nieprawidlowa wartosc - {str(val_err)}")
+            self.calibration_tab.add_app_log(f"ERROR: Invalid value - {str(val_err)}")
         except Exception as e:
-            self.calibration_tab.add_app_log(f"BLAD przetwarzania danych: {str(e)}")
+            self.calibration_tab.add_app_log(f"ERROR processing data: {str(e)}")
     
     def serial_write_callback(self, data: str):
         """Callback for written serial data."""
@@ -315,14 +340,16 @@ class CaliperGUI:
                 "motorState:",
                 "sessionName:",
                 "dropMeas:",
+                "pairing:",
+                "pairingCountdown:",
             )
         ):
             self.process_measurement_data(payload)
             return
 
         # Motor / other status lines
-        if "SILNIK" in payload.upper() or "blad silnika" in payload.lower():
-            self.calibration_tab.add_app_log(f"[SILNIK] {payload}")
+        if "MOTOR" in payload.upper() or "motor error" in payload.lower():
+            self.calibration_tab.add_app_log(f"[MOTOR] {payload}")
     
     def key_press_handler(self, sender, key):
         """Handle keyboard shortcuts"""
@@ -338,7 +365,7 @@ class CaliperGUI:
             if self.serial_handler is None or not self.serial_handler.is_open():
                 try:
                     if dpg.does_item_exist("status"):
-                        dpg.set_value("status", "BŁĄD: Port nie jest otwarty (hotkey: p)")
+                        dpg.set_value("status", "ERROR: Port not open (hotkey: p)")
                 except Exception:
                     pass
                 return
@@ -346,7 +373,7 @@ class CaliperGUI:
             self.serial_handler.write("m")
             try:
                 if dpg.does_item_exist("status"):
-                    dpg.set_value("status", "Hotkey: p → wykonaj pomiar")
+                    dpg.set_value("status", "Hotkey: p → measure")
             except Exception:
                 pass
             self.calibration_tab.add_app_log("[HOTKEY] p -> m")
@@ -392,10 +419,10 @@ class CaliperGUI:
         
         # Create viewport
         # Większa wysokość, żeby wykres i historia były widoczne bez ucinania po starcie.
-        dpg.create_viewport(title="Caliper - aplikacja COM", width=1200, height=850)
+        dpg.create_viewport(title="Caliper - COM Application", width=1200, height=850)
 
         # Main window
-        with dpg.window(label="Caliper - aplikacja", width=1180, height=810):
+        with dpg.window(label="Caliper - Application", width=1180, height=810):
             # Uwaga: `dpg.tab` MUSI mieć jako rodzica `mvTabBar`.
             # Nie polegamy na `dpg.last_container()` (potrafi wskazać ostatnio utworzony kontener,
             # a nie aktualny `tab_bar`), tylko przekazujemy jawnie identyfikator/tab tag.

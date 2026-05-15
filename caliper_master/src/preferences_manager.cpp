@@ -177,3 +177,81 @@ bool PreferencesManager::validateCalibrationOffset(float value) const
 {
   return value >= MIN_CALIBRATION_OFFSET && value <= MAX_CALIBRATION_OFFSET;
 }
+
+static bool isMacUnset(const uint8_t mac[6])
+{
+  for (int i = 0; i < 6; i++)
+  {
+    if (mac[i] != 0x00)
+    {
+      return false;
+    }
+  }
+  return true;
+}
+
+bool PreferencesManager::saveSlaveMac(const uint8_t mac[6])
+{
+  if (isMacUnset(mac))
+  {
+    DEBUG_W("PreferencesManager: Refusing to save unset slave MAC");
+    return false;
+  }
+  prefs.putBytes(KEY_SLAVE_MAC, mac, 6);
+  DEBUG_I("PreferencesManager: Saved slave MAC: %02X:%02X:%02X:%02X:%02X:%02X",
+    mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
+  return true;
+}
+
+bool PreferencesManager::loadSlaveMac(uint8_t mac[6])
+{
+  memset(mac, 0, 6);
+  prefs.getBytes(KEY_SLAVE_MAC, mac, 6);
+  if (isMacUnset(mac))
+  {
+    DEBUG_I("PreferencesManager: No slave MAC in NVS");
+    return false;
+  }
+  DEBUG_I("PreferencesManager: Loaded slave MAC: %02X:%02X:%02X:%02X:%02X:%02X",
+    mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
+  return true;
+}
+
+void PreferencesManager::clearSlaveMac()
+{
+  prefs.remove(KEY_SLAVE_MAC);
+  DEBUG_I("PreferencesManager: Cleared slave MAC");
+}
+
+bool PreferencesManager::saveRcMac(const uint8_t mac[6])
+{
+  if (isMacUnset(mac))
+  {
+    DEBUG_W("PreferencesManager: Refusing to save unset RC MAC");
+    return false;
+  }
+  prefs.putBytes(KEY_RC_MAC, mac, 6);
+  DEBUG_I("PreferencesManager: Saved RC MAC: %02X:%02X:%02X:%02X:%02X:%02X",
+    mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
+  return true;
+}
+
+bool PreferencesManager::loadRcMac(uint8_t mac[6])
+{
+  memset(mac, 0, 6);
+  prefs.getBytes(KEY_RC_MAC, mac, 6);
+  if (isMacUnset(mac))
+  {
+    DEBUG_I("PreferencesManager: No RC MAC in NVS");
+    return false;
+  }
+  DEBUG_I("PreferencesManager: Loaded RC MAC: %02X:%02X:%02X:%02X:%02X:%02X",
+    mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
+  return true;
+}
+
+void PreferencesManager::clearRcMac()
+{
+  prefs.remove(KEY_RC_MAC);
+  DEBUG_I("PreferencesManager: Cleared RC MAC");
+}

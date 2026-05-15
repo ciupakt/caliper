@@ -50,6 +50,12 @@ public:
    */
   ErrorCode sendMessage(const MessageMaster &message, int retryCount = ESPNOW_MAX_RETRIES);
 
+  ErrorCode updatePeerAddress(const uint8_t *newAddr);
+
+  ErrorCode addRcPeer(const uint8_t *rcAddr);
+
+  void removeRcPeer();
+
   /**
    * @brief Check if communication is initialized
    * @return true if initialized, false otherwise
