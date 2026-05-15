@@ -13,21 +13,11 @@
 #include <shared_config.h>
 
 // ============================================================================
-// Device MAC Address Configuration
-// ============================================================================
-
-/**
- * @brief MAC address of the Master device
- * Default/fallback — overridden by NVS if paired.
- */
-#define MASTER_MAC_ADDR {0x10, 0xB4, 0x1D, 0xD6, 0x40, 0xBB}
-
-// ============================================================================
 // Button Pin Configuration (ESP32-C3 Super Mini)
 // ============================================================================
 
-#define BUTTON_TRIG_PIN 8
-#define BUTTON_DROP_PIN 9
+#define BUTTON_TRIG_PIN 0
+#define BUTTON_DROP_PIN 1
 #define DEBOUNCE_DELAY_MS 50
 
 // ============================================================================

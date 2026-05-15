@@ -412,6 +412,12 @@ class CaliperGUI:
                 dpg.add_font_range_hint(dpg.mvFontRangeHint_Default)
                 dpg.add_font_range(0x0100, 0x017F)
                 dpg.add_font_range(0x0180, 0x024F)
+
+            # Font mały (do logów – pół rozmiaru domyślnego)
+            with dpg.font(font_path, 13, tag="font_small"):
+                dpg.add_font_range_hint(dpg.mvFontRangeHint_Default)
+                dpg.add_font_range(0x0100, 0x017F)
+                dpg.add_font_range(0x0180, 0x024F)
         
         # Handler registry
         with dpg.handler_registry():

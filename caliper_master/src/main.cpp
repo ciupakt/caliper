@@ -21,6 +21,8 @@ static uint32_t pairingModeStartMs = 0;
 static uint32_t lastPairBroadcastMs = 0;
 static uint8_t pairedRcAddress[6] = {};
 static bool hasPairedRc = false;
+static volatile bool rcTrigMeasPending = false;
+static volatile bool rcDropMeasPending = false;
 // TODO: Wypisz MAC Address Mastera
 WebServer server(WEB_SERVER_PORT);
 CommunicationManager commManager;
@@ -87,7 +89,21 @@ void OnDataRecv(const esp_now_recv_info_t *recv_info, const uint8_t *incomingDat
     MessageSlave msg{};
     memcpy(&msg, incomingData, sizeof(msg));
 
-    if (pairingMode)
+  if (rcTrigMeasPending)
+  {
+    rcTrigMeasPending = false;
+    DEBUG_I("RC komenda: R");
+    requestMeasurement();
+  }
+
+  if (rcDropMeasPending)
+  {
+    rcDropMeasPending = false;
+    DEBUG_I("RC: DROP_MEAS -> dropMeas:1");
+    DEBUG_PLOT("dropMeas:1");
+  }
+
+  if (pairingMode)
     {
       commManager.updatePeerAddress(src_addr);
       prefsManager.saveSlaveMac(src_addr);
@@ -129,16 +145,13 @@ void OnDataRecv(const esp_now_recv_info_t *recv_info, const uint8_t *incomingDat
       return;
     }
 
-    DEBUG_I("RC komenda: %c", (char)msg.command);
-
     if (msg.command == CMD_TRIG_MEAS)
     {
-      requestMeasurement();
+      rcTrigMeasPending = true;
     }
     else if (msg.command == CMD_DROP_MEAS)
     {
-      DEBUG_PLOT("dropMeas:1");
-      DEBUG_I("RC: DROP_MEAS -> dropMeas:1");
+      rcDropMeasPending = true;
     }
     else if (msg.command != CMD_PAIR && msg.command != CMD_PAIR_ACK)
     {
@@ -814,6 +827,20 @@ void setup()
 
 void loop()
 {
+  if (rcTrigMeasPending)
+  {
+    rcTrigMeasPending = false;
+    DEBUG_I("RC komenda: R");
+    requestMeasurement();
+  }
+
+  if (rcDropMeasPending)
+  {
+    rcDropMeasPending = false;
+    DEBUG_I("RC: DROP_MEAS -> dropMeas:1");
+    DEBUG_PLOT("dropMeas:1");
+  }
+
   if (pairingMode)
   {
     uint32_t now = millis();

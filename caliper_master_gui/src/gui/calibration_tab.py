@@ -46,205 +46,205 @@ class CalibrationTab:
     def create(self, parent: int, serial_handler):
         """Create the calibration tab UI"""
         with dpg.tab(label="Calibration", parent=parent):
-            dpg.add_spacer(height=5)
+            with dpg.child_window(no_scrollbar=True, tag="cal_tab_root"):
+                dpg.add_spacer(height=5)
 
-            # Status tylko dla tej zakładki (żeby feedback był widoczny nawet gdy user nie jest w 'Pomiary')
-            dpg.add_text("", tag="cal_tab_status")
-            dpg.add_spacer(height=10)
+                dpg.add_text("", tag="cal_tab_status")
+                dpg.add_spacer(height=10)
 
-            with dpg.group(horizontal=True):
-                # --- Konfiguracja pomiaru
-                with dpg.group():
-                    dpg.add_text("Measurement Configuration:", color=(100, 200, 255))
-                    dpg.add_spacer(height=5)
+                with dpg.group(horizontal=True):
+                    # --- Konfiguracja pomiaru
+                    with dpg.group():
+                        dpg.add_text("Measurement Configuration:", color=(100, 200, 255))
+                        dpg.add_spacer(height=5)
 
-                    dpg.add_input_int(
-                        label="timeout (ms)",
-                        tag="tx_timeout_input",
-                        default_value=0,
-                        min_value=0,
-                        max_value=600000,
-                        width=220,
-                    )
-                    dpg.add_input_int(
-                        label="motorTorque (0-255)",
-                        tag="tx_torque_input",
-                        default_value=0,
-                        min_value=0,
-                        max_value=255,
-                        width=220,
-                    )
-                    dpg.add_input_int(
-                        label="motorSpeed (0-255)",
-                        tag="tx_speed_input",
-                        default_value=255,
-                        min_value=0,
-                        max_value=255,
-                        width=220,
-                    )
-                    dpg.add_combo(
-                        label="motorState",
-                        tag="tx_state_input",
-                        items=[
-                            "MOTOR_STOP (0)",
-                            "MOTOR_FORWARD (1)",
-                            "MOTOR_REVERSE (2)",
-                            "MOTOR_BRAKE (3)",
-                        ],
-                        default_value="MOTOR_STOP (0)",
-                        width=220,
-                    )
+                        dpg.add_input_int(
+                            label="timeout (ms)",
+                            tag="tx_timeout_input",
+                            default_value=0,
+                            min_value=0,
+                            max_value=600000,
+                            width=220,
+                        )
+                        dpg.add_input_int(
+                            label="motorTorque (0-255)",
+                            tag="tx_torque_input",
+                            default_value=0,
+                            min_value=0,
+                            max_value=255,
+                            width=220,
+                        )
+                        dpg.add_input_int(
+                            label="motorSpeed (0-255)",
+                            tag="tx_speed_input",
+                            default_value=255,
+                            min_value=0,
+                            max_value=255,
+                            width=220,
+                        )
+                        dpg.add_combo(
+                            label="motorState",
+                            tag="tx_state_input",
+                            items=[
+                                "MOTOR_STOP (0)",
+                                "MOTOR_FORWARD (1)",
+                                "MOTOR_REVERSE (2)",
+                                "MOTOR_BRAKE (3)",
+                            ],
+                            default_value="MOTOR_STOP (0)",
+                            width=220,
+                        )
 
-                    dpg.add_spacer(height=5)
-                    with dpg.group(horizontal=True):
+                        dpg.add_spacer(height=5)
+                        with dpg.group(horizontal=True):
+                            dpg.add_button(
+                                label="Apply",
+                                callback=self._apply_measurement_config,
+                                width=150,
+                                height=30,
+                                user_data=serial_handler,
+                            )
+                            dpg.add_button(
+                                label="Motortest",
+                                callback=self._send_motortest,
+                                width=150,
+                                height=30,
+                                user_data=serial_handler,
+                            )
+                            dpg.add_button(
+                                label="Refresh Settings",
+                                callback=self._refresh_settings,
+                                width=150,
+                                height=30,
+                                user_data=serial_handler,
+                            )
+                        with dpg.group(horizontal=True):
+                            dpg.add_button(
+                                label="OTA (Slave)",
+                                callback=self._send_ota,
+                                width=150,
+                                height=30,
+                                user_data=serial_handler,
+                            )
+                            dpg.add_button(
+                                label="Pairing",
+                                callback=self._send_pairing,
+                                width=150,
+                                height=30,
+                                user_data=serial_handler,
+                            )
+                        dpg.add_spacer(height=5)
+                        dpg.add_text("", tag="pairing_status")
+
+                    dpg.add_spacer(width=30)
+
+                    # --- Kalibracja
+                    with dpg.group():
+                        dpg.add_text("Calibration (Master local):", color=(100, 200, 255))
+                        dpg.add_spacer(height=5)
+
+                        dpg.add_text("Raw: n/a", tag="cal_raw_display")
+                        dpg.add_text(
+                            "Current offset: 0.000 mm",
+                            tag="cal_offset_display",
+                            color=(198, 40, 40),
+                        )
+                        dpg.add_text("Corrected: n/a", tag="cal_corrected_display")
+                        dpg.add_spacer(height=5)
+
+                        dpg.add_input_float(
+                            label="calibrationOffset (mm)",
+                            tag="cal_offset_input",
+                            default_value=0.0,
+                            min_value=-14.999,
+                            max_value=14.999,
+                            format="%.3f",
+                            width=180,
+                        )
+
                         dpg.add_button(
-                            label="Apply",
-                            callback=self._apply_measurement_config,
-                            width=150,
+                            label="Get Current Measurement",
+                            callback=self._calibration_measure,
+                            width=220,
                             height=30,
                             user_data=serial_handler,
                         )
                         dpg.add_button(
-                            label="Motortest",
-                            callback=self._send_motortest,
-                            width=150,
+                            label="Apply Offset",
+                            callback=self._apply_calibration_offset,
+                            width=220,
                             height=30,
                             user_data=serial_handler,
                         )
-                        dpg.add_button(
-                            label="Refresh Settings",
-                            callback=self._refresh_settings,
-                            width=150,
-                            height=30,
-                            user_data=serial_handler,
+
+                        dpg.add_spacer(height=10)
+                        dpg.add_text(
+                            "ESP32 Master Web: http://192.168.4.1", color=(100, 255, 100)
                         )
-                    with dpg.group(horizontal=True):
-                        dpg.add_button(
-                            label="OTA (Slave)",
-                            callback=self._send_ota,
-                            width=150,
-                            height=30,
-                            user_data=serial_handler,
+                        dpg.add_text(
+                            "WiFi: Orange_WiFi (password: 1670$2026)", color=(100, 255, 100)
                         )
-                        dpg.add_button(
-                            label="Pairing",
-                            callback=self._send_pairing,
-                            width=150,
-                            height=30,
-                            user_data=serial_handler,
+
+                dpg.add_spacer(height=5)
+                dpg.add_separator()
+                dpg.add_spacer(height=5)
+
+                with dpg.group(horizontal=True):
+                    # Log komunikacji serial
+                    with dpg.group():
+                        dpg.add_text(
+                            "Serial Communication Log (dblclick = clear):",
+                            color=(100, 200, 255),
                         )
-                    dpg.add_spacer(height=5)
-                    dpg.add_text("", tag="pairing_status")
-
-                dpg.add_spacer(width=30)
-
-                # --- Kalibracja
-                with dpg.group():
-                    dpg.add_text("Calibration (Master local):", color=(100, 200, 255))
-                    dpg.add_spacer(height=5)
-
-                    # Podgląd jak w WWW: surowy / aktualny offset / skorygowany
-                    dpg.add_text("Raw: n/a", tag="cal_raw_display")
-                    dpg.add_text(
-                        "Current offset: 0.000 mm",
-                        tag="cal_offset_display",
-                        color=(198, 40, 40),
-                    )
-                    dpg.add_text("Corrected: n/a", tag="cal_corrected_display")
-                    dpg.add_spacer(height=5)
-
-                    dpg.add_input_float(
-                        label="calibrationOffset (mm)",
-                        tag="cal_offset_input",
-                        default_value=0.0,
-                        min_value=-14.999,
-                        max_value=14.999,
-                        format="%.3f",
-                        width=180,
-                    )
-
-                    dpg.add_button(
-                        label="Get Current Measurement",
-                        callback=self._calibration_measure,
-                        width=220,
-                        height=30,
-                        user_data=serial_handler,
-                    )
-                    dpg.add_button(
-                        label="Apply Offset",
-                        callback=self._apply_calibration_offset,
-                        width=220,
-                        height=30,
-                        user_data=serial_handler,
-                    )
-
-                    dpg.add_spacer(height=10)
-                    dpg.add_text(
-                        "ESP32 Master Web: http://192.168.4.1", color=(100, 255, 100)
-                    )
-                    # Wartości zgodne z [`config.h`](caliper_master/src/config.h:33)
-                    dpg.add_text(
-                        "WiFi: Orange_WiFi (password: 1670$2026)", color=(100, 255, 100)
-                    )
-
-            dpg.add_spacer(height=10)
-            dpg.add_separator()
-            dpg.add_spacer(height=10)
-
-            # --- Obszary logów
-            dpg.add_separator()
-            dpg.add_spacer(height=10)
-
-            with dpg.group(horizontal=True):
-                # Log komunikacji serial
-                with dpg.group():
-                    dpg.add_text(
-                        "Serial Communication Log (dblclick = clear):",
-                        color=(100, 200, 255),
-                    )
-                    dpg.add_spacer(height=5)
-                    with dpg.child_window(width=560, height=200, tag="cal_serial_log"):
-                        with dpg.group(tag="cal_serial_log_container"):
-                            pass
-                    # Dodaj handler kliknięcia do czyszczenia logów
-                    with dpg.item_handler_registry(tag="serial_log_click_handler"):
-                        dpg.add_item_clicked_handler(
-                            callback=self._on_log_clicked, user_data="serial"
+                        dpg.add_input_text(
+                            multiline=True,
+                            readonly=True,
+                            width=555,
+                            height=300,
+                            tag="cal_serial_log",
                         )
-                    dpg.bind_item_handler_registry(
-                        "cal_serial_log_container", "serial_log_click_handler"
-                    )
-
-                dpg.add_spacer(width=20)
-
-                # Log aplikacji
-                with dpg.group():
-                    dpg.add_text(
-                        "App Log (dblclick = clear):", color=(100, 200, 255)
-                    )
-                    dpg.add_spacer(height=5)
-                    with dpg.child_window(width=560, height=200, tag="cal_app_log"):
-                        with dpg.group(tag="cal_app_log_container"):
-                            pass
-                    # Dodaj handler kliknięcia do czyszczenia logów
-                    with dpg.item_handler_registry(tag="app_log_click_handler"):
-                        dpg.add_item_clicked_handler(
-                            callback=self._on_log_clicked, user_data="app"
+                        if dpg.does_item_exist("font_small"):
+                            dpg.bind_item_font("cal_serial_log", "font_small")
+                        with dpg.item_handler_registry(tag="serial_log_click_handler"):
+                            dpg.add_item_clicked_handler(
+                                callback=self._on_log_clicked, user_data="serial"
+                            )
+                        dpg.bind_item_handler_registry(
+                            "cal_serial_log", "serial_log_click_handler"
                         )
-                    dpg.bind_item_handler_registry(
-                        "cal_app_log_container", "app_log_click_handler"
-                    )
+
+                    dpg.add_spacer(width=20)
+
+                    # Log aplikacji
+                    with dpg.group():
+                        dpg.add_text(
+                            "App Log (dblclick = clear):", color=(100, 200, 255)
+                        )
+                        dpg.add_input_text(
+                            multiline=True,
+                            readonly=True,
+                            width=555,
+                            height=300,
+                            tag="cal_app_log",
+                        )
+                        if dpg.does_item_exist("font_small"):
+                            dpg.bind_item_font("cal_app_log", "font_small")
+                        with dpg.item_handler_registry(tag="app_log_click_handler"):
+                            dpg.add_item_clicked_handler(
+                                callback=self._on_log_clicked, user_data="app"
+                            )
+                        dpg.bind_item_handler_registry(
+                            "cal_app_log", "app_log_click_handler"
+                        )
 
     def add_serial_log(self, line: str):
         """Add a line to the serial log with timestamp"""
         timestamp = datetime.now().strftime("[%H:%M:%S.%f]")[:-3]  # [HH:MM:SS.mmm]
         self.serial_log_lines.append(f"{timestamp} {line}")
-        if dpg.does_item_exist("cal_serial_log_container"):
-            dpg.add_text(f"{timestamp} {line}", parent="cal_serial_log_container")
-            children = dpg.get_item_children("cal_serial_log_container", 1)
-            while children is not None and len(children) > self.max_lines:
-                dpg.delete_item(children[0])
-                children = dpg.get_item_children("cal_serial_log_container", 1)
+        while len(self.serial_log_lines) > self.max_lines:
+            self.serial_log_lines.popleft()
+        if dpg.does_item_exist("cal_serial_log"):
+            dpg.set_value("cal_serial_log", "\n".join(self.serial_log_lines))
 
             def _autoscroll():
                 try:
@@ -261,12 +261,10 @@ class CalibrationTab:
         """Add a line to the app log with timestamp"""
         timestamp = datetime.now().strftime("[%H:%M:%S.%f]")[:-3]  # [HH:MM:SS.mmm]
         self.app_log_lines.append(f"{timestamp} {line}")
-        if dpg.does_item_exist("cal_app_log_container"):
-            dpg.add_text(f"{timestamp} {line}", parent="cal_app_log_container")
-            children = dpg.get_item_children("cal_app_log_container", 1)
-            while children is not None and len(children) > self.max_lines:
-                dpg.delete_item(children[0])
-                children = dpg.get_item_children("cal_app_log_container", 1)
+        while len(self.app_log_lines) > self.max_lines:
+            self.app_log_lines.popleft()
+        if dpg.does_item_exist("cal_app_log"):
+            dpg.set_value("cal_app_log", "\n".join(self.app_log_lines))
 
             def _autoscroll():
                 try:
@@ -422,27 +420,24 @@ class CalibrationTab:
         """Handle double click on log areas - clear logs on double click"""
         current_time = time.time()
 
-        # Sprawdź, czy to podwójne kliknięcie
         if current_time - self.last_click_time < self.double_click_threshold:
-            # To podwójne kliknięcie - wyczyść odpowiednie logi
             log_type = user_data
             if log_type == "serial":
                 self.serial_log_lines.clear()
-                if dpg.does_item_exist("cal_serial_log_container"):
-                    dpg.delete_item("cal_serial_log_container", children_only=True)
+                if dpg.does_item_exist("cal_serial_log"):
+                    dpg.set_value("cal_serial_log", "")
             elif log_type == "app":
                 self.app_log_lines.clear()
-                if dpg.does_item_exist("cal_app_log_container"):
-                    dpg.delete_item("cal_app_log_container", children_only=True)
+                if dpg.does_item_exist("cal_app_log"):
+                    dpg.set_value("cal_app_log", "")
 
-        # Zaktualizuj czas ostatniego kliknięcia
         self.last_click_time = current_time
 
     def clear_logs(self):
         """Clear all log lines"""
         self.serial_log_lines.clear()
         self.app_log_lines.clear()
-        if dpg.does_item_exist("cal_serial_log_container"):
-            dpg.delete_item("cal_serial_log_container", children_only=True)
-        if dpg.does_item_exist("cal_app_log_container"):
-            dpg.delete_item("cal_app_log_container", children_only=True)
+        if dpg.does_item_exist("cal_serial_log"):
+            dpg.set_value("cal_serial_log", "")
+        if dpg.does_item_exist("cal_app_log"):
+            dpg.set_value("cal_app_log", "")

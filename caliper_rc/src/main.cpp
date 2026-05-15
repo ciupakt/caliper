@@ -9,7 +9,7 @@
 #include <arduino-timer.h>
 #include "communication.h"
 
-uint8_t masterAddress[] = MASTER_MAC_ADDR;
+uint8_t masterAddress[6] = {0};
 
 Preferences rcPrefs;
 CommunicationManager commManager;
@@ -27,6 +27,7 @@ static unsigned long ledOnTime = 0;
 static bool pairingMode = false;
 static uint32_t pairingModeStartMs = 0;
 static bool hasStoredMasterMac = false;
+static bool isPaired = false;
 
 static bool isMacUnset(const uint8_t mac[6])
 {
@@ -79,6 +80,8 @@ void OnDataRecv(const esp_now_recv_info_t *recv_info, const uint8_t *incomingDat
 
       rcPrefs.putBytes("masterMac", src_addr, 6);
 
+      isPaired = false;
+
       MessageRC pairResp{};
       pairResp.command = CMD_PAIR;
       commManager.sendMessage(pairResp);
@@ -92,6 +95,7 @@ void OnDataRecv(const esp_now_recv_info_t *recv_info, const uint8_t *incomingDat
     {
       rcPrefs.putBytes("masterMac", src_addr, 6);
       hasStoredMasterMac = true;
+      isPaired = true;
       exitPairingMode();
       DEBUG_I("RC: Parowanie zakończone");
       return;
@@ -114,6 +118,12 @@ void OnDataSent(const wifi_tx_info_t *info, esp_now_send_status_t status)
 
 static void sendRCCommand(CommandType cmd)
 {
+  if (!isPaired)
+  {
+    DEBUG_W("RC: nie sparowane — komenda %c zignorowana", (char)cmd);
+    return;
+  }
+
   MessageRC msg{};
   msg.command = cmd;
 
@@ -201,12 +211,13 @@ void setup()
   {
     memcpy(masterAddress, storedMasterMac, 6);
     hasStoredMasterMac = true;
-    DEBUG_I("Master MAC z NVS: %02X:%02X:%02X:%02X:%02X:%02X",
+    isPaired = true;
+    DEBUG_I("Master MAC z NVS: %02X:%02X:%02X:%02X:%02X:%02X (sparowany)",
       masterAddress[0], masterAddress[1], masterAddress[2], masterAddress[3], masterAddress[4], masterAddress[5]);
   }
   else
   {
-    DEBUG_W("Brak Master MAC w NVS — używam fallback z config.h");
+    DEBUG_W("Brak Master MAC w NVS — czekam na sparowanie");
     hasStoredMasterMac = false;
   }
 
@@ -232,6 +243,16 @@ void setup()
   enterPairingMode();
 
   DEBUG_I("RC gotowy. Przycisk TRIG=GPIO%d, DROP=GPIO%d", BUTTON_TRIG_PIN, BUTTON_DROP_PIN);
+
+  if (hasStoredMasterMac)
+  {
+    DEBUG_I("Ostatnio sparowany Master: %02X:%02X:%02X:%02X:%02X:%02X",
+      masterAddress[0], masterAddress[1], masterAddress[2], masterAddress[3], masterAddress[4], masterAddress[5]);
+  }
+  else
+  {
+    DEBUG_I("Brak sparowanego Mastera — czekam na parowanie");
+  }
 }
 
 void loop()
