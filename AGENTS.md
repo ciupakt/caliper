@@ -5,7 +5,7 @@
 Projekt Caliper składa się z trzech podprojektów PlatformIO oraz aplikacji GUI:
 
 - `caliper_master` – główny sterownik (ESP32) z AP WiFi + HTTP + ESP-NOW + LittleFS (UI web w `data/`)
-- `caliper_slave` – sterownik (ESP32) suwmiarki + akcelerometru + silnika + baterii + ESP-NOW
+- `caliper_slave` – sterownik (ESP32-S3) suwmiarki + akcelerometru + silnika + baterii + ESP-NOW
 - `caliper_rc` – pilot bezprzewodowy (ESP32-C3) z dwoma przyciskami (TRIG_MEAS / DROP_MEAS) + ESP-NOW
 - `caliper_master_gui` – aplikacja GUI w Pythonie (Dear PyGui) do sterowania i wizualizacji
 - `lib/CaliperShared` – współdzielona biblioteka dla Master, Slave i RC (wspólne typy/stałe + makra debug)
@@ -18,7 +18,9 @@ Projekt Caliper składa się z trzech podprojektów PlatformIO oraz aplikacji GU
 
 ## Kompilacja projektu (PlatformIO)
 
-Używany environment w obu projektach: `esp32doit-devkit-v1`.
+Używane environment'y:
+- `caliper_slave` – płytka `esp32-s3-devkitc-1` (ESP32-S3)
+- `caliper_master` – environment `caliper_master` (ESP32)
 
 Wyjątek: `caliper_rc` używa environment `caliper_rc` z płytką `nologo_esp32c3_super_mini`.
 
@@ -27,7 +29,7 @@ Uwaga: w poniższych poleceniach używany jest bezpośrednio `platformio.exe` z 
 ### Kompilacja `caliper_slave`
 
 ```powershell
-cd caliper_slave && C:\Users\tiim\.platformio\penv\Scripts\platformio.exe run --environment esp32doit-devkit-v1
+cd caliper_slave && C:\Users\tiim\.platformio\penv\Scripts\platformio.exe run --environment caliper_slave
 ```
 
 ### Kompilacja `caliper_master`
@@ -54,7 +56,7 @@ Jeśli port upload jest inny, dodaj `--upload-port COMx`.
 ### Wgranie `caliper_slave`
 
 ```powershell
-cd caliper_slave && C:\Users\tiim\.platformio\penv\Scripts\platformio.exe run --target upload -s --environment esp32doit-devkit-v1 --upload-port COM8
+cd caliper_slave && C:\Users\tiim\.platformio\penv\Scripts\platformio.exe run --target upload -s --environment caliper_slave --upload-port COM8
 ```
 
 ### Wgranie `caliper_master`
@@ -80,8 +82,8 @@ cd caliper_master && C:\Users\tiim\.platformio\penv\Scripts\platformio.exe run -
 ## Czyszczenie plików kompilacji
 
 ```powershell
-cd caliper_slave && C:\Users\tiim\.platformio\penv\Scripts\platformio.exe run --target clean --environment esp32doit-devkit-v1
-cd caliper_master && C:\Users\tiim\.platformio\penv\Scripts\platformio.exe run --target clean --environment esp32doit-devkit-v1
+cd caliper_slave && C:\Users\tiim\.platformio\penv\Scripts\platformio.exe run --target clean --environment caliper_slave
+cd caliper_master && C:\Users\tiim\.platformio\penv\Scripts\platformio.exe run --target clean --environment caliper_master
 ```
 
 ## Struktura projektu
@@ -116,8 +118,10 @@ caliper_slave/
 │   │   └── accelerometer.h/.cpp    # Obsługa IIS328DQ (I2C) + wyliczanie kątów
 │   ├── motor/
 │   │   └── motor_ctrl.h/.cpp       # Sterowanie silnikiem STSPIN250 (PWM, PH, REF, EN, FAULT)
-│   └── power/
-│       └── battery.h/.cpp          # Pomiar napięcia baterii (ADC)
+│   ├── power/
+│   │   └── battery.h/.cpp          # Pomiar napięcia baterii (ADC)
+│   └── ota/
+│       └── ota_update.h/.cpp       # Aktualizacja OTA (WiFi AP + ArduinoOTA)
 └── platformio.ini
 ```
 
@@ -172,8 +176,8 @@ lib/CaliperShared/
 
 ### `caliper_slave`
 
-- Platforma: Espressif 32 (ESP32 DOIT DEVKIT V1)
-- Mikrokontroler: ESP32 240MHz, 320KB RAM, 4MB Flash
+- Platforma: Espressif 32 (ESP32-S3-DevKitC-1-N8)
+- Mikrokontroler: ESP32-S3 240MHz, 320KB RAM, 8MB Flash
 - Biblioteki: `arduino-timer`
 
 ### `caliper_master`
@@ -219,6 +223,6 @@ python -m pytest tests/
 ## Uwagi
 
 - Kompilacja może generować ostrzeżenia, które nie przerywają procesu.
-- Pliki firmware są generowane w katalogu `.pio\build\[board]\firmware.bin` (np. `.pio\build\esp32doit-devkit-v1\firmware.bin`).
+- Pliki firmware są generowane w katalogu `.pio\build\[environment]\firmware.bin` (np. `.pio\build\caliper_slave\firmware.bin`).
 - Aby włączyć tryb szczegółowy PlatformIO, dodaj opcję `-v` / `--verbose`.
 - `caliper_master` wymaga jednorazowego wgrania LittleFS (`uploadfs`) po zmianach w `caliper_master/data/`.
