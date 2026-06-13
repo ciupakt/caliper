@@ -74,6 +74,16 @@ void PreferencesManager::loadSettings(SystemStatus *status)
   }
   status->calibrationOffset = calibrationOffset;
   DEBUG_I("PreferencesManager: Loaded calibrationOffset = %.3f mm", calibrationOffset);
+
+  // Load reference
+  float reference = prefs.getFloat(KEY_REFERENCE, DEFAULT_REFERENCE);
+  if (!validateReference(reference))
+  {
+    DEBUG_W("PreferencesManager: Invalid reference loaded (%.3f), using default", reference);
+    reference = DEFAULT_REFERENCE;
+  }
+  status->reference = reference;
+  DEBUG_I("PreferencesManager: Loaded reference = %.3f mm", reference);
 }
 
 void PreferencesManager::saveMotorSpeed(uint8_t value)
@@ -124,6 +134,18 @@ void PreferencesManager::saveCalibrationOffset(float value)
   DEBUG_I("PreferencesManager: Saved calibrationOffset = %.3f mm", value);
 }
 
+void PreferencesManager::saveReference(float value)
+{
+  if (!validateReference(value))
+  {
+    DEBUG_E("PreferencesManager: Invalid reference value (%.3f), not saving", value);
+    return;
+  }
+
+  prefs.putFloat(KEY_REFERENCE, value);
+  DEBUG_I("PreferencesManager: Saved reference = %.3f mm", value);
+}
+
 void PreferencesManager::resetToDefaults()
 {
   DEBUG_I("PreferencesManager: Resetting all settings to defaults");
@@ -136,12 +158,14 @@ void PreferencesManager::resetToDefaults()
   prefs.putUChar(KEY_MOTOR_TORQUE, DEFAULT_MOTOR_TORQUE);
   prefs.putUInt(KEY_TIMEOUT, DEFAULT_TIMEOUT_MS);
   prefs.putFloat(KEY_CALIBRATION_OFFSET, DEFAULT_CALIBRATION_OFFSET);
+  prefs.putFloat(KEY_REFERENCE, DEFAULT_REFERENCE);
 
   DEBUG_I("PreferencesManager: Settings reset to defaults:");
   DEBUG_I("  motorSpeed = %u", DEFAULT_MOTOR_SPEED);
   DEBUG_I("  motorTorque = %u", DEFAULT_MOTOR_TORQUE);
   DEBUG_I("  timeout = %u ms", DEFAULT_TIMEOUT_MS);
   DEBUG_I("  calibrationOffset = %.3f mm", DEFAULT_CALIBRATION_OFFSET);
+  DEBUG_I("  reference = %.3f mm", DEFAULT_REFERENCE);
 }
 
 bool PreferencesManager::isSettingsValid()
@@ -151,11 +175,13 @@ bool PreferencesManager::isSettingsValid()
   uint8_t motorTorque = prefs.getUChar(KEY_MOTOR_TORQUE, DEFAULT_MOTOR_TORQUE);
   uint32_t timeout = prefs.getUInt(KEY_TIMEOUT, DEFAULT_TIMEOUT_MS);
   float calibrationOffset = prefs.getFloat(KEY_CALIBRATION_OFFSET, DEFAULT_CALIBRATION_OFFSET);
+  float reference = prefs.getFloat(KEY_REFERENCE, DEFAULT_REFERENCE);
 
   return validateMotorSpeed(motorSpeed) &&
          validateMotorTorque(motorTorque) &&
          validateTimeout(timeout) &&
-         validateCalibrationOffset(calibrationOffset);
+         validateCalibrationOffset(calibrationOffset) &&
+         validateReference(reference);
 }
 
 bool PreferencesManager::validateMotorSpeed(uint8_t value) const
@@ -176,6 +202,11 @@ bool PreferencesManager::validateTimeout(uint32_t value) const
 bool PreferencesManager::validateCalibrationOffset(float value) const
 {
   return value >= MIN_CALIBRATION_OFFSET && value <= MAX_CALIBRATION_OFFSET;
+}
+
+bool PreferencesManager::validateReference(float value) const
+{
+  return value >= MIN_REFERENCE && value <= MAX_REFERENCE;
 }
 
 static bool isMacUnset(const uint8_t mac[6])

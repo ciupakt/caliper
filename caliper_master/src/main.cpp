@@ -253,6 +253,7 @@ static bool waitForMeasurementReady(uint32_t timeoutMs)
   // corrected = measurement + calibrationOffset
   DEBUG_PLOT("sessionName:%s", systemStatus.sessionName);
   DEBUG_PLOT("calibrationOffset:%.3f", (double)systemStatus.calibrationOffset);
+  DEBUG_PLOT("reference:%.3f", (double)systemStatus.reference);
   DEBUG_PLOT("angleZ:%u", (unsigned)systemStatus.msgSlave.angleZ);
   DEBUG_PLOT("measurement:%.3f", (double)systemStatus.msgSlave.measurement);
   DEBUG_PLOT("batteryVoltage:%.3f", (double)systemStatus.msgSlave.batteryVoltage);
@@ -465,11 +466,12 @@ void handleCalibrationMeasure()
 
   const float raw = systemStatus.msgSlave.measurement;
   const float offset = systemStatus.calibrationOffset;
+  const float ref = systemStatus.reference;
 
   char response[JSON_RESPONSE_BUFFER_SIZE];
   snprintf(response, sizeof(response),
-    "{\"success\":true,\"measurementRaw\":%.3f,\"calibrationOffset\":%.3f}",
-    raw, offset);
+    "{\"success\":true,\"measurementRaw\":%.3f,\"calibrationOffset\":%.3f,\"reference\":%.3f}",
+    raw, offset, ref);
 
   server.send(200, "application/json", response);
 }
@@ -530,6 +532,34 @@ void handleCalibrationSetOffset()
   snprintf(response, sizeof(response),
     "{\"success\":true,\"calibrationOffset\":%.3f}",
     systemStatus.calibrationOffset);
+
+  server.send(200, "application/json", response);
+}
+
+void handleReferenceSet()
+{
+  const String refStr = server.arg("reference");
+  float refValue = 0.0f;
+
+  if (!parseFloatStrict(refStr, refValue))
+  {
+    server.send(400, "application/json", "{\"success\":false,\"error\":\"Niepoprawny parametr reference\"}");
+    return;
+  }
+
+  if (refValue < REFERENCE_MIN || refValue > REFERENCE_MAX)
+  {
+    server.send(400, "application/json", "{\"success\":false,\"error\":\"Reference poza zakresem (-999.999..999.999)\"}");
+    return;
+  }
+
+  systemStatus.reference = refValue;
+  DEBUG_I("reference:%.3f", (double)systemStatus.reference);
+
+  char response[JSON_RESPONSE_BUFFER_SIZE];
+  snprintf(response, sizeof(response),
+    "{\"success\":true,\"reference\":%.3f}",
+    systemStatus.reference);
 
   server.send(200, "application/json", response);
 }
@@ -664,11 +694,12 @@ void handleMeasureSession()
 
   char response[JSON_RESPONSE_BUFFER_SIZE];
   snprintf(response, sizeof(response),
-    "{\"sessionName\":\"%s\",\"measurementRaw\":%.3f,\"calibrationOffset\":%.3f,\"measurementCorrected\":%.3f,\"valid\":true,\"batteryVoltage\":%.3f,\"angleZ\":%u}",
+    "{\"sessionName\":\"%s\",\"measurementRaw\":%.3f,\"calibrationOffset\":%.3f,\"reference\":%.3f,\"measurementCorrected\":%.3f,\"valid\":true,\"batteryVoltage\":%.3f,\"angleZ\":%u}",
     systemStatus.sessionName,
     m.measurement,
     systemStatus.calibrationOffset,
-    m.measurement + systemStatus.calibrationOffset,
+    systemStatus.reference,
+    m.measurement + systemStatus.calibrationOffset + systemStatus.reference,
     m.batteryVoltage,
     (unsigned)m.angleZ);
 
@@ -794,6 +825,7 @@ void setup()
   // Kalibracja
   server.on("/api/calibration/measure", HTTP_POST, handleCalibrationMeasure);
   server.on("/api/calibration/offset", HTTP_POST, handleCalibrationSetOffset);
+  server.on("/api/reference", HTTP_POST, handleReferenceSet);
 
   server.on("/start_session", HTTP_POST, handleStartSession);
   server.on("/measure_session", HTTP_POST, handleMeasureSession);

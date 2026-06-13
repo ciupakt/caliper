@@ -28,6 +28,9 @@ class MeasurementTab:
         self.include_timestamp = False
         self.include_angle = False
 
+        self.calibration_offset: float = 0.0
+        self.reference: float = 0.0
+
         # Domyślny prefix plików CSV (zamiennik „measurement_”)
         self.csv_prefix: str = "test"
 
@@ -158,6 +161,16 @@ class MeasurementTab:
                         width=288,
                         height=30,
                         user_data=csv_handler,
+                    )
+                    dpg.add_spacer(height=5)
+                    dpg.add_text("Reference (mm)")
+                    dpg.add_input_float(
+                        tag="ref_input_meas",
+                        default_value=0.0,
+                        min_value=-999.999,
+                        max_value=999.999,
+                        format="%.3f",
+                        width=288,
                     )
 
                     with dpg.popup(
@@ -544,6 +557,14 @@ class MeasurementTab:
                 and serial_handler.is_open()
             ):
                 serial_handler.write(f"n {session_name}")
+                # Wysyłanie reference po stworzeniu nowej sesji
+                try:
+                    ref_val = float(dpg.get_value("ref_input_meas"))
+                    ref_val = self._clamp_float(ref_val, -999.999, 999.999)
+                    dpg.set_value("ref_input_meas", ref_val)
+                    serial_handler.write(f"v {ref_val:.3f}")
+                except Exception:
+                    pass
                 # Zapisz do logu aplikacji (przez callback w main)
             else:
                 return
@@ -559,7 +580,13 @@ class MeasurementTab:
         # Create CSV file now
         filename = None
         try:
-            filename = csv_handler.create_new_file(prefix=self.csv_prefix)
+            filename = csv_handler.create_new_file(
+                prefix=self.csv_prefix,
+                include_timestamp=self.include_timestamp,
+                include_angle=self.include_angle,
+                calibration_offset=self.calibration_offset,
+                reference=self.reference,
+            )
         except Exception:
             filename = None
 
@@ -604,6 +631,10 @@ class MeasurementTab:
     def _clamp_int(self, value: int, min_val: int, max_val: int) -> int:
         """Clamp integer value to specified range."""
         return max(min_val, min(value, max_val))
+
+    @staticmethod
+    def _clamp_float(val: float, vmin: float, vmax: float) -> float:
+        return max(vmin, min(vmax, float(val)))
 
     @staticmethod
     def _validate_session_name(name: str) -> bool:
@@ -714,7 +745,19 @@ class MeasurementTab:
         if dpg.does_item_exist("meas_container"):
             dpg.delete_item("meas_container", children_only=True)
 
-        # Pokazujemy więcej wpisów (historia jest teraz wysoką kolumną po lewej stronie)
+        dpg.add_text(
+            f"Offset: {self.calibration_offset:.3f}   Reference: {self.reference:.3f}",
+            color=(200, 200, 100),
+            parent="meas_container",
+        )
+
+        columns = ["Index", "Value"]
+        if self.include_angle:
+            columns.append("Angle")
+        if self.include_timestamp:
+            columns.append("Timestamp")
+        dpg.add_text("  ".join(columns), color=(180, 180, 180), parent="meas_container")
+
         recent_measurements = list(self.meas_history)[-200:]
         start_idx = max(1, len(self.meas_history) - len(recent_measurements) + 1)
 

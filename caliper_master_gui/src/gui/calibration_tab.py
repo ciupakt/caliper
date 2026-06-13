@@ -156,14 +156,12 @@ class CalibrationTab:
                             label="calibrationOffset (mm)",
                             tag="cal_offset_input",
                             default_value=0.0,
-                            min_value=-14.999,
-                            max_value=14.999,
                             format="%.3f",
                             width=180,
                         )
 
                         dpg.add_button(
-                            label="Get Current Measurement",
+                            label="Get raw value",
                             callback=self._calibration_measure,
                             width=220,
                             height=30,
@@ -318,7 +316,7 @@ class CalibrationTab:
             pass
 
         if self._safe_write(serial_handler, "m"):
-            self._set_status("Sent: m (get current measurement)")
+            self._set_status("Sent: m (get raw value)")
 
     def _apply_calibration_offset(self, sender, app_data, user_data):
         """Zastosuj offset (jak w WWW) – UART: c <±14.999>."""

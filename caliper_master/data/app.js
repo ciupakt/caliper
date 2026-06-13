@@ -12,6 +12,7 @@ function showView(viewId) {
 
 let lastCalibrationRaw = NaN;
 let lastCalibrationOffset = NaN;
+let lastReference = NaN;
 let offsetJustApplied = false;
 
 function formatMm(value) {
@@ -23,7 +24,9 @@ function renderCalibrationMeasurement() {
 
     const raw = lastCalibrationRaw;
     const offset = lastCalibrationOffset;
+    const ref = lastReference;
     const corrected = (Number.isFinite(raw) && Number.isFinite(offset)) ? (raw < 0 ? (raw + offset) : (raw - offset)) : NaN;
+    const finalValue = Number.isFinite(corrected) && Number.isFinite(ref) ? corrected + ref : NaN;
 
     const offsetLabel = offsetJustApplied ? 'Aktualny offset (ustawiono):' : 'Aktualny offset:';
 
@@ -37,8 +40,12 @@ function renderCalibrationMeasurement() {
             '<span class="calibration-line-value">' + formatMm(offset) + ' mm</span>' +
         '</div>' +
         '<div class="cal-line">' +
-            '<span class="calibration-line-label">Skorygowany:</span>' +
-            '<span class="calibration-line-value">' + formatMm(corrected) + ' mm</span>' +
+            '<span class="calibration-line-label">Reference:</span>' +
+            '<span class="calibration-line-value">' + formatMm(ref) + ' mm</span>' +
+        '</div>' +
+        '<div class="cal-line">' +
+            '<span class="calibration-line-label">Skorygowany (offset+ref):</span>' +
+            '<span class="calibration-line-value">' + formatMm(finalValue) + ' mm</span>' +
         '</div>';
 }
 
@@ -63,6 +70,7 @@ function calibrationMeasure() {
 
         const raw = Number(data.measurementRaw);
         const offset = Number(data.calibrationOffset);
+        const ref = Number(data.reference);
 
         if (Number.isFinite(raw)) {
             // tryb kalibracji: podbijamy pole offsetu bieżącym pomiarem (bez automatycznego wysyłania)
@@ -71,6 +79,7 @@ function calibrationMeasure() {
 
         lastCalibrationRaw = raw;
         lastCalibrationOffset = offset;
+        lastReference = Number.isFinite(ref) ? ref : 0;
         offsetJustApplied = false;
 
         renderCalibrationMeasurement();
@@ -110,6 +119,42 @@ function applyCalibrationOffset() {
         }
         lastCalibrationOffset = Number(data.calibrationOffset);
         offsetJustApplied = true;
+        renderCalibrationMeasurement();
+
+        elStatus.textContent = 'OK';
+    })
+    .catch(error => {
+        elStatus.textContent = 'Błąd: ' + error.message;
+    });
+}
+
+function applyReference() {
+    const ref = Number(document.getElementById('reference-input').value);
+    const elStatus = document.getElementById('cal-status');
+
+    if (!Number.isFinite(ref) || ref < -999.999 || ref > 999.999) {
+        alert('Reference musi być w zakresie -999.999 .. 999.999');
+        return;
+    }
+
+    elStatus.textContent = 'Ustawianie reference...';
+
+    fetch('/api/reference', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/x-www-form-urlencoded'},
+        body: 'reference=' + ref
+    })
+    .then(response => {
+        if (!response.ok) {
+            return response.json().then(err => { throw new Error(err.error || 'Błąd serwera'); });
+        }
+        return response.json();
+    })
+    .then(data => {
+        if (!data || data.success !== true) {
+            throw new Error((data && data.error) ? data.error : 'Nieznany błąd');
+        }
+        lastReference = Number(data.reference);
         renderCalibrationMeasurement();
 
         elStatus.textContent = 'OK';
@@ -201,6 +246,7 @@ function measureSession() {
             document.getElementById('measurement-value').textContent = 'Brak danych';
             document.getElementById('measurement-raw').textContent = 'Brak danych';
             document.getElementById('measurement-offset').textContent = 'Brak danych';
+            document.getElementById('measurement-reference').textContent = 'Brak danych';
             document.getElementById('battery').textContent = 'Brak danych';
             document.getElementById('angle-z').textContent = 'Brak danych';
             document.getElementById('status').textContent = 'Brak świeżych danych (brak odpowiedzi z urządzenia).';
@@ -209,11 +255,13 @@ function measureSession() {
 
         const raw = Number(data.measurementRaw);
         const offset = Number(data.calibrationOffset);
+        const ref = Number(data.reference);
         const corrected = (Number.isFinite(raw) && Number.isFinite(offset)) ? (raw < 0 ? (raw + offset) : (raw - offset)) : NaN;
+        const finalValue = Number.isFinite(corrected) && Number.isFinite(ref) ? corrected + ref : NaN;
 
-        document.getElementById('measurement-value').textContent = Number.isFinite(corrected)
-            ? corrected.toFixed(3) + ' mm'
-            : (data.measurementCorrected + ' mm');
+        document.getElementById('measurement-value').textContent = Number.isFinite(finalValue)
+            ? finalValue.toFixed(3) + ' mm'
+            : (Number.isFinite(corrected) ? corrected.toFixed(3) + ' mm' : (data.measurementCorrected + ' mm'));
 
         document.getElementById('measurement-raw').textContent = Number.isFinite(raw)
             ? raw.toFixed(3) + ' mm'
@@ -222,6 +270,10 @@ function measureSession() {
         document.getElementById('measurement-offset').textContent = Number.isFinite(offset)
             ? offset.toFixed(3) + ' mm'
             : (data.calibrationOffset + ' mm');
+
+        document.getElementById('measurement-reference').textContent = Number.isFinite(ref)
+            ? ref.toFixed(3) + ' mm'
+            : (Number.isFinite(data.reference) ? Number(data.reference).toFixed(3) + ' mm' : 'Brak danych');
 
         const batt = Number(data.batteryVoltage);
         document.getElementById('battery').textContent = Number.isFinite(batt)

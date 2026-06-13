@@ -118,8 +118,12 @@ struct SystemStatus
 
   // Offset kalibracji utrzymywany lokalnie na Master.
   // UI (WWW/GUI) wysyła go osobno, a korekcja jest liczona po stronie klienta:
-  // corrected = msgSlave.measurement + calibrationOffset
+  // corrected = msgSlave.measurement + calibrationOffset + reference
   float calibrationOffset;
+
+  // Wartość referencyjna (nominalna) utrzymywana lokalnie na Master.
+  // Dodawana do skorygowanego pomiaru analogicznie jak calibrationOffset.
+  float reference;
 
   // Nazwa sesji pomiarowej (maks 31 znaków + null terminator)
   // Ustawiana przez komendę 'n' lub przez WWW/GUI

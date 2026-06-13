@@ -97,6 +97,8 @@ public:
    */
   void saveCalibrationOffset(float value);
 
+  void saveReference(float value);
+
   bool saveSlaveMac(const uint8_t mac[6]);
   bool loadSlaveMac(uint8_t mac[6]);
   void clearSlaveMac();
@@ -114,6 +116,7 @@ public:
    * - motorTorque: 100
    * - timeout: 1000 ms
    * - calibrationOffset: 0.0 mm
+   * - reference: 0.0 mm
    */
   void resetToDefaults();
 
@@ -133,6 +136,7 @@ private:
   static constexpr const char *KEY_MOTOR_TORQUE = "motorTorque";
   static constexpr const char *KEY_TIMEOUT = "timeout";
   static constexpr const char *KEY_CALIBRATION_OFFSET = "calibrationOffset";
+  static constexpr const char *KEY_REFERENCE = "reference";
   static constexpr const char *KEY_SLAVE_MAC = "slaveMac";
   static constexpr const char *KEY_RC_MAC = "rcMac";
 
@@ -141,6 +145,7 @@ private:
   static constexpr uint8_t DEFAULT_MOTOR_TORQUE = 100;
   static constexpr uint32_t DEFAULT_TIMEOUT_MS = 1000;
   static constexpr float DEFAULT_CALIBRATION_OFFSET = 0.0f;
+  static constexpr float DEFAULT_REFERENCE = 0.0f;
 
   // Value ranges
   static constexpr uint8_t MIN_MOTOR_SPEED = 0;
@@ -151,6 +156,8 @@ private:
   static constexpr uint32_t MAX_TIMEOUT_MS = 600000;
   static constexpr float MIN_CALIBRATION_OFFSET = -14.999f;
   static constexpr float MAX_CALIBRATION_OFFSET = 14.999f;
+  static constexpr float MIN_REFERENCE = -999.999f;
+  static constexpr float MAX_REFERENCE = 999.999f;
 
   /**
    * @brief Validate motorSpeed value
@@ -183,6 +190,8 @@ private:
    * @return true if valid, false otherwise
    */
   bool validateCalibrationOffset(float value) const;
+
+  bool validateReference(float value) const;
 };
 
 #endif // PREFERENCES_MANAGER_H

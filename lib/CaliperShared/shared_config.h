@@ -76,6 +76,9 @@
 #define CALIBRATION_OFFSET_MIN -14.999f
 #define CALIBRATION_OFFSET_MAX 14.999f
 
+#define REFERENCE_MIN -999.999f
+#define REFERENCE_MAX 999.999f
+
 // ============================================================================
 // Session Configuration
 // ============================================================================

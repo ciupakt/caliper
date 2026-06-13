@@ -30,6 +30,9 @@ class CaliperGUI:
         # Stan GUI: ostatni znany offset (przychodzi z firmware przez DEBUG_PLOT)
         self.current_calibration_offset: float = 0.0
 
+        # Stan GUI: ostatnia znana referencja (przychodzi z firmware przez DEBUG_PLOT)
+        self.current_reference: float = 0.0
+
         # Stan GUI: ostatni surowy pomiar (żeby móc policzyć/odświeżyć skorygowany w zakładce Kalibracja)
         self.last_measurement_raw: float | None = None
         
@@ -55,7 +58,13 @@ class CaliperGUI:
         # Użyj nazwy sesji jako prefixu pliku CSV
         filename = None
         try:
-            filename = self.csv_handler.create_new_file(prefix=session_name)
+            filename = self.csv_handler.create_new_file(
+                prefix=session_name,
+                include_timestamp=self.measurement_tab.include_timestamp,
+                include_angle=self.measurement_tab.include_angle,
+                calibration_offset=self.current_calibration_offset,
+                reference=self.current_reference,
+            )
         except Exception as e:
             self.calibration_tab.add_app_log(f"ERROR: Failed to create CSV file: {str(e)}")
             return
@@ -112,15 +121,41 @@ class CaliperGUI:
 
                 self.calibration_tab.add_app_log(f"[CALIBRATION] Offset: {self.current_calibration_offset:.3f} mm")
 
+                self.measurement_tab.calibration_offset = self.current_calibration_offset
+                self.measurement_tab._show_measurements()
+
                 # Odświeżamy UI kalibracji (jeśli istnieje)
                 try:
                     if dpg.does_item_exist("cal_offset_display"):
                         dpg.set_value("cal_offset_display", f"Current offset: {self.current_calibration_offset:.3f} mm")
 
-                    # Jeśli mamy ostatni surowy pomiar, odświeżamy też skorygowany
                     if self.last_measurement_raw is not None and dpg.does_item_exist("cal_corrected_display"):
-                        corrected = float(self.last_measurement_raw) + float(self.current_calibration_offset) if float(self.last_measurement_raw) < 0 else float(self.last_measurement_raw) - float(self.current_calibration_offset)
-                        dpg.set_value("cal_corrected_display", f"Corrected: {corrected:.3f} mm")
+                        corrected_base = float(self.last_measurement_raw) + float(self.current_calibration_offset) if float(self.last_measurement_raw) < 0 else float(self.last_measurement_raw) - float(self.current_calibration_offset)
+                        dpg.set_value("cal_corrected_display", f"Corrected: {corrected_base:.3f} mm")
+                except Exception:
+                    pass
+
+                return
+
+            # --- Referencja (wysyłane przez DEBUG_PLOT przy zmianie reference i przy refresh settings)
+            if data.startswith("reference:"):
+                val_str = data.split(":", 1)[1].strip()
+                try:
+                    self.current_reference = float(val_str)
+                except Exception:
+                    self.calibration_tab.add_app_log(f"[REFERENCE] Reference (parse err): {val_str}")
+                    return
+
+                self.calibration_tab.add_app_log(f"[REFERENCE] Reference: {self.current_reference:.3f} mm")
+
+                self.measurement_tab.reference = self.current_reference
+                self.measurement_tab._show_measurements()
+
+                try:
+                    if dpg.does_item_exist("ref_display"):
+                        dpg.set_value("ref_display", f"Current reference: {self.current_reference:.3f} mm")
+                    if dpg.does_item_exist("ref_input_meas"):
+                        dpg.set_value("ref_input_meas", self.current_reference)
                 except Exception:
                     pass
 
@@ -140,27 +175,24 @@ class CaliperGUI:
                 try:
                     if dpg.does_item_exist("cal_autofill_next") and dpg.get_value("cal_autofill_next") is True:
                         if dpg.does_item_exist("cal_offset_input"):
-                            # clamp jak w firmware/UI (-14.999..14.999)
-                            raw_clamped = max(-14.999, min(14.999, float(raw)))
-                            dpg.set_value("cal_offset_input", raw_clamped)
+                            dpg.set_value("cal_offset_input", float(raw))
                         dpg.set_value("cal_autofill_next", False)
                 except Exception:
                     pass
 
-                corrected = raw + float(self.current_calibration_offset) if raw < 0 else raw - float(self.current_calibration_offset)
-
-                # Odświeżamy UI kalibracji (jeśli istnieje)
                 try:
                     if dpg.does_item_exist("cal_raw_display"):
                         dpg.set_value("cal_raw_display", f"Raw: {raw:.3f} mm")
                     if dpg.does_item_exist("cal_offset_display"):
                         dpg.set_value("cal_offset_display", f"Current offset: {self.current_calibration_offset:.3f} mm")
                     if dpg.does_item_exist("cal_corrected_display"):
-                        dpg.set_value("cal_corrected_display", f"Corrected: {corrected:.3f} mm")
+                        cal_corrected = raw + float(self.current_calibration_offset) if raw < 0 else raw - float(self.current_calibration_offset)
+                        dpg.set_value("cal_corrected_display", f"Corrected: {cal_corrected:.3f} mm")
                 except Exception:
                     pass
 
-                # Validate range (na wykresie/logach trzymamy skorygowaną wartość)
+                corrected = raw + float(self.current_calibration_offset) + float(self.current_reference)
+
                 if -1000.0 <= corrected <= 1000.0:
                     ts = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
                     measurement_str = f"{corrected:.3f}"
@@ -174,7 +206,12 @@ class CaliperGUI:
                     )
 
                     if self.csv_handler.is_open():
-                        self.csv_handler.write_measurement(measurement_str, ts if self.measurement_tab.include_timestamp else None, self.last_angle if self.measurement_tab.include_angle else None)
+                        self.csv_handler.write_measurement(
+                            self.measurement_tab.measurement_count,
+                            measurement_str,
+                            angle=self.last_angle,
+                            timestamp=ts,
+                        )
                 else:
                     self.calibration_tab.add_app_log(f"ERROR: Value out of range (corrected): {corrected}")
                 return
@@ -336,6 +373,7 @@ class CaliperGUI:
                 "angleZ:",
                 "batteryVoltage:",
                 "calibrationOffset:",
+                "reference:",
                 "timeout:",
                 "motorTorque:",
                 "motorSpeed:",
@@ -454,7 +492,7 @@ class CaliperGUI:
         
         # Create viewport
         # Większa wysokość, żeby wykres i historia były widoczne bez ucinania po starcie.
-        dpg.create_viewport(title="Caliper - COM Application", width=1200, height=850)
+        dpg.create_viewport(title="TKK Caliper 1.0", width=1200, height=850)
 
         # Main window
         with dpg.window(label="Caliper - Application", tag="main_window"):

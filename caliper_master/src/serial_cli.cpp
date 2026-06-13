@@ -115,14 +115,15 @@ static void printSerialHelp()
           "q <0-255>    - Ustaw motorTorque\n"
           "s <0-255>    - Ustaw motorSpeed\n"
           "r <0-3>      - Ustaw motorState (0=STOP, 1=FORWARD, 2=REVERSE, 3=BRAKE)\n"
-           "t            - Wyślij CMD_MOTORTEST (T) z bieżącymi ustawieniami\n"
-           "f            - Wyślij CMD_OTA (O) – przejdź w tryb OTA na Slave (flash)\n"
-            "p            - Tryb parowania (30s broadcast CMD_PAIR)\n"
-           "c <±14.999>  - Ustaw calibrationOffset (mm) na Master (bez wyzwalania pomiaru)\n"
-           "n <nazwa>    - Ustaw nazwę sesji (maks 31 znaków, dozwolone: a-z, A-Z, 0-9, spacja, _, -)\n"
-           "g            - Odśwież ustawienia (wyślij wszystkie aktualne wartości)\n"
-           "h/?          - Wyświetl tę pomoc\n"
-           "=====================================\n");
+          "t            - Wyślij CMD_MOTORTEST (T) z bieżącymi ustawieniami\n"
+          "f            - Wyślij CMD_OTA (O) – przejdź w tryb OTA na Slave (flash)\n"
+          "p            - Tryb parowania (30s broadcast CMD_PAIR)\n"
+          "c <±14.999>  - Ustaw calibrationOffset (mm) na Master (bez wyzwalania pomiaru)\n"
+          "v <±999.999>  - Ustaw reference (mm) na Master (wartość referencyjna/nominalna)\n"
+          "n <nazwa>    - Ustaw nazwę sesji (maks 31 znaków, dozwolone: a-z, A-Z, 0-9, spacja, _, -)\n"
+          "g            - Odśwież ustawienia (wyślij wszystkie aktualne wartości)\n"
+          "h/?          - Wyświetl tę pomoc\n"
+          "=====================================\n");
 }
 
 void SerialCli_begin(const SerialCliContext &ctx)
@@ -277,6 +278,33 @@ bool SerialCli_tick(void *arg)
       DEBUG_PLOT("calibrationOffset:%.3f", (double)g_ctx.systemStatus->calibrationOffset);
       break;
 
+    case 'v':
+      if (!parseFloatStrict(rest, fval))
+      {
+        DEBUG_W("Serial: brak/niepoprawny parametr dla 'v' (użyj: v <reference_mm>\\n)");
+        printSerialHelp();
+        break;
+      }
+
+      if (fval < -999.999f || fval > 999.999f)
+      {
+        DEBUG_W("Serial: reference poza zakresem: %.3f (-999.999..999.999)", (double)fval);
+        break;
+      }
+
+      g_ctx.systemStatus->reference = fval;
+      DEBUG_I("reference:%.3f", (double)g_ctx.systemStatus->reference);
+
+      // Zapisz do Preferences
+      if (g_ctx.prefsManager != nullptr)
+      {
+        g_ctx.prefsManager->saveReference(fval);
+      }
+
+      // Ujednolicamy kanał dla GUI (DEBUG_PLOT) — GUI może od razu zaktualizować stan.
+      DEBUG_PLOT("reference:%.3f", (double)g_ctx.systemStatus->reference);
+      break;
+
     case 'q':
       if (!parseIntStrict(rest, val))
       {
@@ -394,6 +422,7 @@ bool SerialCli_tick(void *arg)
     case 'g':
       // Wyślij wszystkie aktualne ustawienia przez DEBUG_PLOT
       DEBUG_PLOT("calibrationOffset:%.3f", (double)g_ctx.systemStatus->calibrationOffset);
+      DEBUG_PLOT("reference:%.3f", (double)g_ctx.systemStatus->reference);
       DEBUG_PLOT("timeout:%u", (unsigned)g_ctx.systemStatus->msgMaster.timeout);
       DEBUG_PLOT("motorTorque:%u", (unsigned)g_ctx.systemStatus->msgMaster.motorTorque);
       DEBUG_PLOT("motorSpeed:%u", (unsigned)g_ctx.systemStatus->msgMaster.motorSpeed);
