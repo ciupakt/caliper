@@ -289,10 +289,6 @@ class CalibrationTab:
         if dpg.does_item_exist("cal_tab_status"):
             dpg.set_value("cal_tab_status", text)
 
-        # Jeśli istnieje też globalny status (np. w zakładce 'Pomiary'), aktualizujemy go równolegle
-        if dpg.does_item_exist("status"):
-            dpg.set_value("status", text)
-
     def _safe_write(self, serial_handler, data: str) -> bool:
         """Write to serial only when port is open; update status otherwise."""
         if serial_handler is None or not hasattr(serial_handler, "is_open"):

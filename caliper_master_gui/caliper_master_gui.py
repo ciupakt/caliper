@@ -13,6 +13,7 @@ from datetime import datetime
 from src.serial_handler import SerialHandler
 from src.utils.csv_handler import CSVHandler
 from src.gui.measurement_tab import MeasurementTab
+from src.gui.gauge_tab import GaugeTab
 from src.gui.calibration_tab import CalibrationTab
 
 
@@ -23,6 +24,7 @@ class CaliperGUI:
         self.serial_handler = SerialHandler()
         self.csv_handler = CSVHandler()
         self.measurement_tab = MeasurementTab()
+        self.gauge_tab = GaugeTab()
         self.calibration_tab = CalibrationTab()
 
         # Stan GUI: ostatni znany offset (przychodzi z firmware przez DEBUG_PLOT)
@@ -63,16 +65,13 @@ class CaliperGUI:
         
         # Wyczyść historię pomiarów w GUI
         self.measurement_tab._clear()
+        self.gauge_tab.clear()
         
         # Zaktualizuj UI z informacjami o nowej sesji
         try:
             if filename:
-                if dpg.does_item_exist("csv_info"):
-                    dpg.set_value("csv_info", f"CSV file: {filename}")
-                if dpg.does_item_exist("status"):
-                    dpg.set_value("status", f"New session: {session_name}")
-                if dpg.does_item_exist("session_name_display"):
-                    dpg.set_value("session_name_display", f"Session: {session_name}")
+                import os as _os
+                self.measurement_tab._set_csv_info_label(_os.path.basename(filename))
         except Exception:
             pass
         
@@ -166,6 +165,13 @@ class CaliperGUI:
                     ts = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
                     measurement_str = f"{corrected:.3f}"
                     self.measurement_tab.add_measurement(ts, measurement_str, float(corrected), self.last_angle)
+                    self.gauge_tab.update(
+                        measurement_str,
+                        timestamp=ts,
+                        angle=self.last_angle,
+                        include_timestamp=self.measurement_tab.include_timestamp,
+                        include_angle=self.measurement_tab.include_angle,
+                    )
 
                     if self.csv_handler.is_open():
                         self.csv_handler.write_measurement(measurement_str, ts if self.measurement_tab.include_timestamp else None, self.last_angle if self.measurement_tab.include_angle else None)
@@ -262,13 +268,7 @@ class CaliperGUI:
                 if name_str and name_str != self.last_saved_session_name:
                     self._create_new_session_from_serial(name_str)
                 else:
-                    # Tylko loguj i aktualizuj UI bez tworzenia nowej sesji
                     self.calibration_tab.add_app_log(f"[SESSION] Session name: {name_str}")
-                    try:
-                        if dpg.does_item_exist("session_name_display"):
-                            dpg.set_value("session_name_display", f"Session: {name_str}")
-                    except Exception:
-                        pass
                 return
 
             # --- DROP_MEAS (z RC przez Master)
@@ -278,8 +278,10 @@ class CaliperGUI:
                     if self.measurement_tab.drop_last_measurement():
                         self.csv_handler.remove_last_row()
                         self.calibration_tab.add_app_log("[RC] DROP_MEAS: last measurement removed")
+                        self._sync_gauge()
                     else:
                         self.calibration_tab.add_app_log("[RC] DROP_MEAS: no measurements to remove")
+                        self.gauge_tab.clear()
                 return
 
             # --- Pairing status
@@ -351,32 +353,47 @@ class CaliperGUI:
         if "MOTOR" in payload.upper() or "motor error" in payload.lower():
             self.calibration_tab.add_app_log(f"[MOTOR] {payload}")
     
+    def _sync_gauge(self, sender=None, app_data=None):
+        """Sync gauge tab with current measurement_tab checkbox state and last measurement."""
+        if not self.measurement_tab.meas_history:
+            return
+        last_ts, last_val, last_ang = self.measurement_tab.meas_history[-1]
+        self.gauge_tab.update(
+            last_val,
+            timestamp=last_ts,
+            angle=last_ang,
+            include_timestamp=self.measurement_tab.include_timestamp,
+            include_angle=self.measurement_tab.include_angle,
+        )
+
+    def _on_drop_measurement(self):
+        """Callback po anulowaniu ostatniego pomiaru z przycisku 'Cancel last measurement'."""
+        if self.measurement_tab.meas_history:
+            self._sync_gauge()
+        else:
+            self.gauge_tab.clear()
+
     def key_press_handler(self, sender, key):
         """Handle keyboard shortcuts"""
-        # Hotkey: 'p' = wykonaj pomiar (jak kliknięcie "Wykonaj pomiar")
-        if key == dpg.mvKey_P:
-            # Jeśli user aktualnie pisze w polu tekstowym, nie przechwytujemy.
+        # Hotkey: 'm' = wykonaj pomiar (jak kliknięcie "Measure (m)")
+        if key == dpg.mvKey_M:
+            # Nie przechwytuj, jeśli user pisze w polu tekstowym (np. nazwa sesji)
+            # lub gdy aktywny jest jakikolwiek widget / otwarte modalne okno sesji.
             try:
                 if dpg.is_any_item_active() or dpg.is_any_item_focused():
+                    return
+                if dpg.does_item_exist("new_session_popup") and dpg.is_item_shown("new_session_popup"):
+                    return
+                if dpg.does_item_exist("session_name_input") and dpg.is_item_focused("session_name_input"):
                     return
             except Exception:
                 pass
 
             if self.serial_handler is None or not self.serial_handler.is_open():
-                try:
-                    if dpg.does_item_exist("status"):
-                        dpg.set_value("status", "ERROR: Port not open (hotkey: p)")
-                except Exception:
-                    pass
                 return
 
             self.serial_handler.write("m")
-            try:
-                if dpg.does_item_exist("status"):
-                    dpg.set_value("status", "Hotkey: p → measure")
-            except Exception:
-                pass
-            self.calibration_tab.add_app_log("[HOTKEY] p -> m")
+            self.calibration_tab.add_app_log("[HOTKEY] m -> measure")
             return
     
     def create_gui(self):
@@ -418,6 +435,18 @@ class CaliperGUI:
                 dpg.add_font_range_hint(dpg.mvFontRangeHint_Default)
                 dpg.add_font_range(0x0100, 0x017F)
                 dpg.add_font_range(0x0180, 0x024F)
+
+            # Font gauge meta (mniejszy – do timestamp/angle w zakładce Gauge)
+            with dpg.font(font_path, 20, tag="font_gauge_meta"):
+                dpg.add_font_range_hint(dpg.mvFontRangeHint_Default)
+                dpg.add_font_range(0x0100, 0x017F)
+                dpg.add_font_range(0x0180, 0x024F)
+
+            # Font gauge (duży – do wyświetlania ostatniego pomiaru w zakładce Gauge)
+            with dpg.font(font_bold_path, 360, tag="font_gauge"):
+                dpg.add_font_range_hint(dpg.mvFontRangeHint_Default)
+                dpg.add_font_range(0x0100, 0x017F)
+                dpg.add_font_range(0x0180, 0x024F)
         
         # Handler registry
         with dpg.handler_registry():
@@ -428,19 +457,48 @@ class CaliperGUI:
         dpg.create_viewport(title="Caliper - COM Application", width=1200, height=850)
 
         # Main window
-        with dpg.window(label="Caliper - Application", width=1180, height=810):
+        with dpg.window(label="Caliper - Application", tag="main_window"):
             # Uwaga: `dpg.tab` MUSI mieć jako rodzica `mvTabBar`.
             # Nie polegamy na `dpg.last_container()` (potrafi wskazać ostatnio utworzony kontener,
             # a nie aktualny `tab_bar`), tylko przekazujemy jawnie identyfikator/tab tag.
             with dpg.tab_bar(tag="main_tab_bar") as tab_bar_id:
                 # Pomiary
-                self.measurement_tab.create(tab_bar_id, self.serial_handler, self.csv_handler)
+                self.measurement_tab.create(tab_bar_id, self.serial_handler, self.csv_handler, on_drop=self._on_drop_measurement)
+
+                # Gauge
+                self.gauge_tab.create(tab_bar_id)
 
                 # Kalibracja
                 self.calibration_tab.create(tab_bar_id, self.serial_handler)
 
         # Bind font
         dpg.bind_font(default_font)
+
+        # Główne okno wypełnia cały viewport i skaluje się razem z nim.
+        dpg.set_primary_window("main_window", True)
+
+        # Re-centrowanie pomiaru w zakładce Gauge przy zmianie rozmiaru okna.
+        dpg.set_viewport_resize_callback(self._on_viewport_resize)
+
+        # Sync gauge tab when timestamp/angle checkboxes change
+        with dpg.item_handler_registry(tag="gauge_sync_handler"):
+            dpg.add_item_active_handler(callback=self._sync_gauge)
+        if dpg.does_item_exist("timestamp_cb"):
+            dpg.bind_item_handler_registry("timestamp_cb", "gauge_sync_handler")
+        if dpg.does_item_exist("angle_cb"):
+            dpg.bind_item_handler_registry("angle_cb", "gauge_sync_handler")
+
+    def _on_viewport_resize(self, sender=None, app_data=None):
+        """Przelicz centrowanie pomiaru w zakładce Gauge po zmianie rozmiaru okna."""
+        try:
+            self.gauge_tab.recenter()
+        except Exception:
+            pass
+        # Wyrównanie wiersza statusu w zakładce Pomiary (Session: ↔ Connected to:)
+        try:
+            self.measurement_tab.update_status_row_layout()
+        except Exception:
+            pass
     
     def run(self):
         """Run the application"""
@@ -455,7 +513,24 @@ class CaliperGUI:
         self.create_gui()
         dpg.setup_dearpygui()
         dpg.show_viewport()
-        dpg.start_dearpygui()
+
+        # Ręczna pętla renderowania: pozwala na bieżąco re-centrować pomiar
+        # w zakładce Gauge (rozmiar child_window znany dopiero po wyrenderowaniu
+        # i zmienia się przy skalowaniu okna oraz przełączaniu zakładek).
+        while dpg.is_dearpygui_running():
+            try:
+                if dpg.does_item_exist("gauge_root") and dpg.is_item_visible("gauge_value"):
+                    self.gauge_tab.recenter()
+            except Exception:
+                pass
+            try:
+                # Bieżąca aktualizacja wyrównania wiersza statusu (Session ↔ Connected to)
+                if dpg.does_item_exist("status_row") and dpg.is_item_visible("status_row"):
+                    self.measurement_tab.update_status_row_layout()
+            except Exception:
+                pass
+            dpg.render_dearpygui_frame()
+
         dpg.destroy_context()
         
         # Cleanup
