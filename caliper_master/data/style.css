@@ -85,7 +85,7 @@ input:focus {
     border-radius: 5px;
 }
 
-/* Kalibracja */
+/* Calibration */
 .button-group {
     margin-top: 10px;
 }
@@ -94,7 +94,7 @@ input:focus {
     margin: 6px 0;
 }
 
-/* Wszystkie linie (Surowy / Aktualny offset / Skorygowany) mają być „duże” */
+/* All lines (Raw / Current offset / Corrected) should be "large" */
 .calibration-line-label {
     display: inline-block;
     font-size: 22px;
@@ -107,7 +107,7 @@ input:focus {
     font-weight: 700;
 }
 
-/* Linia „Aktualny offset” zawsze na czerwono */
+/* "Current offset" line always in red */
 .calibration-line--offset {
     color: #c62828;
 }

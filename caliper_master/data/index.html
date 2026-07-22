@@ -3,21 +3,21 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>ESP32 System Pomiarowy</title>
+    <title>TKK Caliper 1.0</title>
     <link rel="stylesheet" href="/style.css">
 </head>
 <body>
     <div class="container">
-        <!-- Widok Menu -->
+        <!-- Menu View -->
         <div id="menu-view" class="view">
-            <h1>System Pomiarowy ESP32</h1>
-            <button onclick="showView('calibration')">Kalibracja</button>
-            <button onclick="showView('session-name')">Nowa sesja pomiarowa</button>
+            <h1>TKK Caliper 1.0</h1>
+            <button onclick="showView('calibration')">Calibration</button>
+            <button onclick="showView('session-name')">New Measurement Session</button>
         </div>
 
-        <!-- Widok Kalibracja -->
+        <!-- Calibration View -->
         <div id="calibration-view" class="view hidden">
-            <h1>Kalibracja</h1>
+            <h1>Calibration</h1>
 
             <div class="status" id="cal-status"></div>
 
@@ -28,41 +28,41 @@
             <input type="number" id="reference-input" min="-999.999" max="999.999" step="0.001" placeholder="Reference (mm, -999.999..999.999)">
 
             <div class="button-group">
-                <button onclick="calibrationMeasure()">Pobierz bieżący pomiar</button>
-                <button onclick="applyCalibrationOffset()">Zastosuj offset</button>
-                <button onclick="applyReference()">Zastosuj reference</button>
+                <button onclick="calibrationMeasure()">Get Current Measurement</button>
+                <button onclick="applyCalibrationOffset()">Apply Offset</button>
+                <button onclick="applyReference()">Apply Reference</button>
                 <button onclick="showView('menu')">Menu</button>
             </div>
         </div>
 
-        <!-- Widok Nazwa Sesji -->
+        <!-- Session Name View -->
         <div id="session-name-view" class="view hidden">
-            <h1>Nowa Sesja Pomiarowa</h1>
-            <input type="text" id="session-name-input" placeholder="Nazwa sesji" autocomplete="off" autofocus>
+            <h1>New Measurement Session</h1>
+            <input type="text" id="session-name-input" placeholder="Session name" autocomplete="off" autofocus>
             <button onclick="startSession()">Start</button>
             <button onclick="showView('menu')">Menu</button>
         </div>
 
-        <!-- Widok Pomiarów -->
+        <!-- Measurement View -->
         <div id="measurement-view" class="view hidden">
-            <h1>Sesja: <span id="session-name-display"></span></h1>
+            <h1>Session: <span id="session-name-display"></span></h1>
 
-            <!-- Domyślnie pokazujemy pomiar SKORYGOWANY (liczony w JS): measurementRaw + calibrationOffset -->
-            <div class="measurement" id="measurement-value">Brak pomiaru</div>
+            <!-- By default we show the CORRECTED measurement (calculated in JS): measurementRaw + calibrationOffset -->
+            <div class="measurement" id="measurement-value">No measurement</div>
 
             <div style="text-align: center; font-size: 16px; color: #666; margin: 10px 0;">
-                Surowy: <span id="measurement-raw">Brak danych</span>
-                | Offset: <span id="measurement-offset">Brak danych</span>
-                | Reference: <span id="measurement-reference">Brak danych</span>
+                Raw: <span id="measurement-raw">No data</span>
+                | Offset: <span id="measurement-offset">No data</span>
+                | Reference: <span id="measurement-reference">No data</span>
             </div>
 
             <div style="text-align: center; font-size: 18px; color: #666; margin: 10px 0;">
-                Napięcie baterii: <span id="battery">Brak danych</span>
+                Battery voltage: <span id="battery">No data</span>
             </div>
             <div style="text-align: center; font-size: 18px; color: #666; margin: 10px 0;">
-                Odchylenie od pionu: <span id="angle-z">Brak danych</span>°
+                Vertical deviation: <span id="angle-z">No data</span>°
             </div>
-            <button onclick="measureSession()">Wykonaj pomiar</button>
+            <button onclick="measureSession()">Take Measurement</button>
 
             <button onclick="showView('menu')">Menu</button>
             <div class="status" id="status"></div>

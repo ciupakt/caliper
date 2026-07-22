@@ -1,4 +1,4 @@
-// Funkcje zarządzania widokami
+// View management functions
 function showView(viewId) {
     document.querySelectorAll('.view').forEach(view => {
         view.classList.add('hidden');
@@ -6,8 +6,8 @@ function showView(viewId) {
     document.getElementById(viewId + '-view').classList.remove('hidden');
 }
 
-// Funkcje kalibracji
-// Założenie: UI liczy korekcję po swojej stronie:
+// Calibration functions
+// Assumption: UI calculates correction on its side:
 // corrected = measurementRaw + calibrationOffset
 
 let lastCalibrationRaw = NaN;
@@ -28,11 +28,11 @@ function renderCalibrationMeasurement() {
     const corrected = (Number.isFinite(raw) && Number.isFinite(offset)) ? (raw < 0 ? (raw + offset) : (raw - offset)) : NaN;
     const finalValue = Number.isFinite(corrected) && Number.isFinite(ref) ? corrected + ref : NaN;
 
-    const offsetLabel = offsetJustApplied ? 'Aktualny offset (ustawiono):' : 'Aktualny offset:';
+    const offsetLabel = offsetJustApplied ? 'Current offset (applied):' : 'Current offset:';
 
     elMeas.innerHTML =
         '<div class="cal-line">' +
-            '<span class="calibration-line-label">Surowy:</span>' +
+            '<span class="calibration-line-label">Raw:</span>' +
             '<span class="calibration-line-value">' + formatMm(raw) + ' mm</span>' +
         '</div>' +
         '<div class="cal-line calibration-line--offset">' +
@@ -44,7 +44,7 @@ function renderCalibrationMeasurement() {
             '<span class="calibration-line-value">' + formatMm(ref) + ' mm</span>' +
         '</div>' +
         '<div class="cal-line">' +
-            '<span class="calibration-line-label">Skorygowany (offset+ref):</span>' +
+            '<span class="calibration-line-label">Corrected (offset+ref):</span>' +
             '<span class="calibration-line-value">' + formatMm(finalValue) + ' mm</span>' +
         '</div>';
 }
@@ -52,20 +52,20 @@ function renderCalibrationMeasurement() {
 function calibrationMeasure() {
     const elStatus = document.getElementById('cal-status');
 
-    elStatus.textContent = 'Pobieranie bieżącego pomiaru...';
+    elStatus.textContent = 'Fetching current measurement...';
 
     fetch('/api/calibration/measure', {
         method: 'POST'
     })
     .then(response => {
         if (!response.ok) {
-            return response.json().then(err => { throw new Error(err.error || 'Błąd serwera'); });
+            return response.json().then(err => { throw new Error(err.error || 'Server error'); });
         }
         return response.json();
     })
     .then(data => {
         if (!data || data.success !== true) {
-            throw new Error((data && data.error) ? data.error : 'Nieznany błąd');
+            throw new Error((data && data.error) ? data.error : 'Unknown error');
         }
 
         const raw = Number(data.measurementRaw);
@@ -73,7 +73,7 @@ function calibrationMeasure() {
         const ref = Number(data.reference);
 
         if (Number.isFinite(raw)) {
-            // tryb kalibracji: podbijamy pole offsetu bieżącym pomiarem (bez automatycznego wysyłania)
+            // calibration mode: prefill offset field with current measurement (without auto-sending)
             document.getElementById('offset-input').value = raw.toFixed(3);
         }
 
@@ -87,7 +87,7 @@ function calibrationMeasure() {
         elStatus.textContent = 'OK';
     })
     .catch(error => {
-        elStatus.textContent = 'Błąd: ' + error.message;
+        elStatus.textContent = 'Error: ' + error.message;
     });
 }
 
@@ -96,11 +96,11 @@ function applyCalibrationOffset() {
     const elStatus = document.getElementById('cal-status');
 
     if (!Number.isFinite(offset) || offset < -14.999 || offset > 14.999) {
-        alert('Offset musi być w zakresie -14.999 .. 14.999');
+        alert('Offset must be in range -14.999 .. 14.999');
         return;
     }
 
-    elStatus.textContent = 'Ustawianie offsetu...';
+    elStatus.textContent = 'Setting offset...';
 
     fetch('/api/calibration/offset', {
         method: 'POST',
@@ -109,13 +109,13 @@ function applyCalibrationOffset() {
     })
     .then(response => {
         if (!response.ok) {
-            return response.json().then(err => { throw new Error(err.error || 'Błąd serwera'); });
+            return response.json().then(err => { throw new Error(err.error || 'Server error'); });
         }
         return response.json();
     })
     .then(data => {
         if (!data || data.success !== true) {
-            throw new Error((data && data.error) ? data.error : 'Nieznany błąd');
+            throw new Error((data && data.error) ? data.error : 'Unknown error');
         }
         lastCalibrationOffset = Number(data.calibrationOffset);
         offsetJustApplied = true;
@@ -124,7 +124,7 @@ function applyCalibrationOffset() {
         elStatus.textContent = 'OK';
     })
     .catch(error => {
-        elStatus.textContent = 'Błąd: ' + error.message;
+        elStatus.textContent = 'Error: ' + error.message;
     });
 }
 
@@ -133,11 +133,11 @@ function applyReference() {
     const elStatus = document.getElementById('cal-status');
 
     if (!Number.isFinite(ref) || ref < -999.999 || ref > 999.999) {
-        alert('Reference musi być w zakresie -999.999 .. 999.999');
+        alert('Reference must be in range -999.999 .. 999.999');
         return;
     }
 
-    elStatus.textContent = 'Ustawianie reference...';
+    elStatus.textContent = 'Setting reference...';
 
     fetch('/api/reference', {
         method: 'POST',
@@ -146,13 +146,13 @@ function applyReference() {
     })
     .then(response => {
         if (!response.ok) {
-            return response.json().then(err => { throw new Error(err.error || 'Błąd serwera'); });
+            return response.json().then(err => { throw new Error(err.error || 'Server error'); });
         }
         return response.json();
     })
     .then(data => {
         if (!data || data.success !== true) {
-            throw new Error((data && data.error) ? data.error : 'Nieznany błąd');
+            throw new Error((data && data.error) ? data.error : 'Unknown error');
         }
         lastReference = Number(data.reference);
         renderCalibrationMeasurement();
@@ -160,27 +160,27 @@ function applyReference() {
         elStatus.textContent = 'OK';
     })
     .catch(error => {
-        elStatus.textContent = 'Błąd: ' + error.message;
+        elStatus.textContent = 'Error: ' + error.message;
     });
 }
 
 /**
- * Walidacja nazwy sesji
- * @param {string} name - Nazwa sesji do walidacji
- * @returns {boolean} - true jeśli nazwa jest prawidłowa
+ * Session name validation
+ * @param {string} name - Session name to validate
+ * @returns {boolean} - true if the name is valid
  */
 function validateSessionName(name) {
-    // Minimalna długość: 1 znak
+    // Minimum length: 1 character
     if (!name || name.length < 1) {
         return false;
     }
 
-    // Maksymalna długość: 31 znaków
+    // Maximum length: 31 characters
     if (name.length > 31) {
         return false;
     }
 
-    // Dozwolone znaki: litery (a-z, A-Z), cyfry (0-9), spacje, podkreślenia (_), myślniki (-)
+    // Allowed characters: letters (a-z, A-Z), digits (0-9), spaces, underscores (_), hyphens (-)
     const allowedChars = /^[a-zA-Z0-9 _-]+$/;
     if (!allowedChars.test(name)) {
         return false;
@@ -189,13 +189,13 @@ function validateSessionName(name) {
     return true;
 }
 
-// Funkcje sesji pomiarowej
+// Measurement session functions
 function startSession() {
     const sessionName = document.getElementById('session-name-input').value;
     
-    // Walidacja nazwy sesji
+    // Session name validation
     if (!validateSessionName(sessionName)) {
-        alert('Nazwa sesji jest nieprawidłowa (maks 31 znaków, dozwolone: a-z, A-Z, 0-9, spacja, _, -)');
+        alert('Session name is invalid (max 31 characters, allowed: a-z, A-Z, 0-9, space, _, -)');
         return;
     }
     
@@ -206,50 +206,50 @@ function startSession() {
     })
     .then(response => {
         if (!response.ok) {
-            return response.json().then(err => { throw new Error(err.error || 'Błąd serwera'); });
+            return response.json().then(err => { throw new Error(err.error || 'Server error'); });
         }
         return response.json();
     })
     .then(data => {
         if (data.error) {
-            document.getElementById('status').textContent = 'Błąd: ' + data.error;
+            document.getElementById('status').textContent = 'Error: ' + data.error;
         } else {
             document.getElementById('session-name-display').textContent = data.sessionName || sessionName;
             showView('measurement');
         }
     })
     .catch(error => {
-        document.getElementById('status').textContent = 'Błąd: ' + error.message;
+        document.getElementById('status').textContent = 'Error: ' + error.message;
     });
 }
 
 function measureSession() {
-    document.getElementById('status').textContent = 'Wykonywanie pomiaru...';
+    document.getElementById('status').textContent = 'Taking measurement...';
 
     fetch('/measure_session', {
         method: 'POST'
     })
     .then(response => {
         if (!response.ok) {
-            return response.json().then(err => { throw new Error(err.error || 'Błąd serwera'); });
+            return response.json().then(err => { throw new Error(err.error || 'Server error'); });
         }
         return response.json();
     })
     .then(data => {
         if (data.error) {
-            document.getElementById('status').textContent = 'Błąd: ' + data.error;
+            document.getElementById('status').textContent = 'Error: ' + data.error;
             return;
         }
 
         const isValid = !!data.valid;
         if (!isValid) {
-            document.getElementById('measurement-value').textContent = 'Brak danych';
-            document.getElementById('measurement-raw').textContent = 'Brak danych';
-            document.getElementById('measurement-offset').textContent = 'Brak danych';
-            document.getElementById('measurement-reference').textContent = 'Brak danych';
-            document.getElementById('battery').textContent = 'Brak danych';
-            document.getElementById('angle-z').textContent = 'Brak danych';
-            document.getElementById('status').textContent = 'Brak świeżych danych (brak odpowiedzi z urządzenia).';
+            document.getElementById('measurement-value').textContent = 'No data';
+            document.getElementById('measurement-raw').textContent = 'No data';
+            document.getElementById('measurement-offset').textContent = 'No data';
+            document.getElementById('measurement-reference').textContent = 'No data';
+            document.getElementById('battery').textContent = 'No data';
+            document.getElementById('angle-z').textContent = 'No data';
+            document.getElementById('status').textContent = 'No fresh data (no response from device).';
             return;
         }
 
@@ -273,7 +273,7 @@ function measureSession() {
 
         document.getElementById('measurement-reference').textContent = Number.isFinite(ref)
             ? ref.toFixed(3) + ' mm'
-            : (Number.isFinite(data.reference) ? Number(data.reference).toFixed(3) + ' mm' : 'Brak danych');
+            : (Number.isFinite(data.reference) ? Number(data.reference).toFixed(3) + ' mm' : 'No data');
 
         const batt = Number(data.batteryVoltage);
         document.getElementById('battery').textContent = Number.isFinite(batt)
@@ -285,9 +285,9 @@ function measureSession() {
             ? angleZ.toFixed(2)
             : data.angleZ;
 
-        document.getElementById('status').textContent = 'Zaktualizowano: ' + new Date().toLocaleTimeString();
+        document.getElementById('status').textContent = 'Updated: ' + new Date().toLocaleTimeString();
     })
     .catch(error => {
-        document.getElementById('status').textContent = 'Błąd: ' + error.message;
+        document.getElementById('status').textContent = 'Error: ' + error.message;
     });
 }
