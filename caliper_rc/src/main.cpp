@@ -50,7 +50,7 @@ static void enterPairingMode()
   broadcastPeer.encrypt = false;
   esp_now_add_peer(&broadcastPeer);
 
-  DEBUG_I("RC: tryb parowania aktywny");
+  DEBUG_I("RC: pairing mode active");
 }
 
 static void exitPairingMode()
@@ -60,7 +60,7 @@ static void exitPairingMode()
   uint8_t broadcastAddr[] = BROADCAST_MAC_ADDR;
   esp_now_del_peer(broadcastAddr);
 
-  DEBUG_I("RC: tryb parowania zakończony");
+  DEBUG_I("RC: pairing mode ended");
 }
 
 void OnDataRecv(const esp_now_recv_info_t *recv_info, const uint8_t *incomingData, int len)
@@ -86,7 +86,7 @@ void OnDataRecv(const esp_now_recv_info_t *recv_info, const uint8_t *incomingDat
       pairResp.command = CMD_PAIR;
       commManager.sendMessage(pairResp);
 
-      DEBUG_I("Otrzymano CMD_PAIR od Mastera: %02X:%02X:%02X:%02X:%02X:%02X",
+      DEBUG_I("Received CMD_PAIR from Master: %02X:%02X:%02X:%02X:%02X:%02X",
         src_addr[0], src_addr[1], src_addr[2], src_addr[3], src_addr[4], src_addr[5]);
       return;
     }
@@ -97,7 +97,7 @@ void OnDataRecv(const esp_now_recv_info_t *recv_info, const uint8_t *incomingDat
       hasStoredMasterMac = true;
       isPaired = true;
       exitPairingMode();
-      DEBUG_I("RC: Parowanie zakończone");
+      DEBUG_I("RC: Pairing completed");
       return;
     }
   }
@@ -120,7 +120,7 @@ static void sendRCCommand(CommandType cmd)
 {
   if (!isPaired)
   {
-    DEBUG_W("RC: nie sparowane — komenda %c zignorowana", (char)cmd);
+    DEBUG_W("RC: not paired — command %c ignored", (char)cmd);
     return;
   }
 
@@ -130,11 +130,11 @@ static void sendRCCommand(CommandType cmd)
   ErrorCode result = commManager.sendMessage(msg);
   if (result == ERR_NONE)
   {
-    DEBUG_I("Wyslano komende RC: %c", (char)cmd);
+    DEBUG_I("RC command sent: %c", (char)cmd);
   }
   else
   {
-    DEBUG_E("Blad wysylki RC: %c (err=0x%04X)", (char)cmd, result);
+    DEBUG_E("RC send error: %c (err=0x%04X)", (char)cmd, result);
   }
 
   digitalWrite(LED_PIN, HIGH);
@@ -197,7 +197,7 @@ static void handleButtons()
 void setup()
 {
   DEBUG_BEGIN();
-  DEBUG_I("=== ESP32 RC - Suwmiarka + ESP-NOW ===");
+  DEBUG_I("=== ESP32 RC - Caliper + ESP-NOW ===");
 
   ERROR_HANDLER.initialize();
 
@@ -212,12 +212,12 @@ void setup()
     memcpy(masterAddress, storedMasterMac, 6);
     hasStoredMasterMac = true;
     isPaired = true;
-    DEBUG_I("Master MAC z NVS: %02X:%02X:%02X:%02X:%02X:%02X (sparowany)",
+    DEBUG_I("Master MAC from NVS: %02X:%02X:%02X:%02X:%02X:%02X (paired)",
       masterAddress[0], masterAddress[1], masterAddress[2], masterAddress[3], masterAddress[4], masterAddress[5]);
   }
   else
   {
-    DEBUG_W("Brak Master MAC w NVS — czekam na sparowanie");
+    DEBUG_W("No Master MAC in NVS — waiting for pairing");
     hasStoredMasterMac = false;
   }
 
@@ -242,16 +242,16 @@ void setup()
 
   enterPairingMode();
 
-  DEBUG_I("RC gotowy. Przycisk TRIG=GPIO%d, DROP=GPIO%d", BUTTON_TRIG_PIN, BUTTON_DROP_PIN);
+  DEBUG_I("RC ready. Button TRIG=GPIO%d, DROP=GPIO%d", BUTTON_TRIG_PIN, BUTTON_DROP_PIN);
 
   if (hasStoredMasterMac)
   {
-    DEBUG_I("Ostatnio sparowany Master: %02X:%02X:%02X:%02X:%02X:%02X",
+    DEBUG_I("Previously paired Master: %02X:%02X:%02X:%02X:%02X:%02X",
       masterAddress[0], masterAddress[1], masterAddress[2], masterAddress[3], masterAddress[4], masterAddress[5]);
   }
   else
   {
-    DEBUG_I("Brak sparowanego Mastera — czekam na parowanie");
+    DEBUG_I("No paired Master — waiting for pairing");
   }
 }
 

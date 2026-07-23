@@ -23,13 +23,13 @@ static uint8_t pairedRcAddress[6] = {};
 static bool hasPairedRc = false;
 static volatile bool rcTrigMeasPending = false;
 static volatile bool rcDropMeasPending = false;
-// TODO: Wypisz MAC Address Mastera
+// TODO: Print Master MAC Address
 WebServer server(WEB_SERVER_PORT);
 CommunicationManager commManager;
 SystemStatus systemStatus;
 PreferencesManager prefsManager;
 
-// Ujednolicona wysyłka: Master → Slave zawsze wysyła pełną strukturę MessageMaster
+// Unified sending: Master → Slave always sends the full MessageMaster structure
 static constexpr uint8_t DEFAULT_MOTOR_SPEED = 100;
 static constexpr uint8_t DEFAULT_MOTOR_TORQUE = 100;
 static constexpr MotorState DEFAULT_MOTOR_STATE = MOTOR_STOP;
@@ -37,7 +37,7 @@ static constexpr uint32_t DEFAULT_TIMEOUT_MS = 1000;
 
 auto timerWorker = timer_create_default();
 
-// Stan pomiarowy - enkapsulacja zamiast zmiennych globalnych
+// Measurement state - encapsulation instead of global variables
 static MeasurementState measurementState;
 
 static void requestMeasurement();
@@ -66,7 +66,7 @@ static void exitPairingMode()
   uint8_t broadcastAddr[] = BROADCAST_MAC_ADDR;
   esp_now_del_peer(broadcastAddr);
 
-  DEBUG_I("Tryb parowania zakończony");
+  DEBUG_I("Pairing mode ended");
   DEBUG_PLOT("pairing:0");
 }
 
@@ -92,7 +92,7 @@ void OnDataRecv(const esp_now_recv_info_t *recv_info, const uint8_t *incomingDat
   if (rcTrigMeasPending)
   {
     rcTrigMeasPending = false;
-    DEBUG_I("RC komenda: R");
+    DEBUG_I("RC command: R");
     requestMeasurement();
   }
 
@@ -112,7 +112,7 @@ void OnDataRecv(const esp_now_recv_info_t *recv_info, const uint8_t *incomingDat
       systemStatus.msgMaster.command = CMD_PAIR_ACK;
       commManager.sendMessage(systemStatus.msgMaster);
 
-      DEBUG_I("Nowy Slave sparowany: %02X:%02X:%02X:%02X:%02X:%02X",
+      DEBUG_I("New Slave paired: %02X:%02X:%02X:%02X:%02X:%02X",
         src_addr[0], src_addr[1], src_addr[2], src_addr[3], src_addr[4], src_addr[5]);
     }
 
@@ -140,7 +140,7 @@ void OnDataRecv(const esp_now_recv_info_t *recv_info, const uint8_t *incomingDat
       ackMsg.command = CMD_PAIR_ACK;
       commManager.sendMessage(ackMsg);
 
-      DEBUG_I("Nowy RC sparowany: %02X:%02X:%02X:%02X:%02X:%02X",
+      DEBUG_I("New RC paired: %02X:%02X:%02X:%02X:%02X:%02X",
         src_addr[0], src_addr[1], src_addr[2], src_addr[3], src_addr[4], src_addr[5]);
       return;
     }
@@ -155,7 +155,7 @@ void OnDataRecv(const esp_now_recv_info_t *recv_info, const uint8_t *incomingDat
     }
     else if (msg.command != CMD_PAIR && msg.command != CMD_PAIR_ACK)
     {
-      DEBUG_W("RC: nieznana komenda: %c", (char)msg.command);
+      DEBUG_W("RC: unknown command: %c", (char)msg.command);
     }
   }
   else
@@ -169,7 +169,7 @@ void OnDataSent(const wifi_tx_info_t *info, esp_now_send_status_t status)
   (void)info;
   if (status == ESP_NOW_SEND_SUCCESS)
   {
-    DEBUG_I("Status wysyłki: Sukces");
+    DEBUG_I("Send status: Success");
   }
   else
   {
@@ -187,25 +187,25 @@ static void initDefaultTxMessage()
 }
 
 /**
- * @brief Oblicza timeout oczekiwania na pomiar
+ * @brief Calculates the measurement wait timeout
  *
- * Funkcja oblicza maksymalny czas oczekiwania na odpowiedź od Slave,
- * dodając margines bezpieczeństwa do timeoutu zdefiniowanego w komendzie.
+ * Calculates the maximum wait time for a response from Slave,
+ * adding a safety margin to the timeout defined in the command.
  *
  * @details
  * - Timeout = msgMaster.timeout + MEASUREMENT_TIMEOUT_MARGIN_MS
- * - Margines MEASUREMENT_TIMEOUT_MARGIN_MS (1000ms) uwzględnia czas:
- *   - transmisji ESP-NOW
- *   - przetwarzania danych po stronie Slave
- *   - opóźnień w komunikacji
- * - W przypadku przepełnienia uint32_t, funkcja zwraca UINT32_MAX
+ * - The MEASUREMENT_TIMEOUT_MARGIN_MS (1000ms) margin accounts for:
+ *   - ESP-NOW transmission
+ *   - data processing on the Slave side
+ *   - communication delays
+ * - In case of uint32_t overflow, the function returns UINT32_MAX
  *
- * @return Timeout w milisekundach (maksymalnie UINT32_MAX)
+ * @return Timeout in milliseconds (maximum UINT32_MAX)
  */
 static uint32_t calcMeasurementWaitTimeoutMs()
 {
-  // Wymóg: timeout = systemStatus.msgMaster.timeout + MEASUREMENT_TIMEOUT_MARGIN_MS
-  // (w razie przepełnienia saturujemy do UINT32_MAX)
+  // Requirement: timeout = systemStatus.msgMaster.timeout + MEASUREMENT_TIMEOUT_MARGIN_MS
+  // (in case of overflow, saturate to UINT32_MAX)
   if (systemStatus.msgMaster.timeout > (UINT32_MAX - MEASUREMENT_TIMEOUT_MARGIN_MS))
   {
     return UINT32_MAX;
@@ -214,19 +214,19 @@ static uint32_t calcMeasurementWaitTimeoutMs()
 }
 
 /**
- * @brief Oczekuje na gotowość pomiaru z timeoutem
+ * @brief Waits for measurement readiness with timeout
  *
- * Funkcja blokuje wykonanie programu do momentu otrzymania danych pomiarowych
- * lub upływu timeoutu. Używa flagi measurementReady ustawianej w OnDataRecv.
+ * This function blocks program execution until measurement data is received
+ * or timeout expiration. Uses the measurementReady flag set in OnDataRecv.
  *
  * @details
- * - Pętla sprawdza flagę measurementReady co POLL_DELAY_MS (1ms)
- * - Po otrzymaniu danych, funkcja loguje czas oczekiwania
- * - W przypadku timeoutu, funkcja loguje błąd i zwraca false
- * - Funkcja jest blokująca - nie należy jej używać w pętlach czasu rzeczywistego
+ * - The loop checks the measurementReady flag every POLL_DELAY_MS (1ms)
+ * - After receiving data, the function logs the wait time
+ * - On timeout, the function logs an error and returns false
+ * - This function is blocking - do not use in real-time loops
  *
- * @param timeoutMs Maksymalny czas oczekiwania w milisekundach
- * @return true jeśli dane są gotowe, false w przypadku timeoutu
+ * @param timeoutMs Maximum wait time in milliseconds
+ * @return true if data is ready, false on timeout
  */
 static bool waitForMeasurementReady(uint32_t timeoutMs)
 {
@@ -241,7 +241,7 @@ static bool waitForMeasurementReady(uint32_t timeoutMs)
       return false;
     }
 
-    // Uwaga: blokująca pętla jak wcześniej, ale nie czekamy na sztywne 1000ms.
+    // Note: blocking loop as before, but we don't wait for a fixed 1000ms.
     delay(POLL_DELAY_MS);
   }
 
@@ -249,7 +249,7 @@ static bool waitForMeasurementReady(uint32_t timeoutMs)
   DEBUG_I("Measurement ready after %u ms", (unsigned)elapsedMs);
   DEBUG_I("command:%c", (char)systemStatus.msgSlave.command);
 
-  // UI (WWW/GUI) liczy korekcję po swojej stronie:
+  // UI (Web/GUI) calculates correction on its side:
   // corrected = measurement + calibrationOffset
   DEBUG_PLOT("sessionName:%s", systemStatus.sessionName);
   DEBUG_PLOT("calibrationOffset:%.3f", (double)systemStatus.calibrationOffset);
@@ -262,43 +262,43 @@ static bool waitForMeasurementReady(uint32_t timeoutMs)
 }
 
 /**
- * @brief Wykonuje operację pomiarową z ochroną przed wyścigiem
+ * @brief Executes a measurement operation with race condition protection
  *
- * Funkcja zapewnia atomowe wykonanie operacji CMD_MEASURE lub CMD_UPDATE
- * z ochroną przed jednoczesnymi wywołaniami z różnych źródeł.
+ * This function ensures atomic execution of CMD_MEASURE or CMD_UPDATE
+ * with protection against simultaneous calls from different sources.
  *
  * @details
- * Przepływ operacji:
- * 1. Sprawdza czy operacja już trwa (measurementInProgress)
- * 2. Jeśli tak - zwraca false (błąd: zajęte)
- * 3. Jeśli nie - ustawia measurementInProgress = true
- * 4. Resetuje flagę ready
- * 5. Wysyła komendę do Slave
- * 6. Czeka na odpowiedź z timeoutem
- * 7. Ustawia measurementInProgress = false
- * 8. Zwraca true (sukces) lub false (timeout/błąd)
+ * Operation flow:
+ * 1. Checks if an operation is already in progress (measurementInProgress)
+ * 2. If yes - returns false (error: busy)
+ * 3. If no - sets measurementInProgress = true
+ * 4. Resets the ready flag
+ * 5. Sends command to Slave
+ * 6. Waits for response with timeout
+ * 7. Sets measurementInProgress = false
+ * 8. Returns true (success) or false (timeout/error)
  *
- * @param command Typ komendy (CMD_MEASURE lub CMD_UPDATE)
- * @param commandName Nazwa komendy dla logowania
- * @return true jeśli operacja zakończyła się sukcesem, false w przeciwnym razie
+ * @param command Command type (CMD_MEASURE or CMD_UPDATE)
+ * @param commandName Command name for logging
+ * @return true if the operation succeeded, false otherwise
  */
 static bool executeMeasurementCommand(CommandType command, const char *commandName)
 {
-  // Krok 1: Sprawdź czy operacja już trwa
+  // Step 1: Check if operation is already in progress
   if (measurementState.isMeasurementInProgress())
   {
     DEBUG_W("Measurement command %s rejected - operation already in progress", commandName);
     return false;
   }
 
-  // Krok 2: Zablokuj operację
+  // Step 2: Lock the operation
   measurementState.setMeasurementInProgress(true);
 
-  // Krok 3: Resetuj flagę gotowości
+  // Step 3: Reset the ready flag
   measurementState.setReady(false);
-  measurementState.setMeasurementMessage("Oczekiwanie na odpowiedź...");
+  measurementState.setMeasurementMessage("Waiting for response...");
 
-  // Krok 4: Ustaw i wyślij komendę
+  // Step 4: Set and send the command
   systemStatus.msgMaster.command = command;
 
   ErrorCode result = commManager.sendMessage(systemStatus.msgMaster);
@@ -306,18 +306,18 @@ static bool executeMeasurementCommand(CommandType command, const char *commandNa
   if (result != ERR_NONE)
   {
     LOG_ERROR(result, "Failed to send command %s", commandName);
-    measurementState.setMeasurementMessage("BLAD: Nie można wysłać komendy");
-    measurementState.setMeasurementInProgress(false);  // Zwolnij blokadę
+    measurementState.setMeasurementMessage("ERROR: Cannot send command");
+    measurementState.setMeasurementInProgress(false);  // Release lock
     return false;
   }
 
-  DEBUG_I("Wysłano komendę: %s", commandName);
+  DEBUG_I("Command sent: %s", commandName);
   measurementState.setMeasurementMessage(commandName);
 
-  // Krok 5: Czekaj na odpowiedź
+  // Step 5: Wait for response
   bool success = waitForMeasurementReady(calcMeasurementWaitTimeoutMs());
 
-  // Krok 6: Zwolnij blokadę (nawet przy timeout)
+  // Step 6: Release lock (even on timeout)
   measurementState.setMeasurementInProgress(false);
 
   return success;
@@ -328,7 +328,7 @@ ErrorCode sendTxToSlave(CommandType command, const char *commandName, bool expec
   if (expectResponse)
   {
     measurementState.setReady(false);
-    measurementState.setMeasurementMessage("Oczekiwanie na odpowiedź...");
+    measurementState.setMeasurementMessage("Waiting for response...");
   }
 
   systemStatus.msgMaster.command = command;
@@ -337,13 +337,13 @@ ErrorCode sendTxToSlave(CommandType command, const char *commandName, bool expec
 
   if (result == ERR_NONE)
   {
-    DEBUG_I("Wyslano komendę: %s", commandName);
+    DEBUG_I("Command sent: %s", commandName);
     measurementState.setMeasurementMessage(commandName);
   }
   else
   {
     LOG_ERROR(result, "Failed to send command %s", commandName);
-    measurementState.setMeasurementMessage("BLAD: Nie można wysłać komendy");
+    measurementState.setMeasurementMessage("ERROR: Cannot send command");
   }
 
   return result;
@@ -351,12 +351,12 @@ ErrorCode sendTxToSlave(CommandType command, const char *commandName, bool expec
 
 void requestMeasurement()
 {
-  executeMeasurementCommand(CMD_MEASURE, "Pomiar");
+  executeMeasurementCommand(CMD_MEASURE, "Measure");
 }
 
 void requestUpdate()
 {
-  executeMeasurementCommand(CMD_UPDATE, "Status");
+  executeMeasurementCommand(CMD_UPDATE, "Update");
 }
 
 void sendMotorTest()
@@ -409,7 +409,7 @@ void handleJS()
 void handleMeasure()
 {
   requestMeasurement();
-  server.send(200, "text/plain", "Pomiar wyzwolony");
+  server.send(200, "text/plain", "Measurement triggered");
 }
 
 void handleRead()
@@ -418,25 +418,25 @@ void handleRead()
 }
 
 
-// --- Kalibracja (WWW)
-// 1) POST /api/calibration/measure  -> robi pomiar i zwraca measurementRaw + calibrationOffset
-// 2) POST /api/calibration/offset  -> ustawia calibrationOffset (bez wyzwalania pomiaru)
+// --- Calibration (Web)
+// 1) POST /api/calibration/measure  -> performs measurement and returns measurementRaw + calibrationOffset
+// 2) POST /api/calibration/offset  -> sets calibrationOffset (without triggering measurement)
 
 /**
- * @brief Obsługuje żądanie pomiaru kalibracyjnego
+ * @brief Handles calibration measurement request
  *
  * Endpoint: POST /api/calibration/measure
  *
- * Funkcja wykonuje pomiar i zwraca surową wartość oraz aktualny offset kalibracji.
+ * Performs a measurement and returns the raw value and current calibration offset.
  *
  * @details
- * Przepływ operacji:
- * 1. Wysyła komendę CMD_MEASURE do Slave (z ochroną przed wyścigiem)
- * 2. Jeśli operacja już trwa - zwraca błąd 503 Service Unavailable
- * 3. Jeśli timeout - zwraca błąd 504 Gateway Timeout
- * 4. Jeśli sukces - zwraca JSON z measurementRaw i calibrationOffset
+ * Operation flow:
+ * 1. Sends CMD_MEASURE to Slave (with race condition protection)
+ * 2. If operation is already in progress - returns 503 Service Unavailable
+ * 3. If timeout - returns 504 Gateway Timeout
+ * 4. If success - returns JSON with measurementRaw and calibrationOffset
  *
- * Format odpowiedzi JSON:
+ * JSON response format:
  * ```json
  * {
  *   "success": true,
@@ -445,21 +445,21 @@ void handleRead()
  * }
  * ```
  *
- * Uwaga: UI powinno obliczyć skorygowaną wartość: corrected = measurementRaw + calibrationOffset
+ * Note: UI should calculate the corrected value: corrected = measurementRaw + calibrationOffset
  */
 void handleCalibrationMeasure()
 {
-  // Wywołaj ujednoliconą funkcję z ochroną przed wyścigiem
-  if (!executeMeasurementCommand(CMD_MEASURE, "Pomiar"))
+  // Call unified function with race condition protection
+  if (!executeMeasurementCommand(CMD_MEASURE, "Measure"))
   {
-    // Sprawdź czy to timeout czy zajętość
+    // Check whether it's a timeout or busy state
     if (!measurementState.isReady())
     {
-      server.send(504, "application/json", "{\"success\":false,\"error\":\"Brak odpowiedzi z urządzenia\"}");
+      server.send(504, "application/json", "{\"success\":false,\"error\":\"No response from device\"}");
     }
     else
     {
-      server.send(503, "application/json", "{\"success\":false,\"error\":\"Urządzenie zajęte - operacja w toku\"}");
+      server.send(503, "application/json", "{\"success\":false,\"error\":\"Device busy - operation in progress\"}");
     }
     return;
   }
@@ -477,27 +477,27 @@ void handleCalibrationMeasure()
 }
 
 /**
- * @brief Obsługuje żądanie ustawienia offsetu kalibracji
+ * @brief Handles calibration offset set request
  *
  * Endpoint: POST /api/calibration/offset
  *
- * Funkcja ustawia offset kalibracji bez wykonywania pomiaru.
+ * This function sets the calibration offset without performing a measurement.
  *
  * @details
- * Parametr URL: offset (float) - wartość offsetu w milimetrach
+ * URL parameter: offset (float) - offset value in millimeters
  *
- * Walidacja:
- * - Offset musi być liczbą zmiennoprzecinkową
- * - Zakres: CALIBRATION_OFFSET_MIN (-14.999) do CALIBRATION_OFFSET_MAX (14.999)
+ * Validation:
+ * - Offset must be a floating-point number
+ * - Range: CALIBRATION_OFFSET_MIN (-14.999) to CALIBRATION_OFFSET_MAX (14.999)
  *
- * Przepływ operacji:
- * 1. Pobiera parametr offset z zapytania
- * 2. Waliduje format i zakres wartości
- * 3. Jeśli błąd - zwraca 400 Bad Request
- * 4. Jeśli sukces - zapisuje offset do systemStatus.calibrationOffset
- * 5. Zwraca potwierdzenie z nową wartością
+ * Operation flow:
+ * 1. Gets the offset parameter from the request
+ * 2. Validates format and value range
+ * 3. On error - returns 400 Bad Request
+ * 4. On success - saves offset to systemStatus.calibrationOffset
+ * 5. Returns confirmation with the new value
  *
- * Format odpowiedzi JSON:
+ * JSON response format:
  * ```json
  * {
  *   "success": true,
@@ -505,8 +505,8 @@ void handleCalibrationMeasure()
  * }
  * ```
  *
- * Uwaga: Offset jest przechowywany tylko w pamięci RAM (nie w Preferences),
- * więc zostanie utracony po restarcie urządzenia.
+ * Note: Offset is stored only in RAM (not in Preferences),
+ * so it will be lost after device restart.
  */
 void handleCalibrationSetOffset()
 {
@@ -515,13 +515,13 @@ void handleCalibrationSetOffset()
 
   if (!parseFloatStrict(offsetStr, offsetValue))
   {
-    server.send(400, "application/json", "{\"success\":false,\"error\":\"Niepoprawny parametr offset\"}");
+    server.send(400, "application/json", "{\"success\":false,\"error\":\"Invalid offset parameter\"}");
     return;
   }
 
   if (offsetValue < CALIBRATION_OFFSET_MIN || offsetValue > CALIBRATION_OFFSET_MAX)
   {
-    server.send(400, "application/json", "{\"success\":false,\"error\":\"Offset poza zakresem (-14.999..14.999)\"}");
+    server.send(400, "application/json", "{\"success\":false,\"error\":\"Offset out of range (-14.999..14.999)\"}");
     return;
   }
 
@@ -543,13 +543,13 @@ void handleReferenceSet()
 
   if (!parseFloatStrict(refStr, refValue))
   {
-    server.send(400, "application/json", "{\"success\":false,\"error\":\"Niepoprawny parametr reference\"}");
+    server.send(400, "application/json", "{\"success\":false,\"error\":\"Invalid reference parameter\"}");
     return;
   }
 
   if (refValue < REFERENCE_MIN || refValue > REFERENCE_MAX)
   {
-    server.send(400, "application/json", "{\"success\":false,\"error\":\"Reference poza zakresem (-999.999..999.999)\"}");
+    server.send(400, "application/json", "{\"success\":false,\"error\":\"Reference out of range (-999.999..999.999)\"}");
     return;
   }
 
@@ -565,27 +565,27 @@ void handleReferenceSet()
 }
 
 /**
- * @brief Walidacja nazwy sesji
+ * @brief Validates session name
  *
- * @param name Nazwa sesji do walidacji
- * @return true Nazwa jest prawidłowa
- * @return false Nazwa jest nieprawidłowa
+ * @param name Session name to validate
+ * @return true Name is valid
+ * @return false Name is invalid
  */
 static bool validateSessionName(const String &name)
 {
-  // Minimalna długość: SESSION_NAME_MIN_LENGTH znak
+  // Minimum length: SESSION_NAME_MIN_LENGTH character
   if (name.length() < SESSION_NAME_MIN_LENGTH)
   {
     return false;
   }
 
-  // Maksymalna długość: SESSION_NAME_MAX_LENGTH znaków (32 z null terminator)
+  // Maximum length: SESSION_NAME_MAX_LENGTH characters (32 with null terminator)
   if (name.length() > SESSION_NAME_MAX_LENGTH)
   {
     return false;
   }
 
-  // Walidacja znaków: litery (a-z, A-Z), cyfry (0-9), spacje, podkreślenia (_), myślniki (-)
+  // Character validation: letters (a-z, A-Z), digits (0-9), spaces, underscores (_), hyphens (-)
   for (unsigned int i = 0; i < name.length(); i++)
   {
     char c = name.charAt(i);
@@ -601,16 +601,16 @@ static bool validateSessionName(const String &name)
 void handleStartSession()
 {
   String sessionName = server.arg("sessionName");
-  sessionName.replace("%20", " "); // Zamień spacje z URL encoding
+  sessionName.replace("%20", " "); // Replace spaces from URL encoding
 
-  // Walidacja nazwy sesji
+  // Validate session name
   if (!validateSessionName(sessionName))
   {
-    server.send(400, "application/json", "{\"error\":\"Nazwa sesji jest nieprawidłowa (maks 31 znaków, dozwolone: a-z, A-Z, 0-9, spacja, _, -)\"}");
+    server.send(400, "application/json", "{\"error\":\"Session name is invalid (max 31 characters, allowed: a-z, A-Z, 0-9, space, _, -)\"}");
     return;
   }
 
-  // Zapisz nazwę sesji do systemStatus.sessionName
+  // Save session name to systemStatus.sessionName
   memset(systemStatus.sessionName, 0, sizeof(systemStatus.sessionName));
   strncpy(systemStatus.sessionName, sessionName.c_str(), sizeof(systemStatus.sessionName) - 1);
   
@@ -622,26 +622,26 @@ void handleStartSession()
 }
 
 /**
- * @brief Obsługuje żądanie pomiaru w ramach aktywnej sesji
+ * @brief Handles measurement request within an active session
  *
  * Endpoint: POST /api/measure_session
  *
- * Funkcja wykonuje pomiar i zwraca wszystkie dane związane z sesją.
+ * Performs a measurement and returns all session-related data.
  *
  * @details
- * Wymagania:
- * - Sesja musi być aktywna (sessionName nie może być puste)
- * - Nazwa sesji musi być ustawiona przez handleStartSession()
+ * Requirements:
+ * - Session must be active (sessionName must not be empty)
+ * - Session name must be set via handleStartSession()
  *
- * Przepływ operacji:
- * 1. Sprawdza czy sesja jest aktywna (sessionName != "")
- * 2. Jeśli nie - zwraca 400 Bad Request
- * 3. Wysyła komendę CMD_MEASURE do Slave (z ochroną przed wyścigiem)
- * 4. Jeśli operacja już trwa - zwraca błąd 503 Service Unavailable
- * 5. Jeśli timeout - zwraca 504 Gateway Timeout
- * 6. Jeśli sukces - zwraca pełne dane pomiarowe
+ * Operation flow:
+ * 1. Checks if session is active (sessionName != "")
+ * 2. If not - returns 400 Bad Request
+ * 3. Sends CMD_MEASURE to Slave (with race condition protection)
+ * 4. If operation is already in progress - returns 503 Service Unavailable
+ * 5. If timeout - returns 504 Gateway Timeout
+ * 6. On success - returns full measurement data
  *
- * Format odpowiedzi JSON:
+ * JSON response format:
  * ```json
  * {
  *   "sessionName": "test_session",
@@ -654,38 +654,38 @@ void handleStartSession()
  * }
  * ```
  *
- * Pola:
- * - sessionName: nazwa aktywnej sesji
- * - measurementRaw: surowa wartość pomiaru z suwmiarki
- * - calibrationOffset: offset kalibracji
- * - measurementCorrected: skorygowana wartość (raw + offset)
- * - valid: flaga walidacji (zawsze true w tej implementacji)
- * - batteryVoltage: napięcie baterii w woltach
- * - angleZ: odchylenie od pionu z akcelerometru w stopniach (0-90°)
+ * Fields:
+ * - sessionName: name of the active session
+ * - measurementRaw: raw measurement value from caliper
+ * - calibrationOffset: calibration offset
+ * - measurementCorrected: corrected value (raw + offset)
+ * - valid: validation flag (always true in this implementation)
+ * - batteryVoltage: battery voltage in volts
+ * - angleZ: vertical deviation from accelerometer in degrees (0-90°)
  *
- * Uwaga: measurementCorrected jest obliczane po stronie Mastera
- * dla wygody UI, ale UI może też obliczyć to lokalnie.
+ * Note: measurementCorrected is calculated on the Master side
+ * for UI convenience, but UI can also calculate it locally.
  */
 void handleMeasureSession()
 {
-  // Sprawdź czy sesja jest aktywna (sessionName nie jest puste)
+  // Check if session is active (sessionName is not empty)
   if (strlen(systemStatus.sessionName) == 0)
   {
-    server.send(400, "application/json", "{\"error\":\"Sesja nieaktywna (nie ustawiono nazwy sesji)\"}");
+    server.send(400, "application/json", "{\"error\":\"Session inactive (session name not set)\"}");
     return;
   }
 
-  // Wywołaj ujednoliconą funkcję z ochroną przed wyścigiem
-  if (!executeMeasurementCommand(CMD_MEASURE, "Pomiar"))
+  // Call unified function with race condition protection
+  if (!executeMeasurementCommand(CMD_MEASURE, "Measure"))
   {
-    // Sprawdź czy to timeout czy zajętość
+    // Check whether it's a timeout or busy state
     if (!measurementState.isReady())
     {
-      server.send(504, "application/json", "{\"error\":\"Brak odpowiedzi z urządzenia\"}");
+      server.send(504, "application/json", "{\"error\":\"No response from device\"}");
     }
     else
     {
-      server.send(503, "application/json", "{\"error\":\"Urządzenie zajęte - operacja w toku\"}");
+      server.send(503, "application/json", "{\"error\":\"Device busy - operation in progress\"}");
     }
     return;
   }
@@ -709,7 +709,7 @@ void handleMeasureSession()
 void setup()
 {
   DEBUG_BEGIN();
-  DEBUG_I("=== ESP32 MASTER - Suwmiarka + ESP-NOW ===");
+  DEBUG_I("=== ESP32 MASTER - Caliper + ESP-NOW ===");
 
   // Initialize system status
   memset(&systemStatus, 0, sizeof(systemStatus));
@@ -733,28 +733,28 @@ void setup()
     if (prefsManager.loadSlaveMac(nvsSlaveMac))
     {
       memcpy(slaveAddress, nvsSlaveMac, 6);
-      DEBUG_I("Slave MAC z NVS: %02X:%02X:%02X:%02X:%02X:%02X",
+      DEBUG_I("Slave MAC from NVS: %02X:%02X:%02X:%02X:%02X:%02X",
         slaveAddress[0], slaveAddress[1], slaveAddress[2], slaveAddress[3], slaveAddress[4], slaveAddress[5]);
     }
     else
     {
-      DEBUG_W("Brak Slave MAC w NVS — używam fallback z config.h");
+      DEBUG_W("Slave MAC not found in NVS — using fallback from config.h");
     }
 
     uint8_t nvsRcMac[6];
     if (prefsManager.loadRcMac(nvsRcMac))
     {
       memcpy(rcAddress, nvsRcMac, 6);
-      DEBUG_I("RC MAC z NVS: %02X:%02X:%02X:%02X:%02X:%02X",
+      DEBUG_I("RC MAC from NVS: %02X:%02X:%02X:%02X:%02X:%02X",
         rcAddress[0], rcAddress[1], rcAddress[2], rcAddress[3], rcAddress[4], rcAddress[5]);
     }
     else
     {
-      DEBUG_W("Brak RC MAC w NVS — używam fallback z config.h");
+      DEBUG_W("RC MAC not found in NVS — using fallback from config.h");
     }
   }
   
-  // sessionName jest już zainicjalizowany na pusty string przez memset
+  // sessionName is already initialized to empty string by memset
 
   // Initialize LittleFS
   if (!LittleFS.begin())
@@ -768,7 +768,7 @@ void setup()
   WiFi.mode(WIFI_AP_STA);
   WiFi.softAP(WIFI_SSID, WIFI_PASSWORD);
 
-  DEBUG_I("\n=== Access Point uruchomiony ===");
+  DEBUG_I("\n=== Access Point started ===");
   DEBUG_I("SSID: %s", WIFI_SSID);
   DEBUG_I("IP: %s", WiFi.softAPIP().toString().c_str());
   DEBUG_I("================================\n");
@@ -798,19 +798,19 @@ void setup()
     rcPeerInfo.encrypt = false;
     if (esp_now_add_peer(&rcPeerInfo) == ESP_OK)
     {
-      DEBUG_I("RC peer dodany: %02X:%02X:%02X:%02X:%02X:%02X",
+      DEBUG_I("RC peer added: %02X:%02X:%02X:%02X:%02X:%02X",
         rcAddress[0], rcAddress[1], rcAddress[2], rcAddress[3], rcAddress[4], rcAddress[5]);
       memcpy(pairedRcAddress, rcAddress, 6);
       hasPairedRc = true;
     }
     else
     {
-      DEBUG_W("Nie udalo sie dodac RC peer");
+      DEBUG_W("Failed to add RC peer");
     }
   }
   else
   {
-    DEBUG_I("RC MAC unset — RC peer nie zostanie dodany (użyj parowania)");
+    DEBUG_I("RC MAC unset — RC peer will not be added (use pairing)");
   }
 
   // Setup web server routes - static files
@@ -822,7 +822,7 @@ void setup()
   server.on("/measure", handleMeasure);
   server.on("/read", handleRead);
 
-  // Kalibracja
+  // Calibration
   server.on("/api/calibration/measure", HTTP_POST, handleCalibrationMeasure);
   server.on("/api/calibration/offset", HTTP_POST, handleCalibrationSetOffset);
   server.on("/api/reference", HTTP_POST, handleReferenceSet);
@@ -833,15 +833,15 @@ void setup()
   server.onNotFound([]()
                     {
     if (server.method() == HTTP_POST) {
-      server.send(404, "application/json", "{\"error\":\"Not found\",\"message\":\"Endpoint nie istnieje\"}");
+      server.send(404, "application/json", "{\"error\":\"Not found\",\"message\":\"Endpoint not found\"}");
     } else {
       server.send(404, "text/plain", "Not found");
     } });
 
   server.begin();
-  DEBUG_I("Serwer HTTP uruchomiony na porcie %d", (int)WEB_SERVER_PORT);
-  DEBUG_I("Polacz sie z WiFi: %s", WIFI_SSID);
-  DEBUG_I("Otworz: http://%s", WiFi.softAPIP().toString().c_str());
+  DEBUG_I("HTTP server started on port %d", (int)WEB_SERVER_PORT);
+  DEBUG_I("Connect to WiFi: %s", WIFI_SSID);
+  DEBUG_I("Open: http://%s", WiFi.softAPIP().toString().c_str());
 
   SerialCliContext cliCtx;
   cliCtx.systemStatus = &systemStatus;
@@ -862,7 +862,7 @@ void loop()
   if (rcTrigMeasPending)
   {
     rcTrigMeasPending = false;
-    DEBUG_I("RC komenda: R");
+    DEBUG_I("RC command: R");
     requestMeasurement();
   }
 

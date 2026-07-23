@@ -37,7 +37,7 @@
 // ============================================================================
 // WiFi Access Point Configuration
 // ============================================================================
-#define WIFI_SSID "Orange_WiFi"
+#define WIFI_SSID "TKK_Caliper"
 #define WIFI_PASSWORD "1670$2026"
 #define WIFI_AP_IP IPAddress(192, 168, 4, 1)
 

@@ -377,7 +377,7 @@ python caliper_master_gui.py
 ```
 
 ### 7. Użycie Web UI
-1. Połącz się z WiFi: `Orange_WiFi` (hasło: `1670$2026`)
+1. Połącz się z WiFi: `TKK_Caliper` (hasło: `1670$2026`)
 2. Otwórz w przeglądarce: `http://192.168.4.1`
 
 ## ⚙️ Instalacja i konfiguracja
@@ -426,7 +426,7 @@ Aby znaleźć adres MAC urządzenia, uruchom firmware i sprawdź wyjście Serial
 
 WiFi AP jest konfigurowane w [`caliper_master/src/config.h`](caliper_master/src/config.h:35):
 ```cpp
-#define WIFI_SSID "Orange_WiFi"
+#define WIFI_SSID "TKK_Caliper"
 #define WIFI_PASSWORD "1670$2026"
 #define WIFI_AP_IP IPAddress(192, 168, 4, 1)
 ```
@@ -798,7 +798,7 @@ prefsManager.resetToDefaults();
 
 #### WiFi
 ```cpp
-#define WIFI_SSID "Orange_WiFi"
+#define WIFI_SSID "TKK_Caliper"
 #define WIFI_PASSWORD "1670$2026"
 #define WIFI_AP_IP IPAddress(192, 168, 4, 1)
 ```

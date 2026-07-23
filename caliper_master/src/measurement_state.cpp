@@ -4,11 +4,11 @@
 MeasurementState::MeasurementState()
     : lastValue(0.0f), ready(false), measurementInProgress(false)
 {
-    // Inicjalizacja buforów tekstowych
-    strncpy(lastMeasurement, "Brak pomiaru", MEASUREMENT_BUFFER_SIZE - 1);
+    // Text buffer initialization
+    strncpy(lastMeasurement, "No measurement", MEASUREMENT_BUFFER_SIZE - 1);
     lastMeasurement[MEASUREMENT_BUFFER_SIZE - 1] = '\0';
     
-    strncpy(lastBatteryVoltage, "Brak danych", BATTERY_BUFFER_SIZE - 1);
+    strncpy(lastBatteryVoltage, "No data", BATTERY_BUFFER_SIZE - 1);
     lastBatteryVoltage[BATTERY_BUFFER_SIZE - 1] = '\0';
 }
 
@@ -73,9 +73,9 @@ void MeasurementState::reset()
     ready = false;
     measurementInProgress = false;
     
-    strncpy(lastMeasurement, "Brak pomiaru", MEASUREMENT_BUFFER_SIZE - 1);
+    strncpy(lastMeasurement, "No measurement", MEASUREMENT_BUFFER_SIZE - 1);
     lastMeasurement[MEASUREMENT_BUFFER_SIZE - 1] = '\0';
     
-    strncpy(lastBatteryVoltage, "Brak danych", BATTERY_BUFFER_SIZE - 1);
+    strncpy(lastBatteryVoltage, "No data", BATTERY_BUFFER_SIZE - 1);
     lastBatteryVoltage[BATTERY_BUFFER_SIZE - 1] = '\0';
 }

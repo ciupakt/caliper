@@ -1,6 +1,6 @@
 """caliper_master_gui.src.gui.measurement_tab
 
-Zakładka „Pomiary” (GUI).
+"Measurements" tab (GUI).
 """
 
 import dearpygui.dearpygui as dpg
@@ -31,17 +31,17 @@ class MeasurementTab:
         self.calibration_offset: float = 0.0
         self.reference: float = 0.0
 
-        # Domyślny prefix plików CSV (zamiennik „measurement_”)
+        # Default CSV file prefix (replacement for "measurement_")
         self.csv_prefix: str = "test"
 
-        # Nazwa sesji (używana jako domyślna wartość w polu input)
+        # Session name (used as default value in input field)
         self.session_name: str = ""
 
-        # Auto-pomiar (wątek wysyłający cyklicznie komendę "m")
+# Auto-measure (thread sending command "m" cyclically)
         self._auto_event = threading.Event()
         self._auto_thread: threading.Thread | None = None
 
-        # Referencje ustawiane w create()
+        # References set in create()
         self._csv_handler = None
         self._on_drop = None
 
@@ -49,8 +49,8 @@ class MeasurementTab:
         """Create the measurement tab UI
 
         Args:
-            on_drop: opcjonalny callback wywoływany po anulowaniu ostatniego
-                     pomiaru (np. do synchronizacji zakładki Gauge).
+            on_drop: optional callback invoked after canceling last
+                     measurement (e.g. to sync Gauge tab).
         """
         self._csv_handler = csv_handler
         self._on_drop = on_drop
@@ -233,7 +233,7 @@ class MeasurementTab:
                             dpg.add_theme_color(dpg.mvThemeCol_ButtonActive, (0, 0, 0, 0))
                 dpg.bind_item_theme(csv_link_btn, "csv_link_theme")
 
-                # Elastyczny odstęp dociskający "Connected to" do prawej krawędzi.
+                # Flexible spacer pushing "Connected to" to the right edge.
                 dpg.add_spacer(width=10, tag="status_row_spacer")
                 dpg.add_text("Connected to:")
                 dpg.add_text("(none)", tag="port_status")
@@ -250,7 +250,7 @@ class MeasurementTab:
                 )
 
     def _open_csv_directory(self, sender, app_data, user_data):
-        """Otwórz katalog zawierający bieżący plik CSV w menedżerze plików."""
+        """Open the directory containing the current CSV file in file manager."""
         csv_handler = user_data
         filename = None
         try:
@@ -276,7 +276,7 @@ class MeasurementTab:
             pass
 
     def _save_session_as(self, sender, app_data, user_data):
-        """Otwórz natywne okno 'Zapisz jako' i skopiuj/przenieś plik CSV."""
+        """Open native "Save as" window and copy/move the CSV file."""
         csv_handler = user_data
         src_filename = None
         try:
@@ -293,9 +293,9 @@ class MeasurementTab:
         initial_file = os.path.basename(abs_src)
 
         def _native_save_dialog() -> str:
-            """Zwraca wybraną ścieżkę lub pusty string przy anulowaniu."""
+            """Returns selected path or empty string on cancel."""
             if sys.platform.startswith("win"):
-                # Windows – natywne okno Win32 przez PowerShell
+                # Windows – native Win32 dialog via PowerShell
                 ps_script = (
                     "Add-Type -AssemblyName System.Windows.Forms; "
                     "$d = New-Object System.Windows.Forms.SaveFileDialog; "
@@ -331,7 +331,7 @@ class MeasurementTab:
                 except Exception:
                     return ""
             else:
-                # Linux – zenity (natywne GTK)
+                # Linux – zenity (native GTK)
                 try:
                     result = subprocess.run(
                         [
@@ -356,7 +356,7 @@ class MeasurementTab:
             dest = _native_save_dialog()
             if not dest:
                 return
-            # Dodaj rozszerzenie .csv jeśli brak
+            # Add .csv extension if missing
             if not dest.lower().endswith(".csv"):
                 dest += ".csv"
             try:
@@ -370,11 +370,11 @@ class MeasurementTab:
 
     @staticmethod
     def update_status_row_layout() -> None:
-        """Dopasuj szerokość spacera w wierszu statusu, aby "Connected to:"
-        było wyrównane do prawej krawędzi okna.
+        """Adjust spacer width in status row so "Connected to:"
+        is aligned to the right edge of the window.
 
-        Działa również poprawnie po zmianie rozmiaru okna oraz po zmianie
-        długości nazwy sesji / nazwy portu COM.
+        Works correctly after window resize and after
+        change in session name / COM port name length.
         """
         try:
             if not dpg.does_item_exist("status_row_spacer"):
@@ -382,8 +382,8 @@ class MeasurementTab:
             if not dpg.does_item_exist("status_row"):
                 return
 
-            # Dostępna szerokość obszaru zakładki – używamy szerokości viewportu
-            # pomniejszonej o typowy padding okna głównego i obszaru zakładek.
+            # Available tab area width – we use viewport width
+            # minus typical main window and tab area padding.
             try:
                 avail_w = int(dpg.get_viewport_client_width()) - 32
             except Exception:
@@ -391,13 +391,13 @@ class MeasurementTab:
             if avail_w <= 0:
                 avail_w = 1100
 
-            # Lista dzieci wiersza statusu
+            # List of status row children
             try:
                 children = dpg.get_item_children("status_row", 1) or []
             except Exception:
                 children = []
 
-            # Znajdź indeks spacera
+            # Find spacer index
             spacer_index = None
             for idx, child in enumerate(children):
                 try:
@@ -409,7 +409,7 @@ class MeasurementTab:
             if spacer_index is None:
                 return
 
-            # Suma szerokości elementów po lewej i prawej stronie spacera
+            # Sum of widths of elements on left and right side of spacer
             left_w = 0
             for child in children[:spacer_index]:
                 try:
@@ -425,7 +425,7 @@ class MeasurementTab:
                 except Exception:
                     pass
 
-            # Item spacing w grupie horizontal (domyślny styl Dear PyGui ~8 px).
+            # Item spacing in horizontal group (Dear PyGui default style ~8 px).
             ITEM_SPACING = 8
             num_gaps = max(len(children) - 1, 0)
             gaps_w = num_gaps * ITEM_SPACING
@@ -440,10 +440,10 @@ class MeasurementTab:
 
     @staticmethod
     def _set_csv_info_label(filename: str | None) -> None:
-        """Ustaw label przycisku csv_info pełną nazwą pliku.
+        """Set csv_info button label to full filename.
 
-        Nazwa sesji jest ograniczona do 31 znaków przy tworzeniu nowej sesji,
-        więc pełna nazwa pliku zmieści się w wierszu statusu bez skracania.
+        Session name is limited to 31 characters when creating a new session,
+        so the full filename fits in the status row without truncation.
         """
         display = filename if filename else "(none)"
         try:
@@ -467,8 +467,8 @@ class MeasurementTab:
         serial_handler, csv_handler = user_data
         port = dpg.get_value("port_combo")
 
-        # Jeśli port jest już otwarty i kliknięto "Open Port" dla tego samego portu,
-        # nie ruszamy bieżącej sesji (zachowujemy nazwę pliku CSV za "Session:").
+        # If port is already open and "Open Port" was clicked for the same port,
+        # we don’t touch the current session (keep CSV filename under "Session:").
         try:
             already_open_same_port = (
                 serial_handler is not None
@@ -486,9 +486,9 @@ class MeasurementTab:
         if serial_handler.open_port(port):
             dpg.set_value("port_status", port)
 
-            # Zgodnie z wymaganiem: plik CSV NIE jest tworzony przy otwieraniu portu.
-            # Jeśli był otwarty poprzedni plik, zamykamy go, żeby nowa sesja zawsze
-            # tworzyła nowy plik po podaniu prefixu.
+            # Per requirement: CSV file is NOT created when opening the port.
+            # If a previous file was open, we close it so that a new session always
+            # creates a new file after providing a prefix.
             try:
                 if (
                     csv_handler is not None
@@ -509,7 +509,7 @@ class MeasurementTab:
         serial_handler.write("m")
 
     def _cancel_last_measurement(self, sender=None, app_data=None, user_data=None):
-        """Anuluj ostatni pomiar: usuń z historii/wykresu, z pliku CSV i odśwież Gauge."""
+        """Cancel last measurement: remove from history/chart, from CSV file, and refresh Gauge."""
         if self.drop_last_measurement():
             try:
                 if self._csv_handler is not None and self._csv_handler.is_open():
@@ -517,7 +517,7 @@ class MeasurementTab:
             except Exception:
                 pass
 
-        # Synchronizacja zakładki Gauge (np. pokaż poprzedni pomiar lub wyczyść)
+        # Gauge tab sync (e.g. show previous measurement or clear)
         if callable(self._on_drop):
             try:
                 self._on_drop()
@@ -543,13 +543,13 @@ class MeasurementTab:
         except Exception:
             session_name = ""
 
-        # Walidacja nazwy sesji
+        # Session name validation
         if not self._validate_session_name(session_name):
             return
 
         self.session_name = session_name
 
-        # Wysyłanie komendy 'n' do ESP32 Master
+        # Sending command 'n' to ESP32 Master
         try:
             if (
                 serial_handler is not None
@@ -557,7 +557,7 @@ class MeasurementTab:
                 and serial_handler.is_open()
             ):
                 serial_handler.write(f"n {session_name}")
-                # Wysyłanie reference po stworzeniu nowej sesji
+                # Sending reference after creating new session
                 try:
                     ref_val = float(dpg.get_value("ref_input_meas"))
                     ref_val = self._clamp_float(ref_val, -999.999, 999.999)
@@ -565,13 +565,13 @@ class MeasurementTab:
                     serial_handler.write(f"v {ref_val:.3f}")
                 except Exception:
                     pass
-                # Zapisz do logu aplikacji (przez callback w main)
+                # Save to application log (via callback in main)
             else:
                 return
         except Exception:
             return
 
-        # Użyj nazwy sesji jako prefixu pliku CSV
+        # Use session name as CSV file prefix
         self.csv_prefix = session_name
 
         # Clear GUI measurements
@@ -606,7 +606,7 @@ class MeasurementTab:
 
         # Start / stop background task
         if running:
-            # jeśli już działa, nic nie rób
+            # if already running, do nothing
             if self._auto_thread is not None and self._auto_thread.is_alive():
                 return
 
@@ -620,7 +620,7 @@ class MeasurementTab:
             self._auto_thread.start()
         else:
             self._auto_event.set()
-            # join krótki, żeby nie blokować GUI przy długim sleep
+            # short join to not block GUI on long sleep
             try:
                 if self._auto_thread is not None:
                     self._auto_thread.join(timeout=0.3)
@@ -638,23 +638,23 @@ class MeasurementTab:
 
     @staticmethod
     def _validate_session_name(name: str) -> bool:
-        """Walidacja nazwy sesji.
+        """Session name validation.
 
         Args:
-            name: Nazwa sesji do walidacji
+            name: Session name to validate
 
         Returns:
-            True jeśli nazwa jest prawidłowa
+            True if name is valid
         """
-        # Minimalna długość: 1 znak
+        # Minimum length: 1 character
         if not name or len(name) < 1:
             return False
 
-        # Maksymalna długość: 31 znaków
+        # Maximum length: 31 characters
         if len(name) > 31:
             return False
 
-        # Dozwolone znaki: litery (a-z, A-Z), cyfry (0-9), spacje, podkreślenia (_), myślniki (-)
+        # Allowed characters: letters (a-z, A-Z), digits (0-9), spaces, underscores (_), hyphens (-)
         allowed_pattern = r"^[a-zA-Z0-9 _-]+$"
         if not re.match(allowed_pattern, name):
             return False
@@ -664,10 +664,10 @@ class MeasurementTab:
     def _auto_loop(self, serial_handler):
         """Worker loop for auto-measure.
 
-        Uwaga: unikamy operacji na UI z wątku w tle (DearPyGui nie gwarantuje thread-safety).
+        Note: we avoid UI operations from background thread (DearPyGui does not guarantee thread-safety).
         """
         while not self._auto_event.is_set():
-            # odczytuj interwał „na żywo”, żeby zmiana w UI działała bez restartu
+            # read interval "live" so that UI change works without restart
             try:
                 interval = int(dpg.get_value("interval_ms"))
             except Exception:
@@ -675,7 +675,7 @@ class MeasurementTab:
 
             interval = self._clamp_int(interval, 500, 600000)
 
-            # wysyłamy tylko gdy port otwarty; jeśli nie, po prostu czekamy
+            # send only when port is open; if not, just wait
             try:
                 if (
                     serial_handler is not None
@@ -684,7 +684,7 @@ class MeasurementTab:
                 ):
                     serial_handler.write("m")
             except Exception:
-                # nie wywalaj wątku – najwyżej pomiń iterację
+            # don’t crash the thread – at worst skip iteration
                 pass
 
             time.sleep(interval / 1000.0)

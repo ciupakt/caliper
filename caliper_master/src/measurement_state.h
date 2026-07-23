@@ -4,25 +4,25 @@
 #include <Arduino.h>
 
 /**
- * @brief Klasa enkapsulująca stan pomiarowy systemu
+ * @brief Class encapsulating the measurement state of the system
  *
- * Klasa zarządza stanem pomiarowym, w tym ostatnimi wartościami pomiarów,
- * napięciem baterii oraz flagą gotowości pomiaru. Stan jest przechowywany
- * w buforach tekstowych o stałym rozmiarze dla bezpieczeństwa.
+ * The class manages the measurement state, including recent measurement values,
+ * battery voltage, and the measurement ready flag. State is stored
+ * in fixed-size text buffers for safety.
  *
- * Użycie:
+ * Usage:
  * ```cpp
  * static MeasurementState measurementState;
  *
- * // Ustawienie pomiaru
+ * // Set measurement
  * measurementState.setMeasurement(123.456f);
  *
- * // Pobranie flagi gotowości
+ * // Get ready flag
  * if (measurementState.isReady()) {
  *     float value = measurementState.getValue();
  * }
  *
- * // Resetowanie flagi gotowości
+ * // Reset ready flag
  * measurementState.setReady(false);
  * ```
  */
@@ -40,82 +40,82 @@ private:
 
 public:
     /**
-     * @brief Konstruktor - inicjalizuje stan domyślny
+     * @brief Constructor - initializes default state
      */
     MeasurementState();
 
     /**
-     * @brief Ustawia wartość pomiaru i formatuje tekst
+     * @brief Sets measurement value and formats text
      *
-     * @param value Wartość pomiaru w milimetrach
+     * @param value Measurement value in millimeters
      */
     void setMeasurement(float value);
 
     /**
-     * @brief Ustawia napięcie baterii i formatuje tekst
+     * @brief Sets battery voltage and formats text
      *
-     * @param voltage Napięcie w woltach
+     * @param voltage Voltage in volts
      */
     void setBatteryVoltage(float voltage);
 
     /**
-     * @brief Ustawia tekst pomiaru (np. komunikat statusu)
+     * @brief Sets measurement text (e.g. status message)
      *
-     * @param message Tekst do ustawienia
+     * @param message Text to set
      */
     void setMeasurementMessage(const char *message);
 
     /**
-     * @brief Ustawia flagę gotowości pomiaru
+     * @brief Sets the measurement ready flag
      *
-     * @param isReady Stan gotowości (true/false)
+     * @param isReady Ready state (true/false)
      */
     void setReady(bool isReady);
 
     /**
-     * @brief Pobiera tekst ostatniego pomiaru
+     * @brief Gets the text of the last measurement
      *
-     * @return Wskaźnik do bufora z tekstem pomiaru
+     * @return Pointer to measurement text buffer
      */
     const char *getMeasurement() const;
 
     /**
-     * @brief Pobiera tekst ostatniego napięcia baterii
+     * @brief Gets the last battery voltage text
      *
-     * @return Wskaźnik do bufora z tekstem napięcia
+     * @return Pointer to voltage text buffer
      */
     const char *getBatteryVoltage() const;
 
     /**
-     * @brief Pobiera wartość liczbową ostatniego pomiaru
+     * @brief Gets the numeric value of the last measurement
      *
-     * @return Wartość pomiaru w milimetrach
+     * @return Measurement value in millimeters
      */
     float getValue() const;
 
     /**
-     * @brief Sprawdza czy pomiar jest gotowy
+     * @brief Checks if measurement is ready
      *
-     * @return true jeśli pomiar jest gotowy, false w przeciwnym razie
+     * @return true if measurement is ready, false otherwise
      */
     bool isReady() const;
 
     /**
-     * @brief Sprawdza czy operacja pomiarowa jest w toku
+     * @brief Checks if a measurement operation is in progress
      *
-     * @return true jeśli operacja jest w toku, false w przeciwnym razie
+     * @return true if operation is in progress, false otherwise
      */
     bool isMeasurementInProgress() const;
 
     /**
-     * @brief Ustawia flagę operacji pomiarowej w toku
+     * @brief Sets the measurement operation in progress flag
      *
-     * @param inProgress Stan operacji (true/false)
+     * @param inProgress Operation state (true/false)
      */
     void setMeasurementInProgress(bool inProgress);
 
     /**
-     * @brief Resetuje stan do wartości domyślnych
+     * @brief Resets state to default values
      */
     void reset();
 };

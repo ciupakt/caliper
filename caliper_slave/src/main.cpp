@@ -63,7 +63,7 @@ static void enterPairingMode()
   broadcastPeer.encrypt = false;
   esp_now_add_peer(&broadcastPeer);
 
-  DEBUG_I("Slave: tryb parowania aktywny");
+  DEBUG_I("Slave: pairing mode active");
 }
 
 static void exitPairingMode()
@@ -73,38 +73,38 @@ static void exitPairingMode()
   uint8_t broadcastAddr[] = BROADCAST_MAC_ADDR;
   esp_now_del_peer(broadcastAddr);
 
-  DEBUG_I("Slave: tryb parowania zakończony");
+  DEBUG_I("Slave: pairing mode ended");
 }
 
 /**
- * @brief Callback odbierający dane ESP-NOW od Mastera
+ * @brief ESP-NOW data receive callback from Master
  *
- * Funkcja jest wywoływana automatycznie przez ESP-NOW po otrzymaniu
- * pakietu od Mastera. Obsługuje różne komendy i planuje wykonanie
- * odpowiednich akcji za pomocą timera.
+ * This function is called automatically by ESP-NOW upon receiving
+ * a packet from Master. It handles various commands and schedules
+ * appropriate actions using a timer.
  *
  * @details
- * Obsługiwane komendy:
- * - CMD_MEASURE: żądanie pomiaru z uruchomieniem silnika
- * - CMD_UPDATE: żądanie aktualizacji statusu bez silnika
- * - CMD_MOTORTEST: test silnika z parametrami z msgMaster
+ * Supported commands:
+ * - CMD_MEASURE: measurement request with motor activation
+ * - CMD_UPDATE: status update request without motor
+ * - CMD_MOTORTEST: motor test with parameters from msgMaster
  *
- * Mechanizm blokowania pomiarów:
- * - Jeśli measurementInProgress == true, wszystkie komendy są ignorowane
- * - Flaga jest ustawiana na początku runMeasReq i zdejmowana na końcu
- * - Zapobiega to zakłócaniu trwającego pomiaru przez nowe komendy
+ * Measurement locking mechanism:
+ * - If measurementInProgress == true, all commands are ignored
+ * - The flag is set at the start of runMeasReq and cleared at the end
+ * - This prevents ongoing measurements from being disrupted by new commands
  *
- * Mechanizm timera:
- * - timerWorker.cancel() anuluje wszystkie zaplanowane zadania
- * - timerWorker.in(TIMER_DELAY_MS, runMeasReq) planuje wykonanie runMeasReq
- * - TIMER_DELAY_MS (1ms) zapewnia minimalne opóźnienie przed wykonaniem
+ * Timer mechanism:
+ * - timerWorker.cancel() cancels all scheduled tasks
+ * - timerWorker.in(TIMER_DELAY_MS, runMeasReq) schedules runMeasReq for execution
+ * - TIMER_DELAY_MS (1ms) provides minimal delay before execution
  *
- * Uwaga: Funkcja nie powinna blokować wykonania, dlatego używamy timera
- * do odroczenia wykonania czasochłonnych operacji.
+ * Note: This function should not block execution, so we use a timer
+ * to defer execution of time-consuming operations.
  *
- * @param recv_info Informacje o nadawcy (nieużywane)
- * @param incomingData Bufor z odebranymi danymi
- * @param len Długość odebranych danych
+ * @param recv_info Sender information (unused)
+ * @param incomingData Buffer with received data
+ * @param len Length of received data
  */
 void OnDataRecv(const esp_now_recv_info_t *recv_info, const uint8_t *incomingData, int len)
 {
@@ -142,7 +142,7 @@ void OnDataRecv(const esp_now_recv_info_t *recv_info, const uint8_t *incomingDat
 
       exitPairingMode();
 
-      DEBUG_I("Otrzymano CMD_PAIR od Mastera: %02X:%02X:%02X:%02X:%02X:%02X",
+      DEBUG_I("Received CMD_PAIR from Master: %02X:%02X:%02X:%02X:%02X:%02X",
         src_addr[0], src_addr[1], src_addr[2], src_addr[3], src_addr[4], src_addr[5]);
       return;
     }
@@ -152,7 +152,7 @@ void OnDataRecv(const esp_now_recv_info_t *recv_info, const uint8_t *incomingDat
       slavePrefs.putBytes("masterMac", src_addr, 6);
       hasStoredMasterMac = true;
       exitPairingMode();
-      DEBUG_I("Parowanie zakończone");
+      DEBUG_I("Pairing completed");
       return;
     }
 
@@ -160,7 +160,7 @@ void OnDataRecv(const esp_now_recv_info_t *recv_info, const uint8_t *incomingDat
 
     if (measurementInProgress)
     {
-      DEBUG_W("Pomiar w trakcie - komenda %c zignorowana", msgMaster.command);
+      DEBUG_W("Measurement in progress - command %c ignored", msgMaster.command);
       return;
     }
 
@@ -193,7 +193,7 @@ void OnDataRecv(const esp_now_recv_info_t *recv_info, const uint8_t *incomingDat
       break;
 
     default:
-      DEBUG_W("Nieznana komenda: %c", msgMaster.command);
+      DEBUG_W("Unknown command: %c", msgMaster.command);
       break;
     }
   }
@@ -208,7 +208,7 @@ void OnDataSent(const wifi_tx_info_t *info, esp_now_send_status_t status)
   (void)info;
   if (status == ESP_NOW_SEND_SUCCESS)
   {
-    DEBUG_I("Status wysyłki: Sukces");
+    DEBUG_I("Send status: Success");
   }
   else
   {
@@ -221,7 +221,7 @@ bool updateMeasureData(void *arg)
   accelerometer.update();
   msgSlave.measurement = caliper.performMeasurement();
   
-  // Pobierz kąt Z - odchylenie od pionu (0-90 stopni)
+  // Get Z angle - vertical deviation (0-90 degrees)
   float angleZ = accelerometer.getAngleZ();
   msgSlave.angleZ = (uint8_t)angleZ;
   
@@ -234,7 +234,7 @@ bool MotorStopTimeout(void *arg)
 {
   motorCtrlRun(0, 0, MOTOR_STOP);
   digitalWrite(LED_GREEN, LOW);
-  DEBUG_I("Silnik zatrzymany po timeout");
+  DEBUG_I("Motor stopped after timeout");
   return false; // do not repeat this task
 }
 
@@ -257,47 +257,47 @@ bool batteryMonitorTask(void *arg)
 }
 
 /**
- * @brief Callback wykonywany przy każdym żądaniu pomiaru
+ * @brief Callback executed on each measurement request
  *
- * Funkcja jest wywoływana przez timer po otrzymaniu komendy CMD_MEASURE
- * lub CMD_UPDATE. Wykonuje pomiar i wysyła wynik do Mastera.
+ * This function is called by the timer after receiving CMD_MEASURE
+ * or CMD_UPDATE. Performs measurement and sends result to Master.
  *
  * @details
- * Przepływ dla CMD_MEASURE:
- * 1. Ustaw flagę measurementInProgress = true (blokuje nowe komendy)
- * 2. Uruchom silnik w przód (MOTOR_FORWARD) z parametrami z msgMaster
- * 3. Poczekaj msgMaster.timeout ms na ustabilizowanie silnika
- * 4. Wykonaj pomiar (updateMeasureData)
- * 5. Uruchom silnik w tył (MOTOR_REVERSE) do powrotu do pozycji
- * 6. Wyślij wynik do Mastera
- * 7. Zdejmij flagę measurementInProgress = false
+ * Flow for CMD_MEASURE:
+ * 1. Set measurementInProgress = true (blocks new commands)
+ * 2. Start motor forward (MOTOR_FORWARD) with parameters from msgMaster
+ * 3. Wait msgMaster.timeout ms for motor stabilization
+ * 4. Perform measurement (updateMeasureData)
+ * 5. Start motor reverse (MOTOR_REVERSE) to return to position
+ * 6. Send result to Master
+ * 7. Clear measurementInProgress = false
  *
- * Przepływ dla CMD_UPDATE:
- * 1. Ustaw flagę measurementInProgress = true
- * 2. Wykonaj pomiar bez uruchamiania silnika
- * 3. Wyślij wynik do Mastera
- * 4. Zdejmij flagę measurementInProgress = false
+ * Flow for CMD_UPDATE:
+ * 1. Set measurementInProgress = true
+ * 2. Perform measurement without activating motor
+ * 3. Send result to Master
+ * 4. Clear measurementInProgress = false
  *
- * Mechanizm blokowania:
- * - Flaga measurementInProgress jest ustawiana na początku funkcji
- * - OnDataRecv sprawdza tę flagę i ignoruje komendy gdy pomiar trwa
- * - Flaga jest zdejmowana po zakończeniu pomiaru i wysyłce wyniku
+ * Locking mechanism:
+ * - The measurementInProgress flag is set at the start of the function
+ * - OnDataRecv checks this flag and ignores commands when measurement is in progress
+ * - The flag is cleared after measurement completes and result is sent
  *
- * Mechanizm retry przy błędzie wysyłki:
- * - Pierwsza próba: natychmiast po przygotowaniu danych
- * - Jeśli błąd: odczekaj ESPNOW_RETRY_DELAY_MS (100ms)
- * - Druga próba: ponów wysyłkę
- * - Jeśli drugi błąd: zaloguj błąd i kontynuuj
+ * Retry mechanism on send error:
+ * - First attempt: immediately after data is prepared
+ * - On error: wait ESPNOW_RETRY_DELAY_MS (100ms)
+ * - Second attempt: retry send
+ * - On second error: log error and continue
  *
- * Uwaga: Funkcja zwraca false, co oznacza, że zadanie nie powinno być
- * powtarzane przez timer (jest jednorazowe).
+ * Note: This function returns false, meaning the task should not be
+ * repeated by timer (it is one-shot).
  *
- * @param arg Argument przekazywany przez timer (nieużywany)
- * @return false (zadanie nie jest powtarzane)
+ * @param arg Argument passed by timer (unused)
+ * @return false (task is not repeated)
  */
 bool runMeasReq(void *arg)
 {
-  // Ustaw flagę blokującą nowe komendy
+  // Set flag blocking new commands
   measurementInProgress = true;
   
   if (msgMaster.command == CMD_MEASURE)
@@ -306,7 +306,7 @@ bool runMeasReq(void *arg)
 
     digitalWrite(LED_GREEN, HIGH);
     motorCtrlRun(msgMaster.motorSpeed, msgMaster.motorTorque, MOTOR_FORWARD);
-    DEBUG_I("Czekanie %u ms na ustabilizowanie silnika...", msgMaster.timeout);
+    DEBUG_I("Waiting %u ms for motor stabilization...", msgMaster.timeout);
     delay(msgMaster.timeout); // wait for motor to stabilize
 
     digitalWrite(LED_GREEN, LOW);
@@ -335,30 +335,30 @@ bool runMeasReq(void *arg)
 
   if (sendResult == ERR_NONE)
   {
-    DEBUG_I("Wynik wysłany do Mastera");
+    DEBUG_I("Result sent to Master");
   }
   else
   {
-    DEBUG_E("Błąd wysyłania wyniku do Mastera");
+    DEBUG_E("Error sending result to Master");
   }
 
-  // Zdejmij flagę blokującą - pomiar zakończony
+  // Clear blocking flag - measurement completed
   measurementInProgress = false;
   
   return false; // do not repeat this task
 }
 
 /**
- * @brief Skanuje magistralę I2C i wyświetla znalezione urządzenia na Serialu
+ * @brief Scans I2C bus and displays found devices on Serial
  *
- * Przeszukuje adresy I2C od 0x00 do 0x7F (0-127).
- * Dla każdego adresu próbuje nawiązać transmisję i sprawdza czy urządzenie
- * odpowiada (ACK). Znalezione urządzenia są wyświetlane w formacie hex.
+ * Scans I2C addresses from 0x00 to 0x7F (0-127).
+ * For each address, attempts to initiate transmission and checks if device
+ * responds (ACK). Found devices are displayed in hex format.
  */
 void scanI2C()
 {
-  DEBUG_I("=== Skanowanie magistrali I2C ===");
-  DEBUG_I("Skanowanie adresow 0x00 - 0x7F...");
+  DEBUG_I("=== Scanning I2C bus ===");
+  DEBUG_I("Scanning addresses 0x00 - 0x7F...");
 
   uint8_t devicesFound = 0;
 
@@ -367,28 +367,28 @@ void scanI2C()
     Wire.beginTransmission(address);
     uint8_t error = Wire.endTransmission();
 
-    if (error == 0) // Urządzenie odpowiedziało (ACK)
+    if (error == 0) // Device responded (ACK)
     {
-      DEBUG_I("Znaleziono urzadzenie I2C pod adresem: 0x%02X (%d)", address, address);
+      DEBUG_I("Found I2C device at address: 0x%02X (%d)", address, address);
       devicesFound++;
     }
   }
 
   if (devicesFound == 0)
   {
-    DEBUG_W("Brak urzadzen I2C na magistrali!");
+    DEBUG_W("No I2C devices found on the bus!");
   }
   else
   {
-    DEBUG_I("Liczba znalezionych urzadzen I2C: %d", devicesFound);
+    DEBUG_I("Number of found I2C devices: %d", devicesFound);
   }
-  DEBUG_I("=== Koniec skanowania I2C ===");
+  DEBUG_I("=== End of I2C scan ===");
 }
 
 void setup()
 {
   DEBUG_BEGIN();
-  DEBUG_I("=== ESP32 SLAVE - Suwmiarka + ESP-NOW ===");
+  DEBUG_I("=== ESP32 SLAVE - Caliper + ESP-NOW ===");
 
   ERROR_HANDLER.initialize();
 
@@ -402,12 +402,12 @@ void setup()
   {
     memcpy(masterAddress, storedMasterMac, 6);
     hasStoredMasterMac = true;
-    DEBUG_I("Master MAC z NVS: %02X:%02X:%02X:%02X:%02X:%02X",
+    DEBUG_I("Master MAC from NVS: %02X:%02X:%02X:%02X:%02X:%02X",
       masterAddress[0], masterAddress[1], masterAddress[2], masterAddress[3], masterAddress[4], masterAddress[5]);
   }
   else
   {
-    DEBUG_I("Brak Master MAC w NVS — oczekiwanie na parowanie");
+    DEBUG_I("No Master MAC in NVS — waiting for pairing");
     hasStoredMasterMac = false;
   }
 
@@ -434,7 +434,7 @@ void setup()
   }
   else
   {
-    DEBUG_E("BŁĄD: WiFi nie może się zainicjalizować!");
+    DEBUG_E("ERROR: WiFi cannot initialize!");
     return;
   }
 
@@ -459,21 +459,21 @@ void setup()
     ErrorCode peerResult = espnow_add_peer_with_retry(&peerInfo);
     if (peerResult == ERR_NONE)
     {
-      DEBUG_I("Master dodany jako peer! MAC: %02X:%02X:%02X:%02X:%02X:%02X",
+      DEBUG_I("Master added as peer! MAC: %02X:%02X:%02X:%02X:%02X:%02X",
         masterAddress[0], masterAddress[1], masterAddress[2], masterAddress[3], masterAddress[4], masterAddress[5]);
     }
     else
     {
-      DEBUG_E("Nie udało się dodać Mastera jako peer");
+      DEBUG_E("Failed to add Master as peer");
       return;
     }
   }
   else
   {
-    DEBUG_I("Brak Master MAC — pomijam dodawanie peera, czekam na parowanie");
+    DEBUG_I("No Master MAC — skipping peer addition, waiting for pairing");
   }
 
-  DEBUG_I("Inicjalizacja sterownika silnika...");
+  DEBUG_I("Initializing motor controller...");
   motorCtrlInit();
   motorCtrlEnable(true);
 
@@ -485,7 +485,7 @@ void setup()
 
   enterPairingMode();
 
-  DEBUG_I("Oczekiwanie na żądania pomiaru...");
+  DEBUG_I("Waiting for measurement requests...");
 }
 
 void loop()

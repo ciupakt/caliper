@@ -70,35 +70,35 @@ bool parseFloatStrict(const String &s, float &out)
 static SerialCliContext g_ctx;
 
 /**
- * @brief Walidacja nazwy sesji
+ * @brief Session name validation
  *
- * @param name Nazwa sesji do walidacji
- * @return true Nazwa jest prawidłowa
- * @return false Nazwa jest nieprawidłowa
+ * @param name Session name to validate
+ * @return true Name is valid
+ * @return false Name is invalid
  */
 static bool validateSessionName(const String &name)
 {
-  // Minimalna długość: 1 znak
+  // Minimum length: 1 character
   if (name.length() < 1)
   {
-    DEBUG_W("Nazwa sesji jest pusta");
+    DEBUG_W("Session name is empty");
     return false;
   }
 
-  // Maksymalna długość: 31 znaków (32 z null terminator)
+  // Maximum length: 31 characters (32 with null terminator)
   if (name.length() > 31)
   {
-    DEBUG_W("Nazwa sesji jest za długa (maks 31 znaków)");
+    DEBUG_W("Session name is too long (max 31 characters)");
     return false;
   }
 
-  // Walidacja znaków: litery (a-z, A-Z), cyfry (0-9), spacje, podkreślenia (_), myślniki (-)
+  // Character validation: letters (a-z, A-Z), digits (0-9), spaces, underscores (_), hyphens (-)
   for (unsigned int i = 0; i < name.length(); i++)
   {
     char c = name.charAt(i);
     if (!(isalnum((unsigned char)c) || c == ' ' || c == '_' || c == '-'))
     {
-      DEBUG_W("Nazwa sesji zawiera niedozwolone znaki: '%c'", c);
+      DEBUG_W("Session name contains invalid characters: '%c'", c);
       return false;
     }
   }
@@ -108,21 +108,21 @@ static bool validateSessionName(const String &name)
 
 static void printSerialHelp()
 {
-  DEBUG_I("\n=== DOSTĘPNE KOMENDY SERIAL (UART) ===\n"
-          "m            - Wyślij do slave: CMD_MEASURE (M)\n"
-          "u            - Wyślij do slave: CMD_UPDATE (U)\n"
-          "o <ms>       - Ustaw timeout (timeout)\n"
-          "q <0-255>    - Ustaw motorTorque\n"
-          "s <0-255>    - Ustaw motorSpeed\n"
-          "r <0-3>      - Ustaw motorState (0=STOP, 1=FORWARD, 2=REVERSE, 3=BRAKE)\n"
-          "t            - Wyślij CMD_MOTORTEST (T) z bieżącymi ustawieniami\n"
-          "f            - Wyślij CMD_OTA (O) – przejdź w tryb OTA na Slave (flash)\n"
-          "p            - Tryb parowania (30s broadcast CMD_PAIR)\n"
-          "c <±14.999>  - Ustaw calibrationOffset (mm) na Master (bez wyzwalania pomiaru)\n"
-          "v <±999.999>  - Ustaw reference (mm) na Master (wartość referencyjna/nominalna)\n"
-          "n <nazwa>    - Ustaw nazwę sesji (maks 31 znaków, dozwolone: a-z, A-Z, 0-9, spacja, _, -)\n"
-          "g            - Odśwież ustawienia (wyślij wszystkie aktualne wartości)\n"
-          "h/?          - Wyświetl tę pomoc\n"
+  DEBUG_I("\n=== AVAILABLE SERIAL COMMANDS (UART) ===\n"
+          "m            - Send to slave: CMD_MEASURE (M)\n"
+          "u            - Send to slave: CMD_UPDATE (U)\n"
+          "o <ms>       - Set timeout\n"
+          "q <0-255>    - Set motorTorque\n"
+          "s <0-255>    - Set motorSpeed\n"
+          "r <0-3>      - Set motorState (0=STOP, 1=FORWARD, 2=REVERSE, 3=BRAKE)\n"
+          "t            - Send CMD_MOTORTEST (T) with current settings\n"
+          "f            - Send CMD_OTA (O) – enter OTA mode on Slave (flash)\n"
+          "p            - Pairing mode (30s broadcast CMD_PAIR)\n"
+          "c <±14.999>  - Set calibrationOffset (mm) on Master (without triggering measurement)\n"
+          "v <±999.999>  - Set reference (mm) on Master (reference/nominal value)\n"
+          "n <name>     - Set session name (max 31 characters, allowed: a-z, A-Z, 0-9, space, _, -)\n"
+          "g            - Refresh settings (send all current values)\n"
+          "h/?          - Show this help\n"
           "=====================================\n");
 }
 
@@ -135,7 +135,7 @@ bool SerialCli_tick(void *arg)
 {
   (void)arg;
 
-  // Parser liniowy: czytamy do '\n' bez blokowania.
+  // Line parser: read until '\n' without blocking.
   static String lineBuf;
 
   while (Serial.available() > 0)
@@ -149,7 +149,7 @@ bool SerialCli_tick(void *arg)
 
     if (ch != '\n')
     {
-      // Ograniczenie długości linii, żeby nie rozjechać RAM przy śmieciach na Serial.
+      // Line length limit to avoid RAM overflow from Serial garbage.
       if (lineBuf.length() < 64)
       {
         lineBuf += ch;
@@ -157,7 +157,7 @@ bool SerialCli_tick(void *arg)
       continue;
     }
 
-    // Mamy pełną linię
+    // Full line received
     String line = lineBuf;
     lineBuf = "";
 
@@ -176,7 +176,7 @@ bool SerialCli_tick(void *arg)
 
     if (g_ctx.systemStatus == nullptr)
     {
-      DEBUG_E("SerialCli: brak systemStatus (SerialCli_begin nie wywołane?)");
+      DEBUG_E("SerialCli: missing systemStatus (SerialCli_begin not called?)");
       return true;
     }
 
@@ -187,16 +187,16 @@ bool SerialCli_tick(void *arg)
       {
         g_ctx.requestMeasurement();
         
-        // Loguj wynik jeśli measurementState jest dostępny
+        // Log result if measurementState is available
         if (g_ctx.measurementState != nullptr)
         {
           if (g_ctx.measurementState->isReady())
           {
-            DEBUG_I("Pomiar zakończony: %s", g_ctx.measurementState->getMeasurement());
+            DEBUG_I("Measurement completed: %s", g_ctx.measurementState->getMeasurement());
           }
           else
           {
-            DEBUG_W("Pomiar nieudany lub timeout");
+            DEBUG_W("Measurement failed or timeout");
           }
         }
       }
@@ -205,27 +205,27 @@ bool SerialCli_tick(void *arg)
     case 'o':
       if (!parseIntStrict(rest, val))
       {
-        DEBUG_W("Serial: brak/niepoprawny parametr dla 'o' (użyj: o <ms>\\n)");
+        DEBUG_W("Serial: missing/invalid parameter for 'o' (use: o <ms>\\n)");
         printSerialHelp();
         break;
       }
 
       if (val < 0 || val > 600000)
       {
-        DEBUG_W("Serial: timeout poza zakresem: %ld (0..600000 ms)", val);
+        DEBUG_W("Serial: timeout out of range: %ld (0..600000 ms)", val);
         break;
       }
 
       g_ctx.systemStatus->msgMaster.timeout = (uint32_t)val;
       DEBUG_I("tx.timeout:%u", (unsigned)g_ctx.systemStatus->msgMaster.timeout);
 
-      // Zapisz do Preferences
+      // Save to Preferences
       if (g_ctx.prefsManager != nullptr)
       {
         g_ctx.prefsManager->saveTimeout((uint32_t)val);
       }
 
-      // Ujednolicamy kanał dla GUI (DEBUG_PLOT) — GUI może od razu zaktualizować stan.
+      // Unify channel for GUI (DEBUG_PLOT) — GUI can update state immediately.
       DEBUG_PLOT("timeout:%u", (unsigned)g_ctx.systemStatus->msgMaster.timeout);
       break;
 
@@ -234,18 +234,18 @@ bool SerialCli_tick(void *arg)
       {
         g_ctx.requestUpdate();
         
-        // Loguj wynik jeśli measurementState jest dostępny
+        // Log result if measurementState is available
         if (g_ctx.measurementState != nullptr)
         {
           if (g_ctx.measurementState->isReady())
           {
-            DEBUG_I("Status zaktualizowany: %s, Bateria: %s",
+            DEBUG_I("Status updated: %s, Battery: %s",
                    g_ctx.measurementState->getMeasurement(),
                    g_ctx.measurementState->getBatteryVoltage());
           }
           else
           {
-            DEBUG_W("Aktualizacja statusu nieudana lub timeout");
+            DEBUG_W("Status update failed or timeout");
           }
         }
       }
@@ -254,129 +254,129 @@ bool SerialCli_tick(void *arg)
     case 'c':
       if (!parseFloatStrict(rest, fval))
       {
-        DEBUG_W("Serial: brak/niepoprawny parametr dla 'c' (użyj: c <offset_mm>\\n)");
+        DEBUG_W("Serial: missing/invalid parameter for 'c' (use: c <offset_mm>\\n)");
         printSerialHelp();
         break;
       }
 
       if (fval < -14.999f || fval > 14.999f)
       {
-        DEBUG_W("Serial: calibrationOffset poza zakresem: %.3f (-14.999..14.999)", (double)fval);
+        DEBUG_W("Serial: calibrationOffset out of range: %.3f (-14.999..14.999)", (double)fval);
         break;
       }
 
       g_ctx.systemStatus->calibrationOffset = fval;
       DEBUG_I("calibrationOffset:%.3f", (double)g_ctx.systemStatus->calibrationOffset);
 
-      // Zapisz do Preferences
+      // Save to Preferences
       if (g_ctx.prefsManager != nullptr)
       {
         g_ctx.prefsManager->saveCalibrationOffset(fval);
       }
 
-      // Ujednolicamy kanał dla GUI (DEBUG_PLOT) — GUI może od razu zaktualizować stan.
+      // Unify channel for GUI (DEBUG_PLOT) — GUI can update state immediately.
       DEBUG_PLOT("calibrationOffset:%.3f", (double)g_ctx.systemStatus->calibrationOffset);
       break;
 
     case 'v':
       if (!parseFloatStrict(rest, fval))
       {
-        DEBUG_W("Serial: brak/niepoprawny parametr dla 'v' (użyj: v <reference_mm>\\n)");
+        DEBUG_W("Serial: missing/invalid parameter for 'v' (use: v <reference_mm>\\n)");
         printSerialHelp();
         break;
       }
 
       if (fval < -999.999f || fval > 999.999f)
       {
-        DEBUG_W("Serial: reference poza zakresem: %.3f (-999.999..999.999)", (double)fval);
+        DEBUG_W("Serial: reference out of range: %.3f (-999.999..999.999)", (double)fval);
         break;
       }
 
       g_ctx.systemStatus->reference = fval;
       DEBUG_I("reference:%.3f", (double)g_ctx.systemStatus->reference);
 
-      // Zapisz do Preferences
+      // Save to Preferences
       if (g_ctx.prefsManager != nullptr)
       {
         g_ctx.prefsManager->saveReference(fval);
       }
 
-      // Ujednolicamy kanał dla GUI (DEBUG_PLOT) — GUI może od razu zaktualizować stan.
+      // Unify channel for GUI (DEBUG_PLOT) — GUI can update state immediately.
       DEBUG_PLOT("reference:%.3f", (double)g_ctx.systemStatus->reference);
       break;
 
     case 'q':
       if (!parseIntStrict(rest, val))
       {
-        DEBUG_W("Serial: brak/niepoprawny parametr dla 'q' (użyj: q <0-255>\\n)");
+        DEBUG_W("Serial: missing/invalid parameter for 'q' (use: q <0-255>\\n)");
         printSerialHelp();
         break;
       }
 
       if (val < 0 || val > 255)
       {
-        DEBUG_W("Serial: motorTorque poza zakresem: %ld (0..255)", val);
+        DEBUG_W("Serial: motorTorque out of range: %ld (0..255)", val);
         break;
       }
 
       g_ctx.systemStatus->msgMaster.motorTorque = (uint8_t)val;
       DEBUG_I("tx.motorTorque:%u", (unsigned)g_ctx.systemStatus->msgMaster.motorTorque);
 
-      // Zapisz do Preferences
+      // Save to Preferences
       if (g_ctx.prefsManager != nullptr)
       {
         g_ctx.prefsManager->saveMotorTorque((uint8_t)val);
       }
 
-      // Ujednolicamy kanał dla GUI (DEBUG_PLOT) — GUI może od razu zaktualizować stan.
+      // Unify channel for GUI (DEBUG_PLOT) — GUI can update state immediately.
       DEBUG_PLOT("motorTorque:%u", (unsigned)g_ctx.systemStatus->msgMaster.motorTorque);
       break;
 
     case 's':
       if (!parseIntStrict(rest, val))
       {
-        DEBUG_W("Serial: brak/niepoprawny parametr dla 's' (użyj: s <0-255>\\n)");
+        DEBUG_W("Serial: missing/invalid parameter for 's' (use: s <0-255>\\n)");
         printSerialHelp();
         break;
       }
 
       if (val < 0 || val > 255)
       {
-        DEBUG_W("Serial: motorSpeed poza zakresem: %ld (0..255)", val);
+        DEBUG_W("Serial: motorSpeed out of range: %ld (0..255)", val);
         break;
       }
 
       g_ctx.systemStatus->msgMaster.motorSpeed = (uint8_t)val;
       DEBUG_I("tx.motorSpeed:%u", (unsigned)g_ctx.systemStatus->msgMaster.motorSpeed);
 
-      // Zapisz do Preferences
+      // Save to Preferences
       if (g_ctx.prefsManager != nullptr)
       {
         g_ctx.prefsManager->saveMotorSpeed((uint8_t)val);
       }
 
-      // Ujednolicamy kanał dla GUI (DEBUG_PLOT) — GUI może od razu zaktualizować stan.
+      // Unify channel for GUI (DEBUG_PLOT) — GUI can update state immediately.
       DEBUG_PLOT("motorSpeed:%u", (unsigned)g_ctx.systemStatus->msgMaster.motorSpeed);
       break;
 
     case 'r':
       if (!parseIntStrict(rest, val))
       {
-        DEBUG_W("Serial: brak/niepoprawny parametr dla 'r' (użyj: r <0-3>\\n)");
+        DEBUG_W("Serial: missing/invalid parameter for 'r' (use: r <0-3>\\n)");
         printSerialHelp();
         break;
       }
 
       if (val < 0 || val > 3)
       {
-        DEBUG_W("Serial: motorState poza zakresem: %ld (0..3)", val);
+        DEBUG_W("Serial: motorState out of range: %ld (0..3)", val);
         break;
       }
 
       g_ctx.systemStatus->msgMaster.motorState = (MotorState)val;
       DEBUG_I("tx.motorState:%u", (unsigned)g_ctx.systemStatus->msgMaster.motorState);
 
-      // Ujednolicamy kanał dla GUI (DEBUG_PLOT) — GUI może od razu zaktualizować stan.
+      // Unify channel for GUI (DEBUG_PLOT) — GUI can update state immediately.
       DEBUG_PLOT("motorState:%u", (unsigned)g_ctx.systemStatus->msgMaster.motorState);
       break;
 
@@ -391,7 +391,7 @@ bool SerialCli_tick(void *arg)
       if (g_ctx.sendOTA)
       {
         g_ctx.sendOTA();
-        DEBUG_I("CMD_OTA wysłany – Slave przejdzie w tryb OTA");
+        DEBUG_I("CMD_OTA sent – Slave will enter OTA mode");
       }
       break;
 
@@ -403,24 +403,24 @@ bool SerialCli_tick(void *arg)
       break;
 
     case 'n':
-      // Ustaw nazwę sesji
+      // Set session name
       if (!validateSessionName(rest))
       {
-        DEBUG_W("Serial: nieprawidłowa nazwa sesji dla 'n' (użyj: n <nazwa>\\n)");
+        DEBUG_W("Serial: invalid session name for 'n' (use: n <name>\\n)");
         printSerialHelp();
         break;
       }
 
-      // Zapisz nazwę sesji do systemStatus.sessionName
+      // Save session name to systemStatus.sessionName
       memset(g_ctx.systemStatus->sessionName, 0, sizeof(g_ctx.systemStatus->sessionName));
       strncpy(g_ctx.systemStatus->sessionName, rest.c_str(), sizeof(g_ctx.systemStatus->sessionName) - 1);
       
-      // Ujednolicamy kanał dla GUI (DEBUG_PLOT) — GUI może od razu zaktualizować stan.
+      // Unify channel for GUI (DEBUG_PLOT) — GUI can update state immediately.
       DEBUG_PLOT("sessionName:%s", g_ctx.systemStatus->sessionName);
       break;
 
     case 'g':
-      // Wyślij wszystkie aktualne ustawienia przez DEBUG_PLOT
+      // Send all current settings via DEBUG_PLOT
       DEBUG_PLOT("calibrationOffset:%.3f", (double)g_ctx.systemStatus->calibrationOffset);
       DEBUG_PLOT("reference:%.3f", (double)g_ctx.systemStatus->reference);
       DEBUG_PLOT("timeout:%u", (unsigned)g_ctx.systemStatus->msgMaster.timeout);
@@ -436,7 +436,7 @@ bool SerialCli_tick(void *arg)
       break;
 
     default:
-      DEBUG_W("Serial: nieznana komenda: '%c' (linia: %s)", cmd, line.c_str());
+      DEBUG_W("Serial: unknown command: '%c' (line: %s)", cmd, line.c_str());
       printSerialHelp();
       break;
     }

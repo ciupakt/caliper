@@ -1,28 +1,28 @@
 """
 Calibration Tab GUI Component for Caliper Master GUI
 
-Zawiera:
-- Konfigurację parametrów pomiaru (msgMaster.* wysyłane po UART):
-  - timeout (ms) - komenda UART: o <ms>
-  - motorTorque (0-255) - komenda UART: q <0-255>
-  - motorSpeed (0-255) - komenda UART: s <0-255>
-  - motorState (0-3) - komenda UART: r <0-3> (combo box z enum MotorState)
-  - Test silnika - komenda UART: r <state> + t (przycisk "Motortest")
-- Kalibrację lokalną Mastera (calibrationOffset)
-- Dwa obszary logów: komunikacja serial i logi aplikacji
+Contains:
+- Measurement parameter configuration (msgMaster.* sent via UART):
+  - timeout (ms) - UART command: o <ms>
+  - motorTorque (0-255) - UART command: q <0-255>
+  - motorSpeed (0-255) - UART command: s <0-255>
+  - motorState (0-3) - UART command: r <0-3> (combo box with MotorState enum)
+  - Motor test - UART command: r <state> + t ("Motortest" button)
+- Local Master calibration (calibrationOffset)
+- Two log areas: serial communication and application logs
 
-Enum MotorState:
+MotorState enum:
   - 0 = MOTOR_STOP (Motor stopped/coast)
   - 1 = MOTOR_FORWARD (Motor rotating forward)
   - 2 = MOTOR_REVERSE (Motor rotating reverse)
   - 3 = MOTOR_BRAKE (Motor braking)
 
-UWAGA: tagi kontrolek są używane przez `CaliperGUI.process_measurement_data()` do
-odświeżania pól podglądu (surowy/offset/skorygowany) oraz pól konfiguracyjnych
+NOTE: control tags are used by `CaliperGUI.process_measurement_data()` to
+refresh preview fields (raw/offset/corrected) and configuration fields
 (timeout, motorTorque, motorSpeed, motorState).
 
-KOMENDA 'r': jest wysyłana tylko po wciśnięciu przycisku "Motortest".
-Przycisk "Zastosuj" wysyła tylko komendy o, q, s (bez r).
+Command 'r': is sent only when the "Motortest" button is pressed.
+The "Apply" button sends only commands o, q, s (without r).
 """
 
 import dearpygui.dearpygui as dpg
@@ -39,9 +39,9 @@ class CalibrationTab:
         self.max_lines = max_lines
         self.serial_log_lines = deque(maxlen=max_lines)
         self.app_log_lines = deque(maxlen=max_lines)
-        # Śledzenie czasu ostatniego kliknięcia do wykrywania podwójnego kliknięcia
+        # Tracking last click time for double-click detection
         self.last_click_time = 0.0
-        self.double_click_threshold = 0.5  # sekundy
+        self.double_click_threshold = 0.5  # seconds
 
     def create(self, parent: int, serial_handler):
         """Create the calibration tab UI"""
@@ -53,7 +53,7 @@ class CalibrationTab:
                 dpg.add_spacer(height=10)
 
                 with dpg.group(horizontal=True):
-                    # --- Konfiguracja pomiaru
+                    # --- Measurement configuration
                     with dpg.group():
                         dpg.add_text("Measurement Configuration:", color=(100, 200, 255))
                         dpg.add_spacer(height=5)
@@ -138,7 +138,7 @@ class CalibrationTab:
 
                     dpg.add_spacer(width=30)
 
-                    # --- Kalibracja
+                    # --- Calibration
                     with dpg.group():
                         dpg.add_text("Calibration (Master local):", color=(100, 200, 255))
                         dpg.add_spacer(height=5)
@@ -177,10 +177,10 @@ class CalibrationTab:
 
                         dpg.add_spacer(height=10)
                         dpg.add_text(
-                            "ESP32 Master Web: http://192.168.4.1", color=(100, 255, 100)
+                            "TKK_Caliper Web: http://192.168.4.1", color=(100, 255, 100)
                         )
                         dpg.add_text(
-                            "WiFi: Orange_WiFi (password: 1670$2026)", color=(100, 255, 100)
+                            "WiFi: TKK_Caliper (password: 1670$2026)", color=(100, 255, 100)
                         )
 
                 dpg.add_spacer(height=5)
@@ -188,7 +188,7 @@ class CalibrationTab:
                 dpg.add_spacer(height=5)
 
                 with dpg.group(horizontal=True):
-                    # Log komunikacji serial
+                    # Serial communication log
                     with dpg.group():
                         dpg.add_text(
                             "Serial Communication Log (dblclick = clear):",
@@ -213,7 +213,7 @@ class CalibrationTab:
 
                     dpg.add_spacer(width=20)
 
-                    # Log aplikacji
+                    # Application log
                     with dpg.group():
                         dpg.add_text(
                             "App Log (dblclick = clear):", color=(100, 200, 255)
@@ -301,11 +301,11 @@ class CalibrationTab:
         return True
 
     def _calibration_measure(self, sender, app_data, user_data):
-        """Pobierz bieżący pomiar (jak w WWW).
+        """Get current measurement (like in Web).
 
-        Realizowane przez wysłanie komendy 'm'. Po nadejściu ramki `measurement:`
-        w [`CaliperGUI.process_measurement_data()`](caliper_master_gui/caliper_master_gui.py:44)
-        zostanie jednorazowo uzupełnione pole `cal_offset_input`.
+        Implemented by sending command 'm'. Upon receiving the `measurement:`
+        frame in [`CaliperGUI.process_measurement_data()`](caliper_master_gui/caliper_master_gui.py:44)
+        the `cal_offset_input` field will be auto-filled once.
         """
         serial_handler = user_data
 
@@ -319,7 +319,7 @@ class CalibrationTab:
             self._set_status("Sent: m (get raw value)")
 
     def _apply_calibration_offset(self, sender, app_data, user_data):
-        """Zastosuj offset (jak w WWW) – UART: c <±14.999>."""
+        """Apply offset (like in Web) – UART: c <±14.999>."""
         serial_handler = user_data
         try:
             val = float(dpg.get_value("cal_offset_input"))
@@ -342,7 +342,7 @@ class CalibrationTab:
             torque = int(dpg.get_value("tx_torque_input"))
             speed = int(dpg.get_value("tx_speed_input"))
 
-            # Parsowanie motorState z combo boxa (format: "MOTOR_STOP (0)")
+            # Parsing motorState from combo box (format: "MOTOR_STOP (0)")
             state_str = dpg.get_value("tx_state_input")
             state = int(state_str.split("(")[-1].rstrip(")"))
         except Exception:
@@ -367,11 +367,11 @@ class CalibrationTab:
         self._set_status(f"Sent: o {timeout_ms}, q {torque}, s {speed}")
 
     def _send_motortest(self, sender, app_data, user_data):
-        """Send motor test command via UART: r <state> i t."""
+        """Send motor test command via UART: r <state> and t."""
         serial_handler = user_data
 
         try:
-            # Parsowanie motorState z combo boxa (format: "MOTOR_STOP (0)")
+            # Parsing motorState from combo box (format: "MOTOR_STOP (0)")
             state_str = dpg.get_value("tx_state_input")
             state = int(state_str.split("(")[-1].rstrip(")"))
         except Exception:
@@ -380,7 +380,7 @@ class CalibrationTab:
 
         state = self._clamp_int(state, 0, 3)
 
-        # Wysyłamy komendę r <state> przed testem silnika
+        # Send command r <state> before motor test
         if self._safe_write(serial_handler, f"r {state}"):
             self._set_status(f"Sent: r {state}, t")
             self.add_app_log(f"[GUI] Sent: r {state}, t")

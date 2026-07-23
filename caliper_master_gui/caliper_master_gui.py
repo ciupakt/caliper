@@ -27,22 +27,22 @@ class CaliperGUI:
         self.gauge_tab = GaugeTab()
         self.calibration_tab = CalibrationTab()
 
-        # Stan GUI: ostatni znany offset (przychodzi z firmware przez DEBUG_PLOT)
+        # GUI state: last known offset (received from firmware via DEBUG_PLOT)
         self.current_calibration_offset: float = 0.0
 
-        # Stan GUI: ostatnia znana referencja (przychodzi z firmware przez DEBUG_PLOT)
+        # GUI state: last known reference (received from firmware via DEBUG_PLOT)
         self.current_reference: float = 0.0
 
-        # Stan GUI: ostatni surowy pomiar (żeby móc policzyć/odświeżyć skorygowany w zakładce Kalibracja)
+        # GUI state: last raw measurement (to calculate/refresh corrected in Calibration tab)
         self.last_measurement_raw: float | None = None
         
-        # Stan GUI: ostatni odczytany kąt X (z akcelerometru)
+        # GUI state: last read angle X (from accelerometer)
         self.last_angle: str = ""
         
-        # Stan GUI: nazwa bieżącej sesji
+        # GUI state: current session name
         self.current_session_name: str = ""
         
-        # Stan GUI: nazwa ostatnio zapisanej sesji (do wykrywania zmian)
+        # GUI state: last saved session name (for detecting changes)
         self.last_saved_session_name: str = ""
     
     def _create_new_session_from_serial(self, session_name: str):
@@ -51,11 +51,11 @@ class CaliperGUI:
         Args:
             session_name: Name of the session (will be used as CSV prefix)
         """
-        # Zamknij stary plik CSV jeśli istnieje
+        # Close old CSV file if it exists
         if self.csv_handler.is_open():
             self.csv_handler.close()
         
-        # Użyj nazwy sesji jako prefixu pliku CSV
+        # Use session name as CSV file prefix
         filename = None
         try:
             filename = self.csv_handler.create_new_file(
@@ -69,14 +69,14 @@ class CaliperGUI:
             self.calibration_tab.add_app_log(f"ERROR: Failed to create CSV file: {str(e)}")
             return
         
-        # Zaktualizuj last_saved_session_name
+        # Update last_saved_session_name
         self.last_saved_session_name = session_name
         
-        # Wyczyść historię pomiarów w GUI
+        # Clear measurement history in GUI
         self.measurement_tab._clear()
         self.gauge_tab.clear()
         
-        # Zaktualizuj UI z informacjami o nowej sesji
+        # Update UI with new session info
         try:
             if filename:
                 import os as _os
@@ -84,11 +84,11 @@ class CaliperGUI:
         except Exception:
             pass
         
-        # Zaktualizuj session_name w measurement_tab
+        # Update session_name in measurement_tab
         self.measurement_tab.session_name = session_name
         self.measurement_tab.csv_prefix = session_name
         
-        # Zaloguj utworzenie nowej sesji
+        # Log new session creation
         self.calibration_tab.add_app_log(f"[SESSION] New session created: {session_name} -> {filename}")
 
     @staticmethod
@@ -102,20 +102,20 @@ class CaliperGUI:
     def process_measurement_data(self, data: str):
         """Process measurement/plot data with validation and storage.
 
-        Parsujemy WYŁĄCZNIE te ramki, które faktycznie wychodzą z `DEBUG_PLOT` w
+        We parse ONLY the frames that actually come from `DEBUG_PLOT` in
         [`caliper_master/src/main.cpp`](caliper_master/src/main.cpp:65).
 
-        NOTE: `DEBUG_PLOT` zawsze prepends '>' (see [`DEBUG_PLOT`](lib/CaliperShared/MacroDebugger.h:113)),
-        więc tu dostajemy już linię znormalizowaną (bez wiodącego '>').
+        NOTE: `DEBUG_PLOT` always prepends '>' (see [`DEBUG_PLOT`](lib/CaliperShared/MacroDebugger.h:113)),
+        so here we receive the already normalized line (without leading '>').
         """
         try:
-            # --- Kalibracja (wysyłane przez DEBUG_PLOT przy zmianie offsetu i przy pomiarze)
+            # --- Calibration (sent via DEBUG_PLOT on offset change and on measurement)
             if data.startswith("calibrationOffset:"):
                 val_str = data.split(":", 1)[1].strip()
                 try:
                     self.current_calibration_offset = float(val_str)
                 except Exception:
-                    # jeśli nie da się sparsować, logujemy tylko tekst
+                    # if it cannot be parsed, log only the text
                     self.calibration_tab.add_app_log(f"[CALIBRATION] Offset (parse err): {val_str}")
                     return
 
@@ -124,7 +124,7 @@ class CaliperGUI:
                 self.measurement_tab.calibration_offset = self.current_calibration_offset
                 self.measurement_tab._show_measurements()
 
-                # Odświeżamy UI kalibracji (jeśli istnieje)
+                # Refresh calibration UI (if it exists)
                 try:
                     if dpg.does_item_exist("cal_offset_display"):
                         dpg.set_value("cal_offset_display", f"Current offset: {self.current_calibration_offset:.3f} mm")
@@ -137,7 +137,7 @@ class CaliperGUI:
 
                 return
 
-            # --- Referencja (wysyłane przez DEBUG_PLOT przy zmianie reference i przy refresh settings)
+            # --- Reference (sent via DEBUG_PLOT on reference change and on settings refresh)
             if data.startswith("reference:"):
                 val_str = data.split(":", 1)[1].strip()
                 try:
@@ -161,9 +161,9 @@ class CaliperGUI:
 
                 return
 
-            # --- Pomiar (wysyłane przez DEBUG_PLOT w OnDataRecv)
-            # Firmware Master wysyła surowy pomiar jako `measurement:`.
-            # GUI liczy korekcję po swojej stronie:
+            # --- Measurement (sent via DEBUG_PLOT in OnDataRecv)
+            # Firmware Master sends raw measurement as `measurement:`.
+            # GUI calculates correction on its side:
             # corrected = measurementRaw + current_calibration_offset
             if data.startswith("measurement:"):
                 val_str = data.split(":", 1)[1].strip()
@@ -171,7 +171,7 @@ class CaliperGUI:
 
                 self.last_measurement_raw = float(raw)
 
-                # Kalibracja: autofill pola offsetu tylko na żądanie (przycisk "Pobierz bieżący pomiar")
+                # Calibration: autofill offset field only on demand (button "Get raw value")
                 try:
                     if dpg.does_item_exist("cal_autofill_next") and dpg.get_value("cal_autofill_next") is True:
                         if dpg.does_item_exist("cal_offset_input"):
@@ -227,13 +227,13 @@ class CaliperGUI:
                 self.calibration_tab.add_app_log(f"[BATTERY] {voltage_str} V")
                 return
 
-            # --- Konfiguracja pomiaru (wysyłane przez DEBUG_PLOT przy zmianie o/q/s/r)
+            # --- Measurement configuration (sent via DEBUG_PLOT on change of o/q/s/r)
             if data.startswith("timeout:"):
                 val_str = data.split(":", 1)[1].strip()
                 try:
                     timeout_val = int(val_str)
                     self.calibration_tab.add_app_log(f"[CONFIG] timeout: {timeout_val} ms")
-                    # Odświeżamy UI kalibracji (jeśli istnieje)
+                    # Refresh calibration UI (if it exists)
                     try:
                         if dpg.does_item_exist("tx_timeout_input"):
                             dpg.set_value("tx_timeout_input", timeout_val)
@@ -248,7 +248,7 @@ class CaliperGUI:
                 try:
                     torque_val = int(val_str)
                     self.calibration_tab.add_app_log(f"[CONFIG] motorTorque: {torque_val}")
-                    # Odświeżamy UI kalibracji (jeśli istnieje)
+                    # Refresh calibration UI (if it exists)
                     try:
                         if dpg.does_item_exist("tx_torque_input"):
                             dpg.set_value("tx_torque_input", torque_val)
@@ -263,7 +263,7 @@ class CaliperGUI:
                 try:
                     speed_val = int(val_str)
                     self.calibration_tab.add_app_log(f"[CONFIG] motorSpeed: {speed_val}")
-                    # Odświeżamy UI kalibracji (jeśli istnieje)
+                    # Refresh calibration UI (if it exists)
                     try:
                         if dpg.does_item_exist("tx_speed_input"):
                             dpg.set_value("tx_speed_input", speed_val)
@@ -286,7 +286,7 @@ class CaliperGUI:
                     state_name = state_names.get(state_val, f"UNKNOWN({state_val})")
                     self.calibration_tab.add_app_log(f"[CONFIG] motorState: {state_name}")
                     
-                    # Odświeżamy UI kalibracji (jeśli istnieje)
+                    # Refresh calibration UI (if it exists)
                     try:
                         if dpg.does_item_exist("tx_state_input"):
                             dpg.set_value("tx_state_input", state_name)
@@ -296,12 +296,12 @@ class CaliperGUI:
                     self.calibration_tab.add_app_log(f"[CONFIG] motorState (parse err): {val_str}")
                 return
 
-            # --- Nazwa sesji (wysyłane przez DEBUG_PLOT przy zmianie nazwy sesji)
+            # --- Session name (sent via DEBUG_PLOT on session name change)
             if data.startswith("sessionName:"):
                 name_str = data.split(":", 1)[1].strip()
                 self.current_session_name = name_str
                 
-                # Sprawdź czy nazwa jest niepusta i różna od ostatnio zapisanej
+                # Check if name is non-empty and different from last saved
                 if name_str and name_str != self.last_saved_session_name:
                     self._create_new_session_from_serial(name_str)
                 else:
@@ -346,7 +346,7 @@ class CaliperGUI:
                     pass
                 return
 
-            # Inne (nie-plot) linie zostawiamy jako log (np. SILNIK)
+            # Other (non-plot) lines are left as log (e.g. MOTOR)
             if "MOTOR" in data.upper() or "motor error" in data.lower():
                 self.calibration_tab.add_app_log(f"[MOTOR] {data}")
 
@@ -366,7 +366,7 @@ class CaliperGUI:
         payload = self._normalize_debug_plot_line(data)
 
         # Process plot/measurement data (from DEBUG_PLOT)
-        # (tylko klucze faktycznie emitowane przez firmware Master)
+        # (only keys actually emitted by firmware Master)
         if payload.startswith(
             (
                 "measurement:",
@@ -405,7 +405,7 @@ class CaliperGUI:
         )
 
     def _on_drop_measurement(self):
-        """Callback po anulowaniu ostatniego pomiaru z przycisku 'Cancel last measurement'."""
+        """Callback after canceling last measurement from 'Cancel last measurement' button."""
         if self.measurement_tab.meas_history:
             self._sync_gauge()
         else:
@@ -413,10 +413,10 @@ class CaliperGUI:
 
     def key_press_handler(self, sender, key):
         """Handle keyboard shortcuts"""
-        # Hotkey: 'm' = wykonaj pomiar (jak kliknięcie "Measure (m)")
+        # Hotkey: 'm' = execute measurement (like clicking "Measure (m)")
         if key == dpg.mvKey_M:
-            # Nie przechwytuj, jeśli user pisze w polu tekstowym (np. nazwa sesji)
-            # lub gdy aktywny jest jakikolwiek widget / otwarte modalne okno sesji.
+            # Don't intercept if user is typing in a text field (e.g. session name)
+            # or when any widget is active / session modal popup is open.
             try:
                 if dpg.is_any_item_active() or dpg.is_any_item_focused():
                     return
@@ -438,16 +438,16 @@ class CaliperGUI:
         """Create the main GUI"""
         dpg.create_context()
 
-        # Value registry (flagi/stany wykorzystywane przez callbacki)
+        # Value registry (flags/states used by callbacks)
         with dpg.value_registry():
-            # Jednorazowe auto-uzupełnienie offsetu po kliknięciu "Pobierz bieżący pomiar"
+            # One-time auto-fill of offset after clicking "Get raw value"
             dpg.add_bool_value(tag="cal_autofill_next", default_value=False)
         
         # Font registry
-        # DearPyGui domyślnie może nie mieć załadowanego zakresu znaków Latin Extended,
-        # więc jawnie dodajemy zakresy potrzebne dla polskich znaków.
+        # DearPyGui may not have the Latin Extended character range loaded by default,
+        # so we explicitly add the ranges needed for Polish characters.
         with dpg.font_registry():
-            # Wykrywanie systemu operacyjnego dla ścieżek do czcionek
+            # OS detection for font paths
             if os.name == 'nt':  # Windows
                 font_path = "C:/Windows/Fonts/segoeui.ttf"
                 font_bold_path = "C:/Windows/Fonts/segoeuib.ttf"
@@ -457,30 +457,30 @@ class CaliperGUI:
 
             with dpg.font(font_path, 22) as default_font:
                 dpg.add_font_range_hint(dpg.mvFontRangeHint_Default)
-                # Latin Extended-A (m.in. ą, ć, ę, ł, ń, ó, ś, ź, ż)
+                # Latin Extended-A (e.g. Polish diacritics)
                 dpg.add_font_range(0x0100, 0x017F)
-                # Latin Extended-B (na wszelki wypadek)
+                # Latin Extended-B (just in case)
                 dpg.add_font_range(0x0180, 0x024F)
 
-            # Font pogrubiony (do akcentowania przycisków, np. "Wykonaj pomiar")
+            # Bold font (for emphasizing buttons, e.g. "Measure")
             with dpg.font(font_bold_path, 24, tag="font_bold"):
                 dpg.add_font_range_hint(dpg.mvFontRangeHint_Default)
                 dpg.add_font_range(0x0100, 0x017F)
                 dpg.add_font_range(0x0180, 0x024F)
 
-            # Font mały (do logów – pół rozmiaru domyślnego)
+            # Small font (for logs – half the default size)
             with dpg.font(font_path, 13, tag="font_small"):
                 dpg.add_font_range_hint(dpg.mvFontRangeHint_Default)
                 dpg.add_font_range(0x0100, 0x017F)
                 dpg.add_font_range(0x0180, 0x024F)
 
-            # Font gauge meta (mniejszy – do timestamp/angle w zakładce Gauge)
+            # Gauge meta font (smaller – for timestamp/angle in Gauge tab)
             with dpg.font(font_path, 20, tag="font_gauge_meta"):
                 dpg.add_font_range_hint(dpg.mvFontRangeHint_Default)
                 dpg.add_font_range(0x0100, 0x017F)
                 dpg.add_font_range(0x0180, 0x024F)
 
-            # Font gauge (duży – do wyświetlania ostatniego pomiaru w zakładce Gauge)
+            # Gauge font (large – for displaying last measurement in Gauge tab)
             with dpg.font(font_bold_path, 360, tag="font_gauge"):
                 dpg.add_font_range_hint(dpg.mvFontRangeHint_Default)
                 dpg.add_font_range(0x0100, 0x017F)
@@ -491,31 +491,31 @@ class CaliperGUI:
             dpg.add_key_release_handler(callback=self.key_press_handler)
         
         # Create viewport
-        # Większa wysokość, żeby wykres i historia były widoczne bez ucinania po starcie.
+        # Larger height so that chart and history are visible without clipping on startup.
         dpg.create_viewport(title="TKK Caliper 1.0", width=1200, height=850)
 
         # Main window
         with dpg.window(label="Caliper - Application", tag="main_window"):
-            # Uwaga: `dpg.tab` MUSI mieć jako rodzica `mvTabBar`.
-            # Nie polegamy na `dpg.last_container()` (potrafi wskazać ostatnio utworzony kontener,
-            # a nie aktualny `tab_bar`), tylko przekazujemy jawnie identyfikator/tab tag.
+            # Note: `dpg.tab` MUST have `mvTabBar` as parent.
+            # We don't rely on `dpg.last_container()` (it can point to the last created container,
+            # not the current `tab_bar`), instead we explicitly pass the identifier/tab tag.
             with dpg.tab_bar(tag="main_tab_bar") as tab_bar_id:
-                # Pomiary
+                # Measurements
                 self.measurement_tab.create(tab_bar_id, self.serial_handler, self.csv_handler, on_drop=self._on_drop_measurement)
 
                 # Gauge
                 self.gauge_tab.create(tab_bar_id)
 
-                # Kalibracja
+                # Calibration
                 self.calibration_tab.create(tab_bar_id, self.serial_handler)
 
         # Bind font
         dpg.bind_font(default_font)
 
-        # Główne okno wypełnia cały viewport i skaluje się razem z nim.
+        # Main window fills the entire viewport and scales with it.
         dpg.set_primary_window("main_window", True)
 
-        # Re-centrowanie pomiaru w zakładce Gauge przy zmianie rozmiaru okna.
+        # Re-center measurement in Gauge tab on viewport resize.
         dpg.set_viewport_resize_callback(self._on_viewport_resize)
 
         # Sync gauge tab when timestamp/angle checkboxes change
@@ -527,12 +527,12 @@ class CaliperGUI:
             dpg.bind_item_handler_registry("angle_cb", "gauge_sync_handler")
 
     def _on_viewport_resize(self, sender=None, app_data=None):
-        """Przelicz centrowanie pomiaru w zakładce Gauge po zmianie rozmiaru okna."""
+        """Recalculate centering of measurement in Gauge tab after viewport resize."""
         try:
             self.gauge_tab.recenter()
         except Exception:
             pass
-        # Wyrównanie wiersza statusu w zakładce Pomiary (Session: ↔ Connected to:)
+        # Align status row in Measurements tab (Session: ↔ Connected to:)
         try:
             self.measurement_tab.update_status_row_layout()
         except Exception:
@@ -552,9 +552,9 @@ class CaliperGUI:
         dpg.setup_dearpygui()
         dpg.show_viewport()
 
-        # Ręczna pętla renderowania: pozwala na bieżąco re-centrować pomiar
-        # w zakładce Gauge (rozmiar child_window znany dopiero po wyrenderowaniu
-        # i zmienia się przy skalowaniu okna oraz przełączaniu zakładek).
+        # Manual render loop: allows continuous re-centering of measurement
+        # in Gauge tab (child_window size known only after rendering
+        # and changes on window scaling and tab switching).
         while dpg.is_dearpygui_running():
             try:
                 if dpg.does_item_exist("gauge_root") and dpg.is_item_visible("gauge_value"):
@@ -562,7 +562,7 @@ class CaliperGUI:
             except Exception:
                 pass
             try:
-                # Bieżąca aktualizacja wyrównania wiersza statusu (Session ↔ Connected to)
+                # Live update of status row alignment (Session ↔ Connected to)
                 if dpg.does_item_exist("status_row") and dpg.is_item_visible("status_row"):
                     self.measurement_tab.update_status_row_layout()
             except Exception:

@@ -2,8 +2,8 @@
 
 #include <Arduino.h>
 
-// Parsowanie liczb z pełną walidacją (brak śmieci po liczbie).
-// Zwraca true tylko jeśli cały string (po trim spacji/tabów) jest poprawną liczbą.
+// Number parsing with full validation (no trailing garbage).
+// Returns true only if the entire string (after trimming spaces/tabs) is a valid number.
 bool parseIntStrict(const String &s, long &out);
 bool parseFloatStrict(const String &s, float &out);
 
@@ -11,15 +11,15 @@ struct SystemStatus;
 class PreferencesManager;
 class MeasurementState;
 
-// Minimalny kontekst wymagany przez parser komend po Serial.
-// Dzięki temu `main.cpp` pozostaje czytelny, a moduł nie musi znać WebServera.
+// Minimal context required by the Serial command parser.
+// This keeps `main.cpp` readable, and the module does not need to know about WebServer.
 struct SerialCliContext
 {
   SystemStatus *systemStatus = nullptr;
   PreferencesManager *prefsManager = nullptr;
   MeasurementState *measurementState = nullptr;
 
-  // Akcje (implementowane w main.cpp)
+  // Actions (implemented in main.cpp)
   void (*requestMeasurement)() = nullptr;
   void (*requestUpdate)() = nullptr;
   void (*sendMotorTest)() = nullptr;
@@ -27,8 +27,8 @@ struct SerialCliContext
   void (*enterPairingMode)() = nullptr;
 };
 
-// Inicjalizacja kontekstu. Należy wywołać w setup() przed startem timera.
+// Initialize context. Call in setup() before starting the timer.
 void SerialCli_begin(const SerialCliContext &ctx);
 
-// Tick / parser liniowy bez blokowania. Zgodny z sygnaturą arduino-timer.
+// Tick / non-blocking line parser. Compatible with arduino-timer signature.
 bool SerialCli_tick(void *arg);
