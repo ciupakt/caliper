@@ -12,28 +12,71 @@
 // Category Names
 // ============================================================================
 
-const char* getErrorCategoryName(ErrorCategory cat)
+const char* getErrorCategoryName(ErrorCode code)
 {
-  switch (cat)
+  switch (code)
   {
-    case ERR_CAT_NONE:
-      return "NONE";
-    case ERR_CAT_COMMUNICATION:
+    case ERR_ESPNOW_INIT_FAILED:
+    case ERR_ESPNOW_SEND_FAILED:
+    case ERR_ESPNOW_RECV_FAILED:
+    case ERR_ESPNOW_PEER_ADD_FAILED:
+    case ERR_ESPNOW_INVALID_LENGTH:
+    case ERR_SERIAL_COMM_ERROR:
+    case ERR_SERIAL_TIMEOUT:
       return "COMMUNICATION";
-    case ERR_CAT_SENSOR:
+
+    case ERR_CALIPER_TIMEOUT:
+    case ERR_CALIPER_INVALID_DATA:
+    case ERR_CALIPER_OUT_OF_RANGE:
+    case ERR_CALIPER_HARDWARE_FAILURE:
+    case ERR_ACCEL_INIT_FAILED:
+    case ERR_ACCEL_READ_FAILED:
+    case ERR_ACCEL_I2C_ERROR:
       return "SENSOR";
-    case ERR_CAT_MOTOR:
+
+    case ERR_MOTOR_INVALID_DIRECTION:
+    case ERR_MOTOR_HARDWARE_FAILURE:
+    case ERR_MOTOR_FAULT:
       return "MOTOR";
-    case ERR_CAT_POWER:
+
+    case ERR_BATTERY_READ_FAILED:
+    case ERR_BATTERY_LOW_VOLTAGE:
+    case ERR_ADC_READ_FAILED:
       return "POWER";
-    case ERR_CAT_STORAGE:
+
+    case ERR_LITTLEFS_MOUNT_FAILED:
+    case ERR_LITTLEFS_FILE_NOT_FOUND:
+    case ERR_LITTLEFS_READ_FAILED:
+    case ERR_LITTLEFS_WRITE_FAILED:
+    case ERR_PREFS_INIT_FAILED:
+    case ERR_PREFS_LOAD_FAILED:
+    case ERR_PREFS_SAVE_FAILED:
+    case ERR_PREFS_INVALID_VALUE:
       return "STORAGE";
-    case ERR_CAT_NETWORK:
+
+    case ERR_WEB_SERVER_INIT_FAILED:
+    case ERR_WEB_SERVER_ROUTE_FAILED:
+    case ERR_WIFI_INIT_FAILED:
+    case ERR_WIFI_AP_CONFIG_FAILED:
       return "NETWORK";
-    case ERR_CAT_VALIDATION:
+
+    case ERR_VALIDATION_INVALID_PARAM:
+    case ERR_VALIDATION_OUT_OF_RANGE:
+    case ERR_VALIDATION_INVALID_FORMAT:
+    case ERR_VALIDATION_SESSION_INACTIVE:
+    case ERR_VALIDATION_INVALID_COMMAND:
       return "VALIDATION";
-    case ERR_CAT_SYSTEM:
+
+    case ERR_SYSTEM_WIFI_INIT_FAILED:
+    case ERR_SYSTEM_MEMORY_ALLOC_FAILED:
+    case ERR_SYSTEM_UNKNOWN_ERROR:
+    case ERR_SYSTEM_NULL_POINTER:
+    case ERR_OTA_INIT_FAILED:
+    case ERR_OTA_TIMEOUT:
+    case ERR_OTA_UPDATE_FAILED:
+    case ERR_OTA_WIFI_AP_FAILED:
       return "SYSTEM";
+
     default:
       return "UNKNOWN";
   }
@@ -43,32 +86,81 @@ const char* getErrorCategoryName(ErrorCategory cat)
 // Module Names
 // ============================================================================
 
-const char* getErrorModuleName(ErrorModule mod)
+const char* getErrorModuleName(ErrorCode code)
 {
-  switch (mod)
+  switch (code)
   {
-    case ERR_MOD_NONE:
-      return "NONE";
-    case ERR_MOD_ESPNOW:
+    case ERR_ESPNOW_INIT_FAILED:
+    case ERR_ESPNOW_SEND_FAILED:
+    case ERR_ESPNOW_RECV_FAILED:
+    case ERR_ESPNOW_PEER_ADD_FAILED:
+    case ERR_ESPNOW_INVALID_LENGTH:
       return "ESPNOW";
-    case ERR_MOD_SERIAL:
+
+    case ERR_SERIAL_COMM_ERROR:
+    case ERR_SERIAL_TIMEOUT:
       return "SERIAL";
-    case ERR_MOD_CALIPER:
+
+    case ERR_CALIPER_TIMEOUT:
+    case ERR_CALIPER_INVALID_DATA:
+    case ERR_CALIPER_OUT_OF_RANGE:
+    case ERR_CALIPER_HARDWARE_FAILURE:
       return "CALIPER";
-    case ERR_MOD_ACCELEROMETER:
+
+    case ERR_ACCEL_INIT_FAILED:
+    case ERR_ACCEL_READ_FAILED:
+    case ERR_ACCEL_I2C_ERROR:
       return "ACCELEROMETER";
-    case ERR_MOD_MOTOR_CTRL:
+
+    case ERR_MOTOR_INVALID_DIRECTION:
+    case ERR_MOTOR_HARDWARE_FAILURE:
+    case ERR_MOTOR_FAULT:
       return "MOTOR_CTRL";
-    case ERR_MOD_BATTERY:
+
+    case ERR_BATTERY_READ_FAILED:
+    case ERR_BATTERY_LOW_VOLTAGE:
+    case ERR_ADC_READ_FAILED:
       return "BATTERY";
-    case ERR_MOD_LITTLEFS:
+
+    case ERR_LITTLEFS_MOUNT_FAILED:
+    case ERR_LITTLEFS_FILE_NOT_FOUND:
+    case ERR_LITTLEFS_READ_FAILED:
+    case ERR_LITTLEFS_WRITE_FAILED:
       return "LITTLEFS";
-    case ERR_MOD_PREFERENCES:
+
+    case ERR_PREFS_INIT_FAILED:
+    case ERR_PREFS_LOAD_FAILED:
+    case ERR_PREFS_SAVE_FAILED:
+    case ERR_PREFS_INVALID_VALUE:
       return "PREFERENCES";
-    case ERR_MOD_WEB_SERVER:
+
+    case ERR_WEB_SERVER_INIT_FAILED:
+    case ERR_WEB_SERVER_ROUTE_FAILED:
       return "WEB_SERVER";
-    case ERR_MOD_CLI:
-      return "CLI";
+
+    case ERR_WIFI_INIT_FAILED:
+    case ERR_WIFI_AP_CONFIG_FAILED:
+      return "WIFI";
+
+    case ERR_VALIDATION_INVALID_PARAM:
+    case ERR_VALIDATION_OUT_OF_RANGE:
+    case ERR_VALIDATION_INVALID_FORMAT:
+    case ERR_VALIDATION_SESSION_INACTIVE:
+    case ERR_VALIDATION_INVALID_COMMAND:
+      return "VALIDATION";
+
+    case ERR_SYSTEM_WIFI_INIT_FAILED:
+    case ERR_SYSTEM_MEMORY_ALLOC_FAILED:
+    case ERR_SYSTEM_UNKNOWN_ERROR:
+    case ERR_SYSTEM_NULL_POINTER:
+      return "SYSTEM";
+
+    case ERR_OTA_INIT_FAILED:
+    case ERR_OTA_TIMEOUT:
+    case ERR_OTA_UPDATE_FAILED:
+    case ERR_OTA_WIFI_AP_FAILED:
+      return "OTA";
+
     default:
       return "UNKNOWN";
   }

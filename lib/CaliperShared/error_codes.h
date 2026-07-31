@@ -23,55 +23,14 @@
 #include <stdint.h>
 
 // ============================================================================
-// Error Categories
-// ============================================================================
-
-/**
- * @brief Error categories for classification
- */
-enum ErrorCategory : uint8_t
-{
-  ERR_CAT_NONE = 0,           /**< No error */
-  ERR_CAT_COMMUNICATION,      /**< Communication errors (ESP-NOW, Serial, WiFi) */
-  ERR_CAT_SENSOR,             /**< Sensor errors (caliper, accelerometer) */
-  ERR_CAT_MOTOR,              /**< Motor controller errors */
-  ERR_CAT_POWER,              /**< Power/Battery errors */
-  ERR_CAT_STORAGE,            /**< Storage errors (LittleFS, NVS/Preferences) */
-  ERR_CAT_NETWORK,            /**< Network errors (WiFi AP, Web Server) */
-  ERR_CAT_VALIDATION,         /**< Data validation errors */
-  ERR_CAT_SYSTEM              /**< System-level errors */
-};
-
-// ============================================================================
-// Error Modules
-// ============================================================================
-
-/**
- * @brief Source modules that can generate errors
- */
-enum ErrorModule : uint8_t
-{
-  ERR_MOD_NONE = 0,           /**< No specific module */
-  ERR_MOD_ESPNOW,             /**< ESP-NOW communication */
-  ERR_MOD_SERIAL,             /**< Serial communication */
-  ERR_MOD_CALIPER,            /**< Caliper sensor */
-  ERR_MOD_ACCELEROMETER,      /**< Accelerometer sensor */
-  ERR_MOD_MOTOR_CTRL,         /**< Motor controller */
-  ERR_MOD_BATTERY,            /**< Battery monitor */
-  ERR_MOD_LITTLEFS,           /**< LittleFS file system */
-  ERR_MOD_PREFERENCES,        /**< Preferences/NVS storage */
-  ERR_MOD_WEB_SERVER,         /**< Web server */
-  ERR_MOD_CLI                 /**< Serial CLI */
-};
-
-// ============================================================================
 // Error Codes
 // ============================================================================
 
 /**
  * @brief Comprehensive error codes
  * 
- * Format: ERR_CAT_XXX | (ERR_MOD_XXX << 4) | (Code << 8)
+ * High byte indicates category (0x01=Communication, 0x02=Sensor, etc.)
+ * for human readability. No bit-packing — all decoding is via switch.
  * 
  * Legend:
  * - 0x00XX: No error
@@ -255,97 +214,16 @@ enum ErrorCode : uint16_t
 // Error Helper Functions
 // ============================================================================
 
-/**
- * @brief Extract category from error code
- * @param code Error code to decode
- * @return Error category
- */
-inline ErrorCategory getErrorCategory(ErrorCode code)
-{
-  return static_cast<ErrorCategory>(code & 0x0F);
-}
+const char* getErrorCategoryName(ErrorCode code);
 
-/**
- * @brief Extract module from error code
- * @param code Error code to decode
- * @return Error module
- */
-inline ErrorModule getErrorModule(ErrorCode code)
-{
-  return static_cast<ErrorModule>((code >> 4) & 0x0F);
-}
+const char* getErrorModuleName(ErrorCode code);
 
-/**
- * @brief Extract specific error code from error code
- * @param code Error code to decode
- * @return Specific error code (8 bits)
- */
-inline uint8_t getErrorCode(ErrorCode code)
-{
-  return static_cast<uint8_t>((code >> 8) & 0xFF);
-}
-
-/**
- * @brief Get category name as string
- * @param cat Error category
- * @return Category name string
- */
-const char* getErrorCategoryName(ErrorCategory cat);
-
-/**
- * @brief Get module name as string
- * @param mod Error module
- * @return Module name string
- */
-const char* getErrorModuleName(ErrorModule mod);
-
-/**
- * @brief Get error description
- * @param code Error code
- * @return Error description string
- */
 const char* getErrorDescription(ErrorCode code);
 
-/**
- * @brief Get recovery action suggestion
- * @param code Error code
- * @return Recovery action string
- */
 const char* getErrorRecoveryAction(ErrorCode code);
 
-/**
- * @brief Check if error code is valid
- * @param code Error code to check
- * @return true if valid, false otherwise
- */
-inline bool isValidErrorCode(ErrorCode code)
-{
-  if (code == ERR_NONE)
-    return true;
-  
-  ErrorCategory cat = getErrorCategory(code);
-  if (cat < ERR_CAT_NONE || cat > ERR_CAT_SYSTEM)
-    return false;
-  
-  ErrorModule mod = getErrorModule(code);
-  if (mod < ERR_MOD_NONE || mod > ERR_MOD_CLI)
-    return false;
-  
-  return true;
-}
-
-/**
- * @brief Check if error is recoverable
- * @param code Error code to check
- * @return true if recoverable, false otherwise
- */
 bool isRecoverableError(ErrorCode code);
 
-/**
- * @brief Get error severity level
- * @param code Error code
- * @return Severity level (0=info, 1=warning, 2=error, 3=critical)
- */
 uint8_t getErrorSeverity(ErrorCode code);
 
 #endif // ERROR_CODES_H

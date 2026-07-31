@@ -59,8 +59,7 @@ Projekt **Caliper** to zaawansowany system bezprzewodowego pomiaru długości op
 
 ### System obsługi błędów
 - **Kompleksowy system kodów błędów** - 8 kategorii (Communication, Sensor, Motor, Power, Storage, Network, Validation, System)
-- **10 modułów źródłowych** - ESP-NOW, Serial, Caliper, Accelerometer, Motor, Battery, LittleFS, Preferences, Web Server, CLI
-- **Makra logowania** - LOG_ERROR, LOG_WARNING, LOG_INFO z automatycznym dekodowaniem
+- **Makra logowania** - LOG_ERROR, LOG_WARNING z automatycznym dekodowaniem kategorii i modułu
 - **ErrorHandler** - singleton do śledzenia statystyk błędów
 - **Funkcje pomocnicze ESP-NOW** - espnow_send_with_retry, espnow_add_peer_with_retry
 
@@ -92,7 +91,7 @@ flowchart TD
         end
 
         subgraph SHARED[CaliperShared]
-            SH_ERROR[ErrorCodes<br/>8 kategorii, 10 modułów]
+            SH_ERROR[ErrorCodes<br/>8 kategorii]
             SH_HELPER[ESP-NOW Helper<br/>retry mechanism]
         end
 
@@ -664,10 +663,9 @@ caliper/
 │   ├── shared_common.h          # Wspólne definicje typów/struktur (MessageMaster, MessageSlave, MessageRC, CommandType)
 │   ├── shared_config.h          # Wspólna konfiguracja (piny, stałe)
 │   ├── MacroDebugger.h          # Makra debug/log/plot
-│   ├── error_codes.h/.cpp       # System kodów błędów (8 kategorii, 10 modułów)
+│   ├── error_codes.h/.cpp       # System kodów błędów (8 kategorii)
 │   ├── error_handler.h          # Makra logowania błędów i klasa ErrorHandler
-│   ├── espnow_helper.h/.cpp     # Funkcje pomocnicze ESP-NOW z retry
-│   └── ERROR_HANDLING.md        # Dokumentacja systemu obsługi błędów
+│   └── espnow_helper.h/.cpp     # Funkcje pomocnicze ESP-NOW z retry
 │
 ├── doc/                         # Dokumentacja sprzętowa
 │   ├── ESP32-DevKit-V1-Pinout-Diagram-r0.1-CIRCUITSTATE-Electronics-2-1280x896.png
@@ -682,38 +680,31 @@ caliper/
 
 ## ⚙️ Konfiguracja
 
-### System obsługi błędów ([`lib/CaliperShared/ERROR_HANDLING.md`](lib/CaliperShared/ERROR_HANDLING.md:1))
+### System obsługi błędów
 
-System obsługi błędów zapewnia spójne zarządzanie błędami w całym projekcie:
+System obsługi błędów zapewnia spójne zarządzanie błędami w całym projekcie. Kody błędów to 16-bitowe wartości, gdzie wysoki bajt oznacza kategorię (dla czytelności), a dekodowanie odbywa się przez switch — bez bit-packingu.
 
-**Format kodu błędu (16 bitów):**
-```
-[Category:4 bits][Module:4 bits][Code:8 bits]
-```
-
-**Kategorie błędów:**
-- `ERR_CAT_NONE` (0x00) - Brak błędu
-- `ERR_CAT_COMMUNICATION` (0x01) - Błędy komunikacji (ESP-NOW, Serial, WiFi)
-- `ERR_CAT_SENSOR` (0x02) - Błędy sensorów (suwmiarka, akcelerometr)
-- `ERR_CAT_MOTOR` (0x03) - Błędy sterownika silnika
-- `ERR_CAT_POWER` (0x04) - Błędy zasilania (bateria, ADC)
-- `ERR_CAT_STORAGE` (0x05) - Błędy pamięci (LittleFS, NVS/Preferences)
-- `ERR_CAT_NETWORK` (0x06) - Błędy sieci (WiFi AP, Web Server)
-- `ERR_CAT_VALIDATION` (0x07) - Błędy walidacji danych
-- `ERR_CAT_SYSTEM` (0x08) - Błędy systemowe
+**Kategorie błędów (high byte):**
+- `0x00XX` - Brak błędu
+- `0x01XX` - Communication (ESP-NOW, Serial, WiFi)
+- `0x02XX` - Sensor (suwmiarka, akcelerometr)
+- `0x03XX` - Motor (sterownik silnika)
+- `0x04XX` - Power (bateria, ADC)
+- `0x05XX` - Storage (LittleFS, NVS/Preferences)
+- `0x06XX` - Network (WiFi AP, Web Server)
+- `0x07XX` - Validation (walidacja danych)
+- `0x08XX` - System (błędy systemowe)
 
 **Przykłady kodów błędów:**
 - `ERR_ESPNOW_SEND_FAILED` (0x0102) - Wysłanie ESP-NOW nieudane
-- `ERR_CALIPER_TIMEOUT` (0x0201) - Timeout pomiaru suwmiarki
+- `ERR_ACCEL_INIT_FAILED` (0x0205) - Inicjalizacja akcelerometru nieudana
 - `ERR_PREFS_SAVE_FAILED` (0x0507) - Zapis Preferences nieudany
 
 **Makra logowania:**
 ```cpp
+RECORD_ERROR(errorCode, "Szczegóły...");  // zapis + LOG_ERROR
 LOG_ERROR(errorCode, "Szczegóły...");
 LOG_WARNING(errorCode, "Szczegóły...");
-LOG_INFO(errorCode, "Szczegóły...");
-RETURN_ERROR(errorCode, "Szczegóły...");
-RETURN_IF_NOT_OK(errorCode, "Szczegóły...");
 ```
 
 ### Wspólna konfiguracja ([`lib/CaliperShared/shared_config.h`](lib/CaliperShared/shared_config.h:1))
