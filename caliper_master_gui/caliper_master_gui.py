@@ -492,7 +492,7 @@ class CaliperGUI:
         
         # Create viewport
         # Larger height so that chart and history are visible without clipping on startup.
-        dpg.create_viewport(title="TKK Caliper 1.0", width=1200, height=850)
+        dpg.create_viewport(title="TKK DBMS 1.0", width=1200, height=850)
 
         # Main window
         with dpg.window(label="Caliper - Application", tag="main_window"):

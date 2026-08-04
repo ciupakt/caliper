@@ -13,6 +13,8 @@
 #ifndef SHARED_CONFIG_BASE_H
 #define SHARED_CONFIG_BASE_H
 
+#define TKK_DBMS_VERSION "1.0"
+
 // ============================================================================
 // ESP-NOW Configuration
 // ============================================================================

@@ -177,10 +177,10 @@ class CalibrationTab:
 
                         dpg.add_spacer(height=10)
                         dpg.add_text(
-                            "TKK_Caliper Web: http://192.168.4.1", color=(100, 255, 100)
+                            "TKK_DBMS Web: http://192.168.4.1", color=(100, 255, 100)
                         )
                         dpg.add_text(
-                            "WiFi: TKK_Caliper (password: 1670$2026)", color=(100, 255, 100)
+                            "WiFi: TKK_DBMS (password: 1670$2026)", color=(100, 255, 100)
                         )
 
                 dpg.add_spacer(height=5)
