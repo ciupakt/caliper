@@ -7,6 +7,7 @@ import dearpygui.dearpygui as dpg
 import threading
 import time
 import os
+import random
 from datetime import datetime
 
 # Import application modules
@@ -355,6 +356,20 @@ class CaliperGUI:
         except Exception as e:
             self.calibration_tab.add_app_log(f"ERROR processing data: {str(e)}")
     
+    def _check_simulation(self) -> bool:
+        """Check if simulation mode is active. If so, generate a simulated measurement."""
+        if dpg.does_item_exist("simulation_checkbox") and dpg.get_value("simulation_checkbox"):
+            self._simulate_measurement()
+            return True
+        return False
+
+    def _simulate_measurement(self):
+        """Generate a simulated measurement value (9.000–11.000 mm)."""
+        raw = random.uniform(9.0, 11.0)
+        payload = f"measurement:{raw:.3f}"
+        self.process_measurement_data(payload)
+        self.calibration_tab.add_app_log(f"[SIMULATION] Generated: {raw:.3f} mm")
+
     def serial_write_callback(self, data: str):
         """Callback for written serial data."""
         self.calibration_tab.add_serial_log(f"> {data}")
@@ -430,6 +445,10 @@ class CaliperGUI:
             if self.serial_handler is None or not self.serial_handler.is_open():
                 return
 
+            if self._check_simulation():
+                self.calibration_tab.add_app_log("[HOTKEY] m -> measure (simulated)")
+                return
+
             self.serial_handler.write("m")
             self.calibration_tab.add_app_log("[HOTKEY] m -> measure")
             return
@@ -440,7 +459,6 @@ class CaliperGUI:
 
         # Value registry (flags/states used by callbacks)
         with dpg.value_registry():
-            # One-time auto-fill of offset after clicking "Get raw value"
             dpg.add_bool_value(tag="cal_autofill_next", default_value=False)
         
         # Font registry
@@ -501,13 +519,13 @@ class CaliperGUI:
             # not the current `tab_bar`), instead we explicitly pass the identifier/tab tag.
             with dpg.tab_bar(tag="main_tab_bar") as tab_bar_id:
                 # Measurements
-                self.measurement_tab.create(tab_bar_id, self.serial_handler, self.csv_handler, on_drop=self._on_drop_measurement)
+                self.measurement_tab.create(tab_bar_id, self.serial_handler, self.csv_handler, on_drop=self._on_drop_measurement, on_simulate=self._check_simulation)
 
                 # Gauge
                 self.gauge_tab.create(tab_bar_id)
 
                 # Calibration
-                self.calibration_tab.create(tab_bar_id, self.serial_handler)
+                self.calibration_tab.create(tab_bar_id, self.serial_handler, on_simulate=self._check_simulation)
 
         # Bind font
         dpg.bind_font(default_font)

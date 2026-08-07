@@ -39,13 +39,14 @@ class CalibrationTab:
         self.max_lines = max_lines
         self.serial_log_lines = deque(maxlen=max_lines)
         self.app_log_lines = deque(maxlen=max_lines)
-        # Tracking last click time for double-click detection
         self.last_click_time = 0.0
-        self.double_click_threshold = 0.5  # seconds
+        self.double_click_threshold = 0.5
+        self._on_simulate = None
 
-    def create(self, parent: int, serial_handler):
+    def create(self, parent: int, serial_handler, on_simulate=None):
         """Create the calibration tab UI"""
-        with dpg.tab(label="Calibration", parent=parent):
+        self._on_simulate = on_simulate
+        with dpg.tab(label="Settings", parent=parent):
             with dpg.child_window(no_scrollbar=True, tag="cal_tab_root"):
                 dpg.add_spacer(height=5)
 
@@ -133,6 +134,7 @@ class CalibrationTab:
                                 height=30,
                                 user_data=serial_handler,
                             )
+                            dpg.add_checkbox(label="Simulation", tag="simulation_checkbox")
                         dpg.add_spacer(height=5)
                         dpg.add_text("", tag="pairing_status")
 
@@ -307,14 +309,17 @@ class CalibrationTab:
         frame in [`CaliperGUI.process_measurement_data()`](caliper_master_gui/caliper_master_gui.py:44)
         the `cal_offset_input` field will be auto-filled once.
         """
-        serial_handler = user_data
-
         try:
             if dpg.does_item_exist("cal_autofill_next"):
                 dpg.set_value("cal_autofill_next", True)
         except Exception:
             pass
 
+        if self._on_simulate is not None and self._on_simulate():
+            self._set_status("Sent: m (get raw value, simulated)")
+            return
+
+        serial_handler = user_data
         if self._safe_write(serial_handler, "m"):
             self._set_status("Sent: m (get raw value)")
 

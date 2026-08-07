@@ -44,16 +44,20 @@ class MeasurementTab:
         # References set in create()
         self._csv_handler = None
         self._on_drop = None
+        self._on_simulate = None
 
-    def create(self, parent: int, serial_handler, csv_handler, on_drop=None):
+    def create(self, parent: int, serial_handler, csv_handler, on_drop=None, on_simulate=None):
         """Create the measurement tab UI
 
         Args:
             on_drop: optional callback invoked after canceling last
                      measurement (e.g. to sync Gauge tab).
+            on_simulate: optional callback that returns True if simulation
+                        was handled (no serial write needed).
         """
         self._csv_handler = csv_handler
         self._on_drop = on_drop
+        self._on_simulate = on_simulate
         with dpg.tab(label="Measurements", parent=parent):
             with dpg.group(horizontal=True):
                 # --- Measurement History (left column)
@@ -506,6 +510,8 @@ class MeasurementTab:
     def _trigger(self, sender, app_data, user_data):
         """Send trigger command"""
         serial_handler = user_data
+        if self._on_simulate is not None and self._on_simulate():
+            return
         serial_handler.write("m")
 
     def _cancel_last_measurement(self, sender=None, app_data=None, user_data=None):
@@ -682,7 +688,10 @@ class MeasurementTab:
                     and hasattr(serial_handler, "is_open")
                     and serial_handler.is_open()
                 ):
-                    serial_handler.write("m")
+                    if self._on_simulate is not None and self._on_simulate():
+                        pass
+                    else:
+                        serial_handler.write("m")
             except Exception:
             # don’t crash the thread – at worst skip iteration
                 pass
