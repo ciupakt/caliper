@@ -135,7 +135,7 @@ private:
   static constexpr const char *KEY_MOTOR_SPEED = "motorSpeed";
   static constexpr const char *KEY_MOTOR_TORQUE = "motorTorque";
   static constexpr const char *KEY_TIMEOUT = "timeout";
-  static constexpr const char *KEY_CALIBRATION_OFFSET = "calibrationOffset";
+  static constexpr const char *KEY_CALIBRATION_OFFSET = "calOffset";
   static constexpr const char *KEY_REFERENCE = "reference";
   static constexpr const char *KEY_SLAVE_MAC = "slaveMac";
   static constexpr const char *KEY_RC_MAC = "rcMac";

@@ -35,6 +35,14 @@ from datetime import datetime
 class CalibrationTab:
     """Calibration tab component"""
 
+    # Motor state names shown in the motorState combo box (index = state value).
+    MOTOR_STATE_NAMES = [
+        "MOTOR_STOP (0)",
+        "MOTOR_FORWARD (1)",
+        "MOTOR_REVERSE (2)",
+        "MOTOR_BRAKE (3)",
+    ]
+
     def __init__(self, max_lines: int = 200):
         self.max_lines = max_lines
         self.serial_log_lines = deque(maxlen=max_lines)
@@ -86,13 +94,8 @@ class CalibrationTab:
                         dpg.add_combo(
                             label="motorState",
                             tag="tx_state_input",
-                            items=[
-                                "MOTOR_STOP (0)",
-                                "MOTOR_FORWARD (1)",
-                                "MOTOR_REVERSE (2)",
-                                "MOTOR_BRAKE (3)",
-                            ],
-                            default_value="MOTOR_STOP (0)",
+                            items=CalibrationTab.MOTOR_STATE_NAMES,
+                            default_value=CalibrationTab.MOTOR_STATE_NAMES[0],
                             width=220,
                         )
 
@@ -203,7 +206,9 @@ class CalibrationTab:
                             height=300,
                             tag="cal_serial_log",
                         )
-                        if dpg.does_item_exist("font_small"):
+                        if dpg.does_item_exist("font_log"):
+                            dpg.bind_item_font("cal_serial_log", "font_log")
+                        elif dpg.does_item_exist("font_small"):
                             dpg.bind_item_font("cal_serial_log", "font_small")
                         with dpg.item_handler_registry(tag="serial_log_click_handler"):
                             dpg.add_item_clicked_handler(
@@ -227,7 +232,9 @@ class CalibrationTab:
                             height=300,
                             tag="cal_app_log",
                         )
-                        if dpg.does_item_exist("font_small"):
+                        if dpg.does_item_exist("font_log"):
+                            dpg.bind_item_font("cal_app_log", "font_log")
+                        elif dpg.does_item_exist("font_small"):
                             dpg.bind_item_font("cal_app_log", "font_small")
                         with dpg.item_handler_registry(tag="app_log_click_handler"):
                             dpg.add_item_clicked_handler(
@@ -362,7 +369,9 @@ class CalibrationTab:
         dpg.set_value("tx_timeout_input", timeout_ms)
         dpg.set_value("tx_torque_input", torque)
         dpg.set_value("tx_speed_input", speed)
-        dpg.set_value("tx_state_input", state)
+        # Combo box items are strings ("MOTOR_STOP (0)"), so map the int back.
+        if 0 <= state < len(CalibrationTab.MOTOR_STATE_NAMES):
+            dpg.set_value("tx_state_input", CalibrationTab.MOTOR_STATE_NAMES[state])
 
         if not self._safe_write(serial_handler, f"o {timeout_ms}"):
             return

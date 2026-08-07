@@ -131,7 +131,11 @@ class CaliperGUI:
                         dpg.set_value("cal_offset_display", f"Current offset: {self.current_calibration_offset:.3f} mm")
 
                     if self.last_measurement_raw is not None and dpg.does_item_exist("cal_corrected_display"):
-                        corrected_base = float(self.last_measurement_raw) + float(self.current_calibration_offset) if float(self.last_measurement_raw) < 0 else float(self.last_measurement_raw) - float(self.current_calibration_offset)
+                        corrected_base = (
+                            float(self.last_measurement_raw)
+                            + float(self.current_calibration_offset)
+                            + float(self.current_reference)
+                        )
                         dpg.set_value("cal_corrected_display", f"Corrected: {corrected_base:.3f} mm")
                 except Exception:
                     pass
@@ -165,7 +169,8 @@ class CaliperGUI:
             # --- Measurement (sent via DEBUG_PLOT in OnDataRecv)
             # Firmware Master sends raw measurement as `measurement:`.
             # GUI calculates correction on its side:
-            # corrected = measurementRaw + current_calibration_offset
+            # corrected = measurementRaw + calibrationOffset + reference
+            # (matches firmware Master, main.cpp:702)
             if data.startswith("measurement:"):
                 val_str = data.split(":", 1)[1].strip()
                 raw = float(val_str)
@@ -187,7 +192,7 @@ class CaliperGUI:
                     if dpg.does_item_exist("cal_offset_display"):
                         dpg.set_value("cal_offset_display", f"Current offset: {self.current_calibration_offset:.3f} mm")
                     if dpg.does_item_exist("cal_corrected_display"):
-                        cal_corrected = raw + float(self.current_calibration_offset) if raw < 0 else raw - float(self.current_calibration_offset)
+                        cal_corrected = raw + float(self.current_calibration_offset) + float(self.current_reference)
                         dpg.set_value("cal_corrected_display", f"Corrected: {cal_corrected:.3f} mm")
                 except Exception:
                     pass
@@ -278,13 +283,11 @@ class CaliperGUI:
                 val_str = data.split(":", 1)[1].strip()
                 try:
                     state_val = int(val_str)
-                    state_names = {
-                        0: "MOTOR_STOP (0)",
-                        1: "MOTOR_FORWARD (1)",
-                        2: "MOTOR_REVERSE (2)",
-                        3: "MOTOR_BRAKE (3)"
-                    }
-                    state_name = state_names.get(state_val, f"UNKNOWN({state_val})")
+                    names = CalibrationTab.MOTOR_STATE_NAMES
+                    if 0 <= state_val < len(names):
+                        state_name = names[state_val]
+                    else:
+                        state_name = f"UNKNOWN({state_val})"
                     self.calibration_tab.add_app_log(f"[CONFIG] motorState: {state_name}")
                     
                     # Refresh calibration UI (if it exists)
@@ -462,8 +465,9 @@ class CaliperGUI:
             dpg.add_bool_value(tag="cal_autofill_next", default_value=False)
         
         # Font registry
-        # DearPyGui may not have the Latin Extended character range loaded by default,
-        # so we explicitly add the ranges needed for Polish characters.
+        # DearPyGui 2.x automatically loads extended character ranges (incl. Polish
+        # diacritics), so explicit add_font_range_hint/add_font_range calls are
+        # no longer needed (and are deprecated no-ops).
         with dpg.font_registry():
             # OS detection for font paths
             if os.name == 'nt':  # Windows
@@ -474,35 +478,27 @@ class CaliperGUI:
                 font_bold_path = "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf"
 
             with dpg.font(font_path, 22) as default_font:
-                dpg.add_font_range_hint(dpg.mvFontRangeHint_Default)
-                # Latin Extended-A (e.g. Polish diacritics)
-                dpg.add_font_range(0x0100, 0x017F)
-                # Latin Extended-B (just in case)
-                dpg.add_font_range(0x0180, 0x024F)
+                pass
 
             # Bold font (for emphasizing buttons, e.g. "Measure")
             with dpg.font(font_bold_path, 24, tag="font_bold"):
-                dpg.add_font_range_hint(dpg.mvFontRangeHint_Default)
-                dpg.add_font_range(0x0100, 0x017F)
-                dpg.add_font_range(0x0180, 0x024F)
+                pass
 
             # Small font (for logs – half the default size)
             with dpg.font(font_path, 13, tag="font_small"):
-                dpg.add_font_range_hint(dpg.mvFontRangeHint_Default)
-                dpg.add_font_range(0x0100, 0x017F)
-                dpg.add_font_range(0x0180, 0x024F)
+                pass
+
+            # Log font (larger than font_small for better readability)
+            with dpg.font(font_path, 16, tag="font_log"):
+                pass
 
             # Gauge meta font (smaller – for timestamp/angle in Gauge tab)
             with dpg.font(font_path, 20, tag="font_gauge_meta"):
-                dpg.add_font_range_hint(dpg.mvFontRangeHint_Default)
-                dpg.add_font_range(0x0100, 0x017F)
-                dpg.add_font_range(0x0180, 0x024F)
+                pass
 
             # Gauge font (large – for displaying last measurement in Gauge tab)
             with dpg.font(font_bold_path, 360, tag="font_gauge"):
-                dpg.add_font_range_hint(dpg.mvFontRangeHint_Default)
-                dpg.add_font_range(0x0100, 0x017F)
-                dpg.add_font_range(0x0180, 0x024F)
+                pass
         
         # Handler registry
         with dpg.handler_registry():

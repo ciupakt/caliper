@@ -194,6 +194,9 @@ class MeasurementTab:
                             tag="session_name_input",
                             default_value=self.session_name,
                             width=360,
+                            on_enter=True,
+                            callback=self._confirm_new_session,
+                            user_data=(serial_handler, csv_handler),
                         )
                         dpg.add_spacer(height=8)
                         with dpg.group(horizontal=True):
@@ -270,8 +273,10 @@ class MeasurementTab:
         directory = os.path.dirname(abs_path)
 
         try:
+            # Hide the console window of the spawned helper process on Windows.
+            creationflags = getattr(subprocess, "CREATE_NO_WINDOW", 0)
             if sys.platform.startswith("win"):
-                subprocess.Popen(["explorer", "/select,", abs_path])
+                subprocess.Popen(["explorer", "/select,", abs_path], creationflags=creationflags)
             elif sys.platform.startswith("darwin"):
                 subprocess.Popen(["open", "-R", abs_path])
             else:
@@ -298,6 +303,9 @@ class MeasurementTab:
 
         def _native_save_dialog() -> str:
             """Returns selected path or empty string on cancel."""
+            # On Windows, hide the console window of the spawned helper process
+            # (PowerShell) so "Save as" doesn't pop up a black cmd window.
+            creationflags = getattr(subprocess, "CREATE_NO_WINDOW", 0)
             if sys.platform.startswith("win"):
                 # Windows – native Win32 dialog via PowerShell
                 ps_script = (
@@ -313,6 +321,7 @@ class MeasurementTab:
                     result = subprocess.run(
                         ["powershell", "-NoProfile", "-Command", ps_script],
                         capture_output=True, text=True, timeout=120,
+                        creationflags=creationflags,
                     )
                     return result.stdout.strip() if result.returncode == 0 else ""
                 except Exception:

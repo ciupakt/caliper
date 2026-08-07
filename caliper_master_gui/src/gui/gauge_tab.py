@@ -89,7 +89,7 @@ class GaugeTab:
                     if size and len(size) >= 2:
                         meta_h += size[1]
 
-            spacer_h = max(0, int((avail_h - val_h) / 2 - meta_h))
+            spacer_h = max(0, int((avail_h - val_h) / 2 - meta_h - val_h * 0.20))
             if dpg.does_item_exist("gauge_vspacer"):
                 dpg.configure_item("gauge_vspacer", height=spacer_h)
         except Exception:
