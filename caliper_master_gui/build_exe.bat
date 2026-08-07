@@ -25,6 +25,6 @@ if %ERRORLEVEL% neq 0 (
 echo.
 echo [2/2] Done!
 echo.
-echo EXE location: dist\CaliperGUI.exe
+echo EXE location: dist\TKK_DBMS.exe
 echo.
 pause

@@ -36,7 +36,7 @@ exe = EXE(
     a.zipfiles,
     a.datas,
     [],
-    name='CaliperGUI',
+    name='TKK_DBMS',
     debug=False,
     bootloader_ignore_signals=False,
     strip=False,
