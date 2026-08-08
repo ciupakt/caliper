@@ -521,7 +521,7 @@ class CaliperGUI:
                 self.gauge_tab.create(tab_bar_id)
 
                 # Calibration
-                self.calibration_tab.create(tab_bar_id, self.serial_handler, on_simulate=self._check_simulation)
+                self.calibration_tab.create(tab_bar_id, self.serial_handler, self.csv_handler, on_simulate=self._check_simulation)
 
         # Bind font
         dpg.bind_font(default_font)

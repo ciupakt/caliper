@@ -50,199 +50,235 @@ class CalibrationTab:
         self.last_click_time = 0.0
         self.double_click_threshold = 0.5
         self._on_simulate = None
+        self._csv_handler = None
 
-    def create(self, parent: int, serial_handler, on_simulate=None):
-        """Create the calibration tab UI"""
+    def create(self, parent: int, serial_handler, csv_handler=None, on_simulate=None):
+        """Create the calibration tab UI
+
+        Args:
+            csv_handler: optional CSV handler (used by "Open Port" to close any
+                         previously open CSV file when switching ports).
+            on_simulate: optional callback that returns True if simulation
+                         was handled (no serial write needed).
+        """
         self._on_simulate = on_simulate
+        self._csv_handler = csv_handler
         with dpg.tab(label="Settings", parent=parent):
-            with dpg.child_window(no_scrollbar=True, tag="cal_tab_root"):
-                dpg.add_spacer(height=5)
+            with dpg.group(horizontal=True):
+                # --- COM Port Configuration
+                with dpg.group(width=288):
+                    dpg.add_text("COM Port Configuration:", color=(100, 200, 255))
+                    dpg.add_spacer(height=5)
+                    ports_list = (
+                        serial_handler.list_ports()
+                        if serial_handler is not None
+                        else []
+                    )
+                    dpg.add_combo(ports_list, tag="port_combo", width=288)
+                    if ports_list:
+                        dpg.set_value("port_combo", ports_list[0])
+                    dpg.add_spacer(height=5)
+                    dpg.add_button(
+                        label="Refresh Ports",
+                        callback=self._refresh_ports,
+                        width=288,
+                        height=30,
+                        user_data=serial_handler,
+                    )
+                    dpg.add_spacer(height=5)
+                    dpg.add_button(
+                        label="Open Port",
+                        callback=self._open_port,
+                        width=288,
+                        height=30,
+                        user_data=(serial_handler, csv_handler),
+                    )
 
-                dpg.add_text("", tag="cal_tab_status")
-                dpg.add_spacer(height=10)
+                dpg.add_spacer(width=30)
 
-                with dpg.group(horizontal=True):
-                    # --- Measurement configuration
-                    with dpg.group():
-                        dpg.add_text("Measurement Configuration:", color=(100, 200, 255))
-                        dpg.add_spacer(height=5)
+                # --- Measurement configuration
+                with dpg.group():
+                    dpg.add_text("Measurement Configuration:", color=(100, 200, 255))
+                    dpg.add_spacer(height=5)
 
-                        dpg.add_input_int(
-                            label="timeout (ms)",
-                            tag="tx_timeout_input",
-                            default_value=0,
-                            min_value=0,
-                            max_value=600000,
-                            width=220,
-                        )
-                        dpg.add_input_int(
-                            label="motorTorque (0-255)",
-                            tag="tx_torque_input",
-                            default_value=0,
-                            min_value=0,
-                            max_value=255,
-                            width=220,
-                        )
-                        dpg.add_input_int(
-                            label="motorSpeed (0-255)",
-                            tag="tx_speed_input",
-                            default_value=255,
-                            min_value=0,
-                            max_value=255,
-                            width=220,
-                        )
-                        dpg.add_combo(
-                            label="motorState",
-                            tag="tx_state_input",
-                            items=CalibrationTab.MOTOR_STATE_NAMES,
-                            default_value=CalibrationTab.MOTOR_STATE_NAMES[0],
-                            width=220,
-                        )
+                    dpg.add_input_int(
+                        label="timeout (ms)",
+                        tag="tx_timeout_input",
+                        default_value=0,
+                        min_value=0,
+                        max_value=600000,
+                        width=220,
+                    )
+                    dpg.add_input_int(
+                        label="motorTorque (0-255)",
+                        tag="tx_torque_input",
+                        default_value=0,
+                        min_value=0,
+                        max_value=255,
+                        width=220,
+                    )
+                    dpg.add_input_int(
+                        label="motorSpeed (0-255)",
+                        tag="tx_speed_input",
+                        default_value=255,
+                        min_value=0,
+                        max_value=255,
+                        width=220,
+                    )
+                    dpg.add_combo(
+                        label="motorState",
+                        tag="tx_state_input",
+                        items=CalibrationTab.MOTOR_STATE_NAMES,
+                        default_value=CalibrationTab.MOTOR_STATE_NAMES[0],
+                        width=220,
+                    )
 
-                        dpg.add_spacer(height=5)
-                        with dpg.group(horizontal=True):
-                            dpg.add_button(
-                                label="Apply",
-                                callback=self._apply_measurement_config,
-                                width=150,
-                                height=30,
-                                user_data=serial_handler,
-                            )
-                            dpg.add_button(
-                                label="Motortest",
-                                callback=self._send_motortest,
-                                width=150,
-                                height=30,
-                                user_data=serial_handler,
-                            )
-                            dpg.add_button(
-                                label="Refresh Settings",
-                                callback=self._refresh_settings,
-                                width=150,
-                                height=30,
-                                user_data=serial_handler,
-                            )
-                        with dpg.group(horizontal=True):
-                            dpg.add_button(
-                                label="OTA (Slave)",
-                                callback=self._send_ota,
-                                width=150,
-                                height=30,
-                                user_data=serial_handler,
-                            )
-                            dpg.add_button(
-                                label="Pairing",
-                                callback=self._send_pairing,
-                                width=150,
-                                height=30,
-                                user_data=serial_handler,
-                            )
-                            dpg.add_checkbox(label="Simulation", tag="simulation_checkbox")
-                        dpg.add_spacer(height=5)
-                        dpg.add_text("", tag="pairing_status")
-
-                    dpg.add_spacer(width=30)
-
-                    # --- Calibration
-                    with dpg.group():
-                        dpg.add_text("Calibration (Master local):", color=(100, 200, 255))
-                        dpg.add_spacer(height=5)
-
-                        dpg.add_text("Raw: n/a", tag="cal_raw_display")
-                        dpg.add_text(
-                            "Current offset: 0.000 mm",
-                            tag="cal_offset_display",
-                            color=(198, 40, 40),
-                        )
-                        dpg.add_text("Corrected: n/a", tag="cal_corrected_display")
-                        dpg.add_spacer(height=5)
-
-                        dpg.add_input_float(
-                            label="calibrationOffset (mm)",
-                            tag="cal_offset_input",
-                            default_value=0.0,
-                            format="%.3f",
-                            width=180,
-                        )
-
+                    dpg.add_spacer(height=5)
+                    with dpg.group(horizontal=True):
                         dpg.add_button(
-                            label="Get raw value",
-                            callback=self._calibration_measure,
-                            width=220,
+                            label="Apply",
+                            callback=self._apply_measurement_config,
+                            width=150,
                             height=30,
                             user_data=serial_handler,
                         )
                         dpg.add_button(
-                            label="Apply Offset",
-                            callback=self._apply_calibration_offset,
-                            width=220,
+                            label="Motortest",
+                            callback=self._send_motortest,
+                            width=150,
                             height=30,
                             user_data=serial_handler,
                         )
+                    with dpg.group(horizontal=True):
+                        dpg.add_button(
+                            label="OTA (Slave)",
+                            callback=self._send_ota,
+                            width=150,
+                            height=30,
+                            user_data=serial_handler,
+                        )
+                        dpg.add_button(
+                            label="Pairing",
+                            callback=self._send_pairing,
+                            width=150,
+                            height=30,
+                            user_data=serial_handler,
+                        )
+                    with dpg.group(horizontal=True):
+                        dpg.add_button(
+                            label="Refresh Settings",
+                            callback=self._refresh_settings,
+                            width=150,
+                            height=30,
+                            user_data=serial_handler,
+                        )
+                        dpg.add_checkbox(label="Simulation", tag="simulation_checkbox")
+                    dpg.add_spacer(height=5)
+                    dpg.add_text("", tag="pairing_status")
 
-                        dpg.add_spacer(height=10)
-                        dpg.add_text(
-                            "TKK_DBMS Web: http://192.168.4.1", color=(100, 255, 100)
-                        )
-                        dpg.add_text(
-                            "WiFi: TKK_DBMS (password: 1670$2026)", color=(100, 255, 100)
-                        )
+                dpg.add_spacer(width=30)
 
-                dpg.add_spacer(height=5)
-                dpg.add_separator()
-                dpg.add_spacer(height=5)
+                # --- Calibration
+                with dpg.group():
+                    dpg.add_text("Calibration (Master local):", color=(100, 200, 255))
+                    dpg.add_spacer(height=5)
 
-                with dpg.group(horizontal=True):
-                    # Serial communication log
-                    with dpg.group():
-                        dpg.add_text(
-                            "Serial Communication Log (dblclick = clear):",
-                            color=(100, 200, 255),
-                        )
-                        dpg.add_input_text(
-                            multiline=True,
-                            readonly=True,
-                            width=555,
-                            height=300,
-                            tag="cal_serial_log",
-                        )
-                        if dpg.does_item_exist("font_log"):
-                            dpg.bind_item_font("cal_serial_log", "font_log")
-                        elif dpg.does_item_exist("font_small"):
-                            dpg.bind_item_font("cal_serial_log", "font_small")
-                        with dpg.item_handler_registry(tag="serial_log_click_handler"):
-                            dpg.add_item_clicked_handler(
-                                callback=self._on_log_clicked, user_data="serial"
-                            )
-                        dpg.bind_item_handler_registry(
-                            "cal_serial_log", "serial_log_click_handler"
-                        )
+                    dpg.add_text("Raw: n/a", tag="cal_raw_display")
+                    dpg.add_text(
+                        "Current offset: 0.000 mm",
+                        tag="cal_offset_display",
+                        color=(198, 40, 40),
+                    )
+                    dpg.add_text("Corrected: n/a", tag="cal_corrected_display")
+                    dpg.add_spacer(height=5)
 
-                    dpg.add_spacer(width=20)
+                    dpg.add_input_float(
+                        label="calibrationOffset (mm)",
+                        tag="cal_offset_input",
+                        default_value=0.0,
+                        format="%.3f",
+                        width=180,
+                    )
 
-                    # Application log
-                    with dpg.group():
-                        dpg.add_text(
-                            "App Log (dblclick = clear):", color=(100, 200, 255)
+                    dpg.add_button(
+                        label="Get raw value",
+                        callback=self._calibration_measure,
+                        width=220,
+                        height=30,
+                        user_data=serial_handler,
+                    )
+                    dpg.add_button(
+                        label="Apply Offset",
+                        callback=self._apply_calibration_offset,
+                        width=220,
+                        height=30,
+                        user_data=serial_handler,
+                    )
+
+                    dpg.add_spacer(height=10)
+                    dpg.add_text(
+                        "TKK_DBMS Web: http://192.168.4.1", color=(100, 255, 100)
+                    )
+                    dpg.add_text(
+                        "WiFi: TKK_DBMS (password: 1670$2026)", color=(100, 255, 100)
+                    )
+
+            dpg.add_text("", tag="cal_tab_status")
+            dpg.add_spacer(height=5)
+            dpg.add_separator()
+            dpg.add_spacer(height=5)
+
+            with dpg.group(horizontal=True):
+                # Serial communication log
+                with dpg.group():
+                    dpg.add_text(
+                        "Serial Communication Log (dblclick = clear):",
+                        color=(100, 200, 255),
+                    )
+                    dpg.add_input_text(
+                        multiline=True,
+                        readonly=True,
+                        width=555,
+                        height=300,
+                        tag="cal_serial_log",
+                    )
+                    if dpg.does_item_exist("font_log"):
+                        dpg.bind_item_font("cal_serial_log", "font_log")
+                    elif dpg.does_item_exist("font_small"):
+                        dpg.bind_item_font("cal_serial_log", "font_small")
+                    with dpg.item_handler_registry(tag="serial_log_click_handler"):
+                        dpg.add_item_clicked_handler(
+                            callback=self._on_log_clicked, user_data="serial"
                         )
-                        dpg.add_input_text(
-                            multiline=True,
-                            readonly=True,
-                            width=555,
-                            height=300,
-                            tag="cal_app_log",
+                    dpg.bind_item_handler_registry(
+                        "cal_serial_log", "serial_log_click_handler"
+                    )
+
+                dpg.add_spacer(width=20)
+
+                # Application log
+                with dpg.group():
+                    dpg.add_text(
+                        "App Log (dblclick = clear):", color=(100, 200, 255)
+                    )
+                    dpg.add_input_text(
+                        multiline=True,
+                        readonly=True,
+                        width=555,
+                        height=300,
+                        tag="cal_app_log",
+                    )
+                    if dpg.does_item_exist("font_log"):
+                        dpg.bind_item_font("cal_app_log", "font_log")
+                    elif dpg.does_item_exist("font_small"):
+                        dpg.bind_item_font("cal_app_log", "font_small")
+                    with dpg.item_handler_registry(tag="app_log_click_handler"):
+                        dpg.add_item_clicked_handler(
+                            callback=self._on_log_clicked, user_data="app"
                         )
-                        if dpg.does_item_exist("font_log"):
-                            dpg.bind_item_font("cal_app_log", "font_log")
-                        elif dpg.does_item_exist("font_small"):
-                            dpg.bind_item_font("cal_app_log", "font_small")
-                        with dpg.item_handler_registry(tag="app_log_click_handler"):
-                            dpg.add_item_clicked_handler(
-                                callback=self._on_log_clicked, user_data="app"
-                            )
-                        dpg.bind_item_handler_registry(
-                            "cal_app_log", "app_log_click_handler"
-                        )
+                    dpg.bind_item_handler_registry(
+                        "cal_app_log", "app_log_click_handler"
+                    )
 
     def add_serial_log(self, line: str):
         """Add a line to the serial log with timestamp"""
@@ -308,6 +344,62 @@ class CalibrationTab:
 
         serial_handler.write(data)
         return True
+
+    def _refresh_ports(self, sender, app_data, user_data):
+        """Refresh the list of available ports"""
+        serial_handler = user_data
+        ports = (
+            serial_handler.list_ports() if serial_handler is not None else []
+        )
+        dpg.configure_item("port_combo", items=ports)
+        if ports:
+            dpg.set_value("port_combo", ports[0])
+
+    def _open_port(self, sender, app_data, user_data):
+        """Open the selected serial port"""
+        serial_handler, csv_handler = user_data
+        port = dpg.get_value("port_combo")
+
+        # If port is already open and "Open Port" was clicked for the same port,
+        # we don’t touch the current session (keep CSV filename under "Session:").
+        try:
+            already_open_same_port = (
+                serial_handler is not None
+                and hasattr(serial_handler, "is_open")
+                and serial_handler.is_open()
+                and getattr(serial_handler, "current_port", None) == port
+            )
+        except Exception:
+            already_open_same_port = False
+
+        if already_open_same_port:
+            dpg.set_value("port_status", port)
+            return
+
+        if serial_handler.open_port(port):
+            dpg.set_value("port_status", port)
+
+            # Per requirement: CSV file is NOT created when opening the port.
+            # If a previous file was open, we close it so that a new session always
+            # creates a new file after providing a prefix.
+            try:
+                if (
+                    csv_handler is not None
+                    and hasattr(csv_handler, "is_open")
+                    and csv_handler.is_open()
+                ):
+                    csv_handler.close()
+            except Exception:
+                pass
+
+            # Reset "Session:" label in Measurements tab
+            try:
+                from src.gui.measurement_tab import MeasurementTab
+                MeasurementTab._set_csv_info_label(None)
+            except Exception:
+                pass
+        else:
+            dpg.set_value("port_status", "(none)")
 
     def _calibration_measure(self, sender, app_data, user_data):
         """Get current measurement (like in Web).

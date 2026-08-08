@@ -130,30 +130,9 @@ class MeasurementTab:
 
                 dpg.add_spacer(width=30)
 
-                # --- Port Config (right column, width=288)
+                # --- Session / Reference (right column, width=288)
                 with dpg.group(width=288):
-                    dpg.add_text("COM Port Configuration:", color=(100, 200, 255))
-                    dpg.add_spacer(height=5)
-                    ports_list = serial_handler.list_ports()
-                    dpg.add_combo(ports_list, tag="port_combo", width=288)
-                    if ports_list:
-                        dpg.set_value("port_combo", ports_list[0])
-                    dpg.add_spacer(height=5)
-                    dpg.add_button(
-                        label="Refresh Ports",
-                        callback=self._refresh_ports,
-                        width=288,
-                        height=30,
-                        user_data=serial_handler,
-                    )
-                    dpg.add_spacer(height=5)
-                    dpg.add_button(
-                        label="Open Port",
-                        callback=self._open_port,
-                        width=288,
-                        height=30,
-                        user_data=(serial_handler, csv_handler),
-                    )
+                    dpg.add_text("Session:", color=(100, 200, 255))
                     dpg.add_spacer(height=5)
                     new_session_btn = dpg.add_button(
                         label="New Session", width=288, height=30
@@ -466,55 +445,6 @@ class MeasurementTab:
                 dpg.set_value("csv_info_tooltip", display)
         except Exception:
             pass
-
-    def _refresh_ports(self, sender, app_data, user_data):
-        """Refresh the list of available ports"""
-        serial_handler = user_data
-        ports = serial_handler.list_ports()
-        dpg.configure_item("port_combo", items=ports)
-        if ports:
-            dpg.set_value("port_combo", ports[0])
-
-    def _open_port(self, sender, app_data, user_data):
-        """Open the selected serial port"""
-        serial_handler, csv_handler = user_data
-        port = dpg.get_value("port_combo")
-
-        # If port is already open and "Open Port" was clicked for the same port,
-        # we don’t touch the current session (keep CSV filename under "Session:").
-        try:
-            already_open_same_port = (
-                serial_handler is not None
-                and hasattr(serial_handler, "is_open")
-                and serial_handler.is_open()
-                and getattr(serial_handler, "current_port", None) == port
-            )
-        except Exception:
-            already_open_same_port = False
-
-        if already_open_same_port:
-            dpg.set_value("port_status", port)
-            return
-
-        if serial_handler.open_port(port):
-            dpg.set_value("port_status", port)
-
-            # Per requirement: CSV file is NOT created when opening the port.
-            # If a previous file was open, we close it so that a new session always
-            # creates a new file after providing a prefix.
-            try:
-                if (
-                    csv_handler is not None
-                    and hasattr(csv_handler, "is_open")
-                    and csv_handler.is_open()
-                ):
-                    csv_handler.close()
-            except Exception:
-                pass
-
-            self._set_csv_info_label(None)
-        else:
-            dpg.set_value("port_status", "(none)")
 
     def _trigger(self, sender, app_data, user_data):
         """Send trigger command"""
