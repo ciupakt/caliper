@@ -358,6 +358,11 @@ class CalibrationTab:
     def _open_port(self, sender, app_data, user_data):
         """Open the selected serial port"""
         serial_handler, csv_handler = user_data
+
+        # Stop auto-connect if it's running (user is manually taking over)
+        if hasattr(serial_handler, "stop_auto_connect"):
+            serial_handler.stop_auto_connect()
+
         port = dpg.get_value("port_combo")
 
         # If port is already open and "Open Port" was clicked for the same port,

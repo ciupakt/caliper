@@ -552,6 +552,43 @@ class CaliperGUI:
         except Exception:
             pass
     
+    def _on_autoconnect_status(self, payload):
+        """Callback for auto-connect status updates.
+
+        Args:
+            payload: tuple (display_text, connected_port|None)
+        """
+        display, port = payload
+        try:
+            if dpg.does_item_exist("port_status"):
+                dpg.set_value("port_status", display)
+        except Exception:
+            pass
+        try:
+            self.calibration_tab.add_app_log(f"[AUTOCONNECT] {display}")
+        except Exception:
+            pass
+        if port:
+            try:
+                if dpg.does_item_exist("port_combo"):
+                    items = dpg.get_item_configuration("port_combo").get("items", [])
+                    if port not in items:
+                        items = self.serial_handler.list_ports()
+                        dpg.configure_item("port_combo", items=items)
+                    dpg.set_value("port_combo", port)
+            except Exception:
+                pass
+
+    def _run_autoconnect(self):
+        """Run auto-connect in background thread."""
+        try:
+            self.serial_handler.auto_connect(status_callback=self._on_autoconnect_status)
+        except Exception as e:
+            try:
+                self.calibration_tab.add_app_log(f"[AUTOCONNECT] Error: {e}")
+            except Exception:
+                pass
+
     def run(self):
         """Run the application"""
         # Set up serial data callbacks
@@ -565,6 +602,12 @@ class CaliperGUI:
         self.create_gui()
         dpg.setup_dearpygui()
         dpg.show_viewport()
+
+        # Start auto-connect after viewport is shown so status is visible
+        self._autoconnect_thread = threading.Thread(
+            target=self._run_autoconnect, daemon=True, name="autoconnect"
+        )
+        self._autoconnect_thread.start()
 
         # Manual render loop: allows continuous re-centering of measurement
         # in Gauge tab (child_window size known only after rendering
@@ -586,6 +629,7 @@ class CaliperGUI:
         dpg.destroy_context()
         
         # Cleanup
+        self.serial_handler.stop_auto_connect()
         self.serial_handler.stop_reading()
         self.csv_handler.close()
 
