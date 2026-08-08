@@ -44,20 +44,16 @@ class MeasurementTab:
         # References set in create()
         self._csv_handler = None
         self._on_drop = None
-        self._on_simulate = None
 
-    def create(self, parent: int, serial_handler, csv_handler, on_drop=None, on_simulate=None):
+    def create(self, parent: int, serial_handler, csv_handler, on_drop=None):
         """Create the measurement tab UI
 
         Args:
             on_drop: optional callback invoked after canceling last
                      measurement (e.g. to sync Gauge tab).
-            on_simulate: optional callback that returns True if simulation
-                        was handled (no serial write needed).
         """
         self._csv_handler = csv_handler
         self._on_drop = on_drop
-        self._on_simulate = on_simulate
         with dpg.tab(label="Measurements", parent=parent):
             with dpg.group(horizontal=True):
                 # --- Measurement History (left column)
@@ -124,8 +120,9 @@ class MeasurementTab:
                         tag="interval_ms",
                         default_value=1000,
                         min_value=500,
-                        enabled=False,
+                        enabled=True,
                         width=150,
+                        callback=self._on_interval_changed,
                     )
 
                 dpg.add_spacer(width=30)
@@ -136,14 +133,6 @@ class MeasurementTab:
                     dpg.add_spacer(height=5)
                     new_session_btn = dpg.add_button(
                         label="New Session", width=288, height=30
-                    )
-                    dpg.add_spacer(height=5)
-                    dpg.add_button(
-                        label="Save session as:",
-                        callback=self._save_session_as,
-                        width=288,
-                        height=30,
-                        user_data=csv_handler,
                     )
                     dpg.add_spacer(height=5)
                     dpg.add_text("Reference (mm)")
@@ -263,103 +252,6 @@ class MeasurementTab:
         except Exception:
             pass
 
-    def _save_session_as(self, sender, app_data, user_data):
-        """Open native "Save as" window and copy/move the CSV file."""
-        csv_handler = user_data
-        src_filename = None
-        try:
-            if csv_handler is not None and hasattr(csv_handler, "get_filename"):
-                src_filename = csv_handler.get_filename()
-        except Exception:
-            src_filename = None
-
-        if not src_filename:
-            return
-
-        abs_src = os.path.abspath(src_filename)
-        initial_dir = os.path.dirname(abs_src)
-        initial_file = os.path.basename(abs_src)
-
-        def _native_save_dialog() -> str:
-            """Returns selected path or empty string on cancel."""
-            # On Windows, hide the console window of the spawned helper process
-            # (PowerShell) so "Save as" doesn't pop up a black cmd window.
-            creationflags = getattr(subprocess, "CREATE_NO_WINDOW", 0)
-            if sys.platform.startswith("win"):
-                # Windows – native Win32 dialog via PowerShell
-                ps_script = (
-                    "Add-Type -AssemblyName System.Windows.Forms; "
-                    "$d = New-Object System.Windows.Forms.SaveFileDialog; "
-                    f"$d.InitialDirectory = '{initial_dir}'; "
-                    f"$d.FileName = '{initial_file}'; "
-                    "$d.Filter = 'CSV files (*.csv)|*.csv|All files (*.*)|*.*'; "
-                    "$d.Title = 'Save session as'; "
-                    "if ($d.ShowDialog() -eq 'OK') {{ Write-Output $d.FileName }}"
-                )
-                try:
-                    result = subprocess.run(
-                        ["powershell", "-NoProfile", "-Command", ps_script],
-                        capture_output=True, text=True, timeout=120,
-                        creationflags=creationflags,
-                    )
-                    return result.stdout.strip() if result.returncode == 0 else ""
-                except Exception:
-                    return ""
-            elif sys.platform.startswith("darwin"):
-                # macOS – natywny dialog przez osascript
-                script = (
-                    f'tell app "System Events" to '
-                    f'POSIX path of (choose file name '
-                    f'with prompt "Save session as:" '
-                    f'default name "{initial_file}" '
-                    f'default location POSIX file "{initial_dir}")'
-                )
-                try:
-                    result = subprocess.run(
-                        ["osascript", "-e", script],
-                        capture_output=True, text=True, timeout=120,
-                    )
-                    return result.stdout.strip() if result.returncode == 0 else ""
-                except Exception:
-                    return ""
-            else:
-                # Linux – zenity (native GTK)
-                try:
-                    result = subprocess.run(
-                        [
-                            "zenity", "--file-selection",
-                            "--save",
-                            "--confirm-overwrite",
-                            f"--filename={os.path.join(initial_dir, initial_file)}",
-                            "--file-filter=CSV files (*.csv) | *.csv",
-                            "--file-filter=All files | *",
-                            "--title=Save session as",
-                        ],
-                        capture_output=True, text=True, timeout=120,
-                    )
-                    return result.stdout.strip() if result.returncode == 0 else ""
-                except FileNotFoundError:
-                    return ""
-                except Exception:
-                    return ""
-
-        def _do_save_as():
-            import shutil
-            dest = _native_save_dialog()
-            if not dest:
-                return
-            # Add .csv extension if missing
-            if not dest.lower().endswith(".csv"):
-                dest += ".csv"
-            try:
-                if csv_handler is not None and hasattr(csv_handler, "file") and csv_handler.file:
-                    csv_handler.file.flush()
-                shutil.copy2(abs_src, dest)
-            except Exception:
-                pass
-
-        threading.Thread(target=_do_save_as, daemon=True).start()
-
     @staticmethod
     def update_status_row_layout() -> None:
         """Adjust spacer width in status row so "Connected to:"
@@ -449,18 +341,11 @@ class MeasurementTab:
     def _trigger(self, sender, app_data, user_data):
         """Send trigger command"""
         serial_handler = user_data
-        if self._on_simulate is not None and self._on_simulate():
-            return
         serial_handler.write("m")
 
     def _cancel_last_measurement(self, sender=None, app_data=None, user_data=None):
-        """Cancel last measurement: remove from history/chart, from CSV file, and refresh Gauge."""
-        if self.drop_last_measurement():
-            try:
-                if self._csv_handler is not None and self._csv_handler.is_open():
-                    self._csv_handler.remove_last_row()
-            except Exception:
-                pass
+        """Cancel last measurement: remove from history/chart, rewrite CSV, refresh Gauge."""
+        self.drop_last_measurement()
 
         # Gauge tab sync (e.g. show previous measurement or clear)
         if callable(self._on_drop):
@@ -547,7 +432,8 @@ class MeasurementTab:
         """Toggle auto trigger"""
         serial_handler = user_data
         running = dpg.get_value("auto_checkbox")
-        dpg.configure_item("interval_ms", enabled=running)
+        # Interval is editable only when Auto-measure is OFF.
+        dpg.configure_item("interval_ms", enabled=not running)
 
         # Start / stop background task
         if running:
@@ -576,6 +462,38 @@ class MeasurementTab:
     def _clamp_int(self, value: int, min_val: int, max_val: int) -> int:
         """Clamp integer value to specified range."""
         return max(min_val, min(value, max_val))
+
+    def _get_min_interval(self) -> int:
+        """Minimum interval (ms) = max(500, 3 * timeout) from Settings tab."""
+        try:
+            if dpg.does_item_exist("tx_timeout_input"):
+                timeout = int(dpg.get_value("tx_timeout_input"))
+            else:
+                timeout = 0
+        except Exception:
+            timeout = 0
+        return max(500, 3 * timeout)
+
+    def _apply_interval_min(self):
+        """Enforce the dynamic min interval on the Interval (ms) input."""
+        min_interval = self._get_min_interval()
+        try:
+            dpg.configure_item("interval_ms", min_value=min_interval)
+            cur = int(dpg.get_value("interval_ms"))
+            if cur < min_interval:
+                dpg.set_value("interval_ms", min_interval)
+        except Exception:
+            pass
+
+    def _on_interval_changed(self, sender, app_data, user_data):
+        """Clamp the interval to the dynamic min when edited by the user."""
+        min_interval = self._get_min_interval()
+        try:
+            cur = int(dpg.get_value("interval_ms"))
+            if cur < min_interval:
+                dpg.set_value("interval_ms", min_interval)
+        except Exception:
+            pass
 
     @staticmethod
     def _clamp_float(val: float, vmin: float, vmax: float) -> float:
@@ -618,7 +536,7 @@ class MeasurementTab:
             except Exception:
                 interval = 1000
 
-            interval = self._clamp_int(interval, 500, 600000)
+            interval = self._clamp_int(interval, self._get_min_interval(), 600000)
 
             # send only when port is open; if not, just wait
             try:
@@ -627,10 +545,7 @@ class MeasurementTab:
                     and hasattr(serial_handler, "is_open")
                     and serial_handler.is_open()
                 ):
-                    if self._on_simulate is not None and self._on_simulate():
-                        pass
-                    else:
-                        serial_handler.write("m")
+                    serial_handler.write("m")
             except Exception:
             # don’t crash the thread – at worst skip iteration
                 pass
@@ -646,6 +561,25 @@ class MeasurementTab:
         """Toggle angle inclusion"""
         self.include_angle = app_data
         self._show_measurements()
+
+    def _save_csv_from_history(self):
+        """Rewrite the open CSV file from the current measurement history.
+
+        Called whenever the history list changes (add/drop) so the file on disk
+        always reflects the GUI list. No-op when no session CSV is open.
+        """
+        if self._csv_handler is None or not self._csv_handler.is_open():
+            return
+        try:
+            self._csv_handler.rewrite(
+                list(self.meas_history),
+                self.calibration_offset,
+                self.reference,
+                self.include_timestamp,
+                self.include_angle,
+            )
+        except Exception:
+            pass
 
     def add_measurement(
         self, timestamp: str, value: str, numeric_value: float, angle: str = ""
@@ -670,6 +604,9 @@ class MeasurementTab:
         self._update_plot_axes()
         self._show_measurements()
 
+        # Persist full CSV from current history list
+        self._save_csv_from_history()
+
     def drop_last_measurement(self):
         """Remove the most recent measurement from history and plot"""
         if not self.meas_history:
@@ -686,6 +623,9 @@ class MeasurementTab:
         dpg.set_value("plot_data", [list(self.plot_x), list(self.plot_y)])
         self._update_plot_axes()
         self._show_measurements()
+
+        # Persist full CSV from current history list
+        self._save_csv_from_history()
         return True
 
     def _show_measurements(self):

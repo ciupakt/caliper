@@ -49,19 +49,15 @@ class CalibrationTab:
         self.app_log_lines = deque(maxlen=max_lines)
         self.last_click_time = 0.0
         self.double_click_threshold = 0.5
-        self._on_simulate = None
         self._csv_handler = None
 
-    def create(self, parent: int, serial_handler, csv_handler=None, on_simulate=None):
+    def create(self, parent: int, serial_handler, csv_handler=None):
         """Create the calibration tab UI
 
         Args:
             csv_handler: optional CSV handler (used by "Open Port" to close any
                          previously open CSV file when switching ports).
-            on_simulate: optional callback that returns True if simulation
-                         was handled (no serial write needed).
         """
-        self._on_simulate = on_simulate
         self._csv_handler = csv_handler
         with dpg.tab(label="Settings", parent=parent):
             with dpg.group(horizontal=True):
@@ -172,7 +168,6 @@ class CalibrationTab:
                             height=30,
                             user_data=serial_handler,
                         )
-                        dpg.add_checkbox(label="Simulation", tag="simulation_checkbox")
                     dpg.add_spacer(height=5)
                     dpg.add_text("", tag="pairing_status")
 
@@ -418,10 +413,6 @@ class CalibrationTab:
                 dpg.set_value("cal_autofill_next", True)
         except Exception:
             pass
-
-        if self._on_simulate is not None and self._on_simulate():
-            self._set_status("Sent: m (get raw value, simulated)")
-            return
 
         serial_handler = user_data
         if self._safe_write(serial_handler, "m"):

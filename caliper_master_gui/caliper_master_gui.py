@@ -7,7 +7,6 @@ import dearpygui.dearpygui as dpg
 import threading
 import time
 import os
-import random
 from datetime import datetime
 
 # Import application modules
@@ -210,14 +209,6 @@ class CaliperGUI:
                         include_timestamp=self.measurement_tab.include_timestamp,
                         include_angle=self.measurement_tab.include_angle,
                     )
-
-                    if self.csv_handler.is_open():
-                        self.csv_handler.write_measurement(
-                            self.measurement_tab.measurement_count,
-                            measurement_str,
-                            angle=self.last_angle,
-                            timestamp=ts,
-                        )
                 else:
                     self.calibration_tab.add_app_log(f"ERROR: Value out of range (corrected): {corrected}")
                 return
@@ -243,6 +234,11 @@ class CaliperGUI:
                     try:
                         if dpg.does_item_exist("tx_timeout_input"):
                             dpg.set_value("tx_timeout_input", timeout_val)
+                    except Exception:
+                        pass
+                    # Update Interval (ms) min based on 3 * timeout
+                    try:
+                        self.measurement_tab._apply_interval_min()
                     except Exception:
                         pass
                 except Exception:
@@ -317,7 +313,6 @@ class CaliperGUI:
                 val_str = data.split(":", 1)[1].strip()
                 if val_str == "1":
                     if self.measurement_tab.drop_last_measurement():
-                        self.csv_handler.remove_last_row()
                         self.calibration_tab.add_app_log("[RC] DROP_MEAS: last measurement removed")
                         self._sync_gauge()
                     else:
@@ -359,20 +354,6 @@ class CaliperGUI:
         except Exception as e:
             self.calibration_tab.add_app_log(f"ERROR processing data: {str(e)}")
     
-    def _check_simulation(self) -> bool:
-        """Check if simulation mode is active. If so, generate a simulated measurement."""
-        if dpg.does_item_exist("simulation_checkbox") and dpg.get_value("simulation_checkbox"):
-            self._simulate_measurement()
-            return True
-        return False
-
-    def _simulate_measurement(self):
-        """Generate a simulated measurement value (9.000–11.000 mm)."""
-        raw = random.uniform(9.0, 11.0)
-        payload = f"measurement:{raw:.3f}"
-        self.process_measurement_data(payload)
-        self.calibration_tab.add_app_log(f"[SIMULATION] Generated: {raw:.3f} mm")
-
     def serial_write_callback(self, data: str):
         """Callback for written serial data."""
         self.calibration_tab.add_serial_log(f"> {data}")
@@ -448,10 +429,6 @@ class CaliperGUI:
             if self.serial_handler is None or not self.serial_handler.is_open():
                 return
 
-            if self._check_simulation():
-                self.calibration_tab.add_app_log("[HOTKEY] m -> measure (simulated)")
-                return
-
             self.serial_handler.write("m")
             self.calibration_tab.add_app_log("[HOTKEY] m -> measure")
             return
@@ -515,13 +492,13 @@ class CaliperGUI:
             # not the current `tab_bar`), instead we explicitly pass the identifier/tab tag.
             with dpg.tab_bar(tag="main_tab_bar") as tab_bar_id:
                 # Measurements
-                self.measurement_tab.create(tab_bar_id, self.serial_handler, self.csv_handler, on_drop=self._on_drop_measurement, on_simulate=self._check_simulation)
+                self.measurement_tab.create(tab_bar_id, self.serial_handler, self.csv_handler, on_drop=self._on_drop_measurement)
 
                 # Gauge
                 self.gauge_tab.create(tab_bar_id)
 
                 # Calibration
-                self.calibration_tab.create(tab_bar_id, self.serial_handler, self.csv_handler, on_simulate=self._check_simulation)
+                self.calibration_tab.create(tab_bar_id, self.serial_handler, self.csv_handler)
 
         # Bind font
         dpg.bind_font(default_font)
@@ -539,6 +516,20 @@ class CaliperGUI:
             dpg.bind_item_handler_registry("timestamp_cb", "gauge_sync_handler")
         if dpg.does_item_exist("angle_cb"):
             dpg.bind_item_handler_registry("angle_cb", "gauge_sync_handler")
+
+        # Update Interval (ms) min when the Settings timeout field changes
+        with dpg.item_handler_registry(tag="timeout_change_handler"):
+            dpg.add_item_deactivated_handler(
+                callback=lambda: self.measurement_tab._apply_interval_min()
+            )
+        if dpg.does_item_exist("tx_timeout_input"):
+            dpg.bind_item_handler_registry("tx_timeout_input", "timeout_change_handler")
+
+        # Apply the initial interval min now that both tabs exist
+        try:
+            self.measurement_tab._apply_interval_min()
+        except Exception:
+            pass
 
     def _on_viewport_resize(self, sender=None, app_data=None):
         """Recalculate centering of measurement in Gauge tab after viewport resize."""
