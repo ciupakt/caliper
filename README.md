@@ -447,7 +447,7 @@ WiFi AP jest konfigurowane w [`caliper_master/src/config.h`](caliper_master/src/
 1. Utwórz sesję przez podanie nazwy
 2. Kliknij "Wykonaj pomiar" - wykona pomiar z uruchomieniem silnika
 3. Wynik pokaże:
-   - Pomiar skorygowany (raw + offset)
+   - Pomiar skorygowany (raw - offset)
    - Pomiar surowy
    - Offset
    - Napięcie baterii

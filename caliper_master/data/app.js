@@ -8,7 +8,7 @@ function showView(viewId) {
 
 // Calibration functions
 // Assumption: UI calculates correction on its side:
-// corrected = measurementRaw + calibrationOffset
+// corrected = measurementRaw - calibrationOffset
 
 let lastCalibrationRaw = NaN;
 let lastCalibrationOffset = NaN;
@@ -25,7 +25,7 @@ function renderCalibrationMeasurement() {
     const raw = lastCalibrationRaw;
     const offset = lastCalibrationOffset;
     const ref = lastReference;
-    const corrected = (Number.isFinite(raw) && Number.isFinite(offset)) ? (raw < 0 ? (raw + offset) : (raw - offset)) : NaN;
+    const corrected = (Number.isFinite(raw) && Number.isFinite(offset)) ? (raw - offset) : NaN;
     const finalValue = Number.isFinite(corrected) && Number.isFinite(ref) ? corrected + ref : NaN;
 
     const offsetLabel = offsetJustApplied ? 'Current offset (applied):' : 'Current offset:';
@@ -44,7 +44,7 @@ function renderCalibrationMeasurement() {
             '<span class="calibration-line-value">' + formatMm(ref) + ' mm</span>' +
         '</div>' +
         '<div class="cal-line">' +
-            '<span class="calibration-line-label">Corrected (offset+ref):</span>' +
+            '<span class="calibration-line-label">Corrected:</span>' +
             '<span class="calibration-line-value">' + formatMm(finalValue) + ' mm</span>' +
         '</div>';
 }
@@ -256,7 +256,7 @@ function measureSession() {
         const raw = Number(data.measurementRaw);
         const offset = Number(data.calibrationOffset);
         const ref = Number(data.reference);
-        const corrected = (Number.isFinite(raw) && Number.isFinite(offset)) ? (raw < 0 ? (raw + offset) : (raw - offset)) : NaN;
+        const corrected = (Number.isFinite(raw) && Number.isFinite(offset)) ? (raw - offset) : NaN;
         const finalValue = Number.isFinite(corrected) && Number.isFinite(ref) ? corrected + ref : NaN;
 
         document.getElementById('measurement-value').textContent = Number.isFinite(finalValue)

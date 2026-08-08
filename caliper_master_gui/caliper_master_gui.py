@@ -133,7 +133,7 @@ class CaliperGUI:
                     if self.last_measurement_raw is not None and dpg.does_item_exist("cal_corrected_display"):
                         corrected_base = (
                             float(self.last_measurement_raw)
-                            + float(self.current_calibration_offset)
+                            - float(self.current_calibration_offset)
                             + float(self.current_reference)
                         )
                         dpg.set_value("cal_corrected_display", f"Corrected: {corrected_base:.3f} mm")
@@ -169,7 +169,7 @@ class CaliperGUI:
             # --- Measurement (sent via DEBUG_PLOT in OnDataRecv)
             # Firmware Master sends raw measurement as `measurement:`.
             # GUI calculates correction on its side:
-            # corrected = measurementRaw + calibrationOffset + reference
+            # corrected = measurementRaw - calibrationOffset + reference
             # (matches firmware Master, main.cpp:702)
             if data.startswith("measurement:"):
                 val_str = data.split(":", 1)[1].strip()
@@ -192,12 +192,12 @@ class CaliperGUI:
                     if dpg.does_item_exist("cal_offset_display"):
                         dpg.set_value("cal_offset_display", f"Current offset: {self.current_calibration_offset:.3f} mm")
                     if dpg.does_item_exist("cal_corrected_display"):
-                        cal_corrected = raw + float(self.current_calibration_offset) + float(self.current_reference)
+                        cal_corrected = raw - float(self.current_calibration_offset) + float(self.current_reference)
                         dpg.set_value("cal_corrected_display", f"Corrected: {cal_corrected:.3f} mm")
                 except Exception:
                     pass
 
-                corrected = raw + float(self.current_calibration_offset) + float(self.current_reference)
+                corrected = raw - float(self.current_calibration_offset) + float(self.current_reference)
 
                 if -1000.0 <= corrected <= 1000.0:
                     ts = datetime.now().strftime("%Y-%m-%d %H:%M:%S")

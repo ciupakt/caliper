@@ -250,7 +250,7 @@ static bool waitForMeasurementReady(uint32_t timeoutMs)
   DEBUG_I("command:%c", (char)systemStatus.msgSlave.command);
 
   // UI (Web/GUI) calculates correction on its side:
-  // corrected = measurement + calibrationOffset
+  // corrected = measurement - calibrationOffset
   DEBUG_PLOT("sessionName:%s", systemStatus.sessionName);
   DEBUG_PLOT("calibrationOffset:%.3f", (double)systemStatus.calibrationOffset);
   DEBUG_PLOT("reference:%.3f", (double)systemStatus.reference);
@@ -445,7 +445,7 @@ void handleRead()
  * }
  * ```
  *
- * Note: UI should calculate the corrected value: corrected = measurementRaw + calibrationOffset
+ * Note: UI should calculate the corrected value: corrected = measurementRaw - calibrationOffset
  */
 void handleCalibrationMeasure()
 {
@@ -658,7 +658,7 @@ void handleStartSession()
  * - sessionName: name of the active session
  * - measurementRaw: raw measurement value from caliper
  * - calibrationOffset: calibration offset
- * - measurementCorrected: corrected value (raw + offset)
+ * - measurementCorrected: corrected value (raw - offset)
  * - valid: validation flag (always true in this implementation)
  * - batteryVoltage: battery voltage in volts
  * - angleZ: vertical deviation from accelerometer in degrees (0-90°)
@@ -699,7 +699,7 @@ void handleMeasureSession()
     m.measurement,
     systemStatus.calibrationOffset,
     systemStatus.reference,
-    m.measurement + systemStatus.calibrationOffset + systemStatus.reference,
+    m.measurement - systemStatus.calibrationOffset + systemStatus.reference,
     m.batteryVoltage,
     (unsigned)m.angleZ);
 
