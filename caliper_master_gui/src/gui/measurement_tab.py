@@ -41,7 +41,7 @@ class MeasurementTab:
         self._csv_handler = None
         self._on_drop = None
 
-    def create(self, parent: int, serial_handler, csv_handler, on_drop=None, on_calibrate=None):
+    def create(self, parent: int, serial_handler, csv_handler, on_drop=None, on_calibrate=None, on_reference_changed=None):
         """Create the measurement tab UI
 
         Args:
@@ -49,10 +49,13 @@ class MeasurementTab:
                      measurement (e.g. to sync Gauge tab).
             on_calibrate: optional callback invoked by the toolbar
                      "Calibration" button (same as Settings "Get raw value").
+            on_reference_changed: optional callback invoked when the user
+                     edits the Reference field; receives the new float value.
         """
         self._csv_handler = csv_handler
         self._on_drop = on_drop
         self._on_calibrate = on_calibrate
+        self._on_reference_changed = on_reference_changed
         with dpg.tab(label="Measurements", parent=parent):
             # --- Top toolbar: Reference + Calibration (2x font) ---
             with dpg.group(horizontal=True, tag="meas_toolbar_row"):
@@ -69,6 +72,7 @@ class MeasurementTab:
                     width=150,
                     step=0,
                     step_fast=0,
+                    callback=self._on_ref_input_changed,
                 )
                 if dpg.does_item_exist("font_x2"):
                     dpg.bind_item_font(ref_input, "font_x2")
@@ -76,18 +80,35 @@ class MeasurementTab:
                 # Flexible spacer pushing Calibration to the right edge.
                 dpg.add_spacer(width=10, tag="meas_toolbar_spacer")
 
-                cal_lbl = dpg.add_text("Calibration", color=(255, 255, 255, 255))
+                cal_lbl = dpg.add_text(
+                    "Calibration: n/a",
+                    tag="calibration_label",
+                    color=(255, 255, 255, 255),
+                )
                 if dpg.does_item_exist("font_x2"):
                     dpg.bind_item_font(cal_lbl, "font_x2")
 
                 calib_btn = dpg.add_button(
                     label="Calibrate",
+                    tag="calibrate_btn",
                     callback=self._on_calibrate_btn,
                     width=200,
                     height=45,
                 )
                 if dpg.does_item_exist("font_bold"):
                     dpg.bind_item_font(calib_btn, "font_bold")
+
+                # Disabled-state theme: clearly grays out the button when
+                # calibration is unavailable (e.g. right after a new session,
+                # until the Reference field is edited).
+                if not dpg.does_item_exist("calibrate_btn_theme"):
+                    with dpg.theme(tag="calibrate_btn_theme"):
+                        with dpg.theme_component(dpg.mvButton, enabled_state=False):
+                            dpg.add_theme_color(dpg.mvThemeCol_Text, (140, 140, 140, 255))
+                            dpg.add_theme_color(dpg.mvThemeCol_Button, (55, 55, 55, 255))
+                            dpg.add_theme_color(dpg.mvThemeCol_ButtonHovered, (55, 55, 55, 255))
+                            dpg.add_theme_color(dpg.mvThemeCol_ButtonActive, (55, 55, 55, 255))
+                dpg.bind_item_theme(calib_btn, "calibrate_btn_theme")
 
             dpg.add_separator()
             dpg.add_spacer(height=10)
@@ -367,6 +388,22 @@ class MeasurementTab:
             except Exception:
                 pass
 
+    def set_calibrate_enabled(self, enabled: bool) -> None:
+        """Enable or disable the toolbar 'Calibrate' button."""
+        try:
+            if dpg.does_item_exist("calibrate_btn"):
+                dpg.configure_item("calibrate_btn", enabled=enabled)
+        except Exception:
+            pass
+
+    def _on_ref_input_changed(self, sender, app_data, user_data):
+        """Invoke on_reference_changed when the user edits the Reference field."""
+        if callable(self._on_reference_changed):
+            try:
+                self._on_reference_changed(app_data)
+            except Exception:
+                pass
+
     def _cancel_last_measurement(self, sender=None, app_data=None, user_data=None):
         """Cancel last measurement: remove from history/chart, rewrite CSV, refresh Gauge."""
         self.drop_last_measurement()
@@ -446,6 +483,9 @@ class MeasurementTab:
 
         if filename:
             self._set_csv_info_label(os.path.basename(filename))
+
+        # Calibrate button is disabled until the Reference field is edited again.
+        self.set_calibrate_enabled(False)
 
         try:
             dpg.configure_item("new_session_popup", show=False)

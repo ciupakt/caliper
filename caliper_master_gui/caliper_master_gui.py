@@ -33,6 +33,9 @@ class CaliperGUI:
         # GUI state: last known reference (received from firmware via DEBUG_PLOT)
         self.current_reference: float = 0.0
 
+        # GUI state: True when awaiting next measurement frame to apply calibration
+        self.calibrate_pending: bool = False
+
         # GUI state: last raw measurement (to calculate/refresh corrected in Calibration tab)
         self.last_measurement_raw: float | None = None
         
@@ -87,7 +90,13 @@ class CaliperGUI:
         # Update session_name in measurement_tab
         self.measurement_tab.session_name = session_name
         self.measurement_tab.csv_prefix = session_name
-        
+
+        # NOTE: Calibrate is NOT disabled here. This path also runs on startup
+        # when the 'g' refresh echoes a saved (non-empty) sessionName — that is
+        # a state restore, not an explicit new-session action. Calibrate stays
+        # active so it can be used immediately (only the manual "New Session"
+        # button disables it, in MeasurementTab._confirm_new_session).
+
         # Log new session creation
         self.calibration_tab.add_app_log(f"[SESSION] New session created: {session_name} -> {filename}")
 
@@ -197,6 +206,27 @@ class CaliperGUI:
                     pass
 
                 corrected = raw - float(self.current_calibration_offset) + float(self.current_reference)
+
+                # Calibration button flow: show pre-calibration corrected value in the
+                # toolbar label, fill Settings offset field with raw and send it as offset.
+                if self.calibrate_pending:
+                    self.calibrate_pending = False
+                    offset_val = self.calibration_tab._clamp_float(float(raw), -14.999, 14.999)
+                    try:
+                        if dpg.does_item_exist("cal_offset_input"):
+                            dpg.set_value("cal_offset_input", offset_val)
+                        if dpg.does_item_exist("calibration_label"):
+                            dpg.set_value("calibration_label", f"Calibration: {corrected:.3f} mm")
+                    except Exception:
+                        pass
+                    if self.calibration_tab._safe_write(self.serial_handler, f"c {offset_val:.3f}"):
+                        self.calibration_tab.add_app_log(
+                            f"[CALIBRATE] Sent c {offset_val:.3f} (offset=raw); label set to corrected"
+                        )
+                    else:
+                        self.calibration_tab.add_app_log(
+                            "[CALIBRATE] Port not open; offset not sent"
+                        )
 
                 if -1000.0 <= corrected <= 1000.0:
                     ts = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
@@ -406,12 +436,52 @@ class CaliperGUI:
             self.gauge_tab.clear()
 
     def _on_calibrate(self, sender=None, app_data=None, user_data=None):
-        """Toolbar 'Calibration' button: same as Settings 'Get raw value'
-        (send 'm', autofill calibrationOffset on next measurement)."""
+        """Toolbar 'Calibration' button: request a fresh measurement and, on the
+        next `measurement:` frame, display the pre-calibration corrected value
+        in the toolbar label, fill Settings `cal_offset_input` with the raw
+        value and send it as offset (command `c`), identical to "Apply Offset".
+        """
+        # Immediate visible feedback in the Measurements toolbar label.
         try:
-            self.calibration_tab._calibration_measure(None, None, self.serial_handler)
+            port_open = (
+                self.serial_handler is not None and self.serial_handler.is_open()
+            )
+        except Exception:
+            port_open = False
+
+        try:
+            if dpg.does_item_exist("calibration_label"):
+                if not port_open:
+                    dpg.set_value("calibration_label", "Calibration: port closed!")
+                    self.calibration_tab.add_app_log("[CALIBRATE] Port not open")
+                    return
+                dpg.set_value("calibration_label", "Calibration: measuring...")
         except Exception:
             pass
+
+        if self.calibration_tab._safe_write(self.serial_handler, "m"):
+            self.calibrate_pending = True
+            self.calibration_tab._set_status("Sent: m (calibrate)")
+            self.calibration_tab.add_app_log(
+                "[CALIBRATE] Sent m, awaiting measurement to apply offset"
+            )
+
+    def _handle_reference_changed(self, new_ref):
+        """Invoked when the user edits the Reference field in the Measurements toolbar.
+
+        Enables the Calibrate button and synchronizes the new reference to the
+        device (UART `v`), so the calibration targets the edited value and the
+        field is not overwritten by the next `reference:` echo.
+        """
+        self.measurement_tab.set_calibrate_enabled(True)
+        try:
+            ref_val = self.calibration_tab._clamp_float(float(new_ref), -999.999, 999.999)
+        except (TypeError, ValueError):
+            return
+        if self.serial_handler is not None and self.serial_handler.is_open():
+            self.serial_handler.write(f"v {ref_val:.3f}")
+            self.calibration_tab.add_app_log(f"[REFERENCE] Sent v {ref_val:.3f}")
+
 
     def key_press_handler(self, sender, key):
         """Handle keyboard shortcuts"""
@@ -509,6 +579,7 @@ class CaliperGUI:
                     self.csv_handler,
                     on_drop=self._on_drop_measurement,
                     on_calibrate=self._on_calibrate,
+                    on_reference_changed=self._handle_reference_changed,
                 )
 
                 # Gauge
