@@ -7,12 +7,12 @@ import dearpygui.dearpygui as dpg
 from collections import deque
 from datetime import datetime
 import threading
-import time
 import re
-import threading
 import os
 import subprocess
 import sys
+
+_APP_TITLE = "TKK DBMS 1.0"
 
 
 class MeasurementTab:
@@ -36,10 +36,6 @@ class MeasurementTab:
 
         # Session name (used as default value in input field)
         self.session_name: str = ""
-
-# Auto-measure (thread sending command "m" cyclically)
-        self._auto_event = threading.Event()
-        self._auto_thread: threading.Thread | None = None
 
         # References set in create()
         self._csv_handler = None
@@ -70,7 +66,7 @@ class MeasurementTab:
                     min_value=-999.999,
                     max_value=999.999,
                     format="%.3f",
-                    width=260,
+                    width=150,
                     step=0,
                     step_fast=0,
                 )
@@ -106,9 +102,9 @@ class MeasurementTab:
 
                 dpg.add_spacer(width=30)
 
-                # --- Controls (center column, width=288)
+                # --- Session info (center column, width=288)
                 with dpg.group(width=288):
-                    dpg.add_text("Measurement Controls:", color=(100, 200, 255))
+                    dpg.add_text("Session Info:", color=(100, 200, 255))
                     dpg.add_spacer(height=5)
                     new_session_btn = dpg.add_button(
                         label="New Session", width=288, height=30
@@ -154,63 +150,6 @@ class MeasurementTab:
                                 height=30,
                             )
 
-                    dpg.add_spacer(height=5)
-                    measure_btn = dpg.add_button(
-                        label="Measure (m)",
-                        callback=self._trigger,
-                        width=288,
-                        height=55,
-                        user_data=serial_handler,
-                    )
-
-                    if not dpg.does_item_exist("measure_button_theme"):
-                        with dpg.theme(tag="measure_button_theme"):
-                            with dpg.theme_component(dpg.mvButton):
-                                dpg.add_theme_color(
-                                    dpg.mvThemeCol_Text, (0, 200, 0, 255)
-                                )
-
-                    dpg.bind_item_theme(measure_btn, "measure_button_theme")
-
-                    if dpg.does_item_exist("font_bold"):
-                        dpg.bind_item_font(measure_btn, "font_bold")
-
-                    dpg.add_spacer(height=5)
-                    dpg.add_button(
-                        label="Cancel last measurement",
-                        callback=self._cancel_last_measurement,
-                        width=288,
-                        height=30,
-                    )
-
-                    dpg.add_spacer(height=5)
-                    dpg.add_spacer(height=5)
-                    dpg.add_checkbox(
-                        label="Auto-measure",
-                        tag="auto_checkbox",
-                        callback=self._set_auto,
-                        user_data=serial_handler,
-                    )
-                    dpg.add_text("Interval (ms)")
-                    dpg.add_input_text(
-                        tag="interval_ms",
-                        default_value="1000",
-                        decimal=True,
-                        enabled=True,
-                        width=150,
-                        callback=self._on_interval_changed,
-                    )
-
-                dpg.add_spacer(width=30)
-
-                # --- Session info (right column)
-                with dpg.group(width=288):
-                    dpg.add_text("Session Info:", color=(100, 200, 255))
-                    dpg.add_spacer(height=5)
-                    with dpg.group(horizontal=True):
-                        dpg.add_text("Connected to:")
-                        dpg.add_text("(none)", tag="port_status")
-                    dpg.add_spacer(height=5)
                     with dpg.group(horizontal=True):
                         dpg.add_text("Session:")
                         csv_link_btn = dpg.add_button(
@@ -243,6 +182,40 @@ class MeasurementTab:
                         callback=self._angle_checkbox,
                         tag="angle_cb",
                         default_value=True,
+                    )
+
+                dpg.add_spacer(width=30)
+
+                # --- Measurement controls (right column, width=288)
+                with dpg.group(width=288):
+                    dpg.add_text("Measurement Controls:", color=(100, 200, 255))
+                    dpg.add_spacer(height=5)
+                    measure_btn = dpg.add_button(
+                        label="Measure (m)",
+                        callback=self._trigger,
+                        width=288,
+                        height=55,
+                        user_data=serial_handler,
+                    )
+
+                    if not dpg.does_item_exist("measure_button_theme"):
+                        with dpg.theme(tag="measure_button_theme"):
+                            with dpg.theme_component(dpg.mvButton):
+                                dpg.add_theme_color(
+                                    dpg.mvThemeCol_Text, (0, 200, 0, 255)
+                                )
+
+                    dpg.bind_item_theme(measure_btn, "measure_button_theme")
+
+                    if dpg.does_item_exist("font_bold"):
+                        dpg.bind_item_font(measure_btn, "font_bold")
+
+                    dpg.add_spacer(height=5)
+                    dpg.add_button(
+                        label="Cancel last measurement",
+                        callback=self._cancel_last_measurement,
+                        width=288,
+                        height=30,
                     )
 
             dpg.add_spacer(height=10)
@@ -364,6 +337,22 @@ class MeasurementTab:
         except Exception:
             pass
 
+    @staticmethod
+    def set_connection_status(status: str | None) -> None:
+        """Update the connection status shown in the window title bar.
+
+        Args:
+            status: connection text (e.g. "Connected to COM7"), or None when
+                    not connected (falls back to the plain app title).
+        """
+        try:
+            if status:
+                dpg.set_viewport_title(f"{_APP_TITLE} - {status}")
+            else:
+                dpg.set_viewport_title(_APP_TITLE)
+        except Exception:
+            pass
+
     def _trigger(self, sender, app_data, user_data):
         """Send trigger command"""
         serial_handler = user_data
@@ -463,72 +452,6 @@ class MeasurementTab:
         except Exception:
             pass
 
-    def _set_auto(self, sender, app_data, user_data):
-        """Toggle auto trigger"""
-        serial_handler = user_data
-        running = dpg.get_value("auto_checkbox")
-        # Interval is editable only when Auto-measure is OFF.
-        dpg.configure_item("interval_ms", enabled=not running)
-
-        # Start / stop background task
-        if running:
-            # if already running, do nothing
-            if self._auto_thread is not None and self._auto_thread.is_alive():
-                return
-
-            self._auto_event.clear()
-            self._auto_thread = threading.Thread(
-                target=self._auto_loop,
-                args=(serial_handler,),
-                daemon=True,
-                name="auto_measurement",
-            )
-            self._auto_thread.start()
-        else:
-            self._auto_event.set()
-            # short join to not block GUI on long sleep
-            try:
-                if self._auto_thread is not None:
-                    self._auto_thread.join(timeout=0.3)
-            except Exception:
-                pass
-            self._auto_thread = None
-
-    def _clamp_int(self, value: int, min_val: int, max_val: int) -> int:
-        """Clamp integer value to specified range."""
-        return max(min_val, min(value, max_val))
-
-    def _get_min_interval(self) -> int:
-        """Minimum interval (ms) = max(500, 3 * timeout) from Settings tab."""
-        try:
-            if dpg.does_item_exist("tx_timeout_input"):
-                timeout = int(dpg.get_value("tx_timeout_input"))
-            else:
-                timeout = 0
-        except Exception:
-            timeout = 0
-        return max(500, 3 * timeout)
-
-    def _apply_interval_min(self):
-        """Enforce the dynamic min interval on the Interval (ms) input."""
-        min_interval = self._get_min_interval()
-        try:
-            cur = int(dpg.get_value("interval_ms") or "0")
-            if cur < min_interval:
-                dpg.set_value("interval_ms", str(min_interval))
-        except Exception:
-            pass
-
-    def _on_interval_changed(self, sender, app_data, user_data):
-        """Clamp the interval to the dynamic min when edited by the user."""
-        min_interval = self._get_min_interval()
-        try:
-            cur = int(dpg.get_value("interval_ms") or "0")
-            if cur < min_interval:
-                dpg.set_value("interval_ms", str(min_interval))
-        except Exception:
-            pass
-
     @staticmethod
     def _clamp_float(val: float, vmin: float, vmax: float) -> float:
         return max(vmin, min(vmax, float(val)))
@@ -557,34 +480,6 @@ class MeasurementTab:
             return False
 
         return True
-
-    def _auto_loop(self, serial_handler):
-        """Worker loop for auto-measure.
-
-        Note: we avoid UI operations from background thread (DearPyGui does not guarantee thread-safety).
-        """
-        while not self._auto_event.is_set():
-            # read interval "live" so that UI change works without restart
-            try:
-                interval = int(dpg.get_value("interval_ms") or "0")
-            except Exception:
-                interval = 1000
-
-            interval = self._clamp_int(interval, self._get_min_interval(), 600000)
-
-            # send only when port is open; if not, just wait
-            try:
-                if (
-                    serial_handler is not None
-                    and hasattr(serial_handler, "is_open")
-                    and serial_handler.is_open()
-                ):
-                    serial_handler.write("m")
-            except Exception:
-            # don’t crash the thread – at worst skip iteration
-                pass
-
-            time.sleep(interval / 1000.0)
 
     def _timestamp_checkbox(self, sender, app_data, user_data):
         """Toggle timestamp inclusion"""

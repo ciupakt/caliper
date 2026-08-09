@@ -236,11 +236,6 @@ class CaliperGUI:
                             dpg.set_value("tx_timeout_input", timeout_val)
                     except Exception:
                         pass
-                    # Update Interval (ms) min based on 3 * timeout
-                    try:
-                        self.measurement_tab._apply_interval_min()
-                    except Exception:
-                        pass
                 except Exception:
                     self.calibration_tab.add_app_log(f"[CONFIG] timeout (parse err): {val_str}")
                 return
@@ -539,20 +534,6 @@ class CaliperGUI:
         if dpg.does_item_exist("angle_cb"):
             dpg.bind_item_handler_registry("angle_cb", "gauge_sync_handler")
 
-        # Update Interval (ms) min when the Settings timeout field changes
-        with dpg.item_handler_registry(tag="timeout_change_handler"):
-            dpg.add_item_deactivated_handler(
-                callback=lambda: self.measurement_tab._apply_interval_min()
-            )
-        if dpg.does_item_exist("tx_timeout_input"):
-            dpg.bind_item_handler_registry("tx_timeout_input", "timeout_change_handler")
-
-        # Apply the initial interval min now that both tabs exist
-        try:
-            self.measurement_tab._apply_interval_min()
-        except Exception:
-            pass
-
     def _on_viewport_resize(self, sender=None, app_data=None):
         """Recalculate centering of measurement in Gauge tab after viewport resize."""
         try:
@@ -571,9 +552,15 @@ class CaliperGUI:
             payload: tuple (display_text, connected_port|None)
         """
         display, port = payload
+        # Connection status is shown in the window title bar.
+        if port:
+            status = f"Connected to {port}"
+        elif display and display != "(none)":
+            status = display
+        else:
+            status = None
         try:
-            if dpg.does_item_exist("port_status"):
-                dpg.set_value("port_status", display)
+            self.measurement_tab.set_connection_status(status)
         except Exception:
             pass
         try:

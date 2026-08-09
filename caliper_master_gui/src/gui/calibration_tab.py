@@ -358,6 +358,8 @@ class CalibrationTab:
         if hasattr(serial_handler, "stop_auto_connect"):
             serial_handler.stop_auto_connect()
 
+        from src.gui.measurement_tab import MeasurementTab
+
         port = dpg.get_value("port_combo")
 
         # If port is already open and "Open Port" was clicked for the same port,
@@ -373,11 +375,11 @@ class CalibrationTab:
             already_open_same_port = False
 
         if already_open_same_port:
-            dpg.set_value("port_status", port)
+            MeasurementTab.set_connection_status(f"Connected to {port}")
             return
 
         if serial_handler.open_port(port):
-            dpg.set_value("port_status", port)
+            MeasurementTab.set_connection_status(f"Connected to {port}")
 
             # Per requirement: CSV file is NOT created when opening the port.
             # If a previous file was open, we close it so that a new session always
@@ -394,12 +396,11 @@ class CalibrationTab:
 
             # Reset "Session:" label in Measurements tab
             try:
-                from src.gui.measurement_tab import MeasurementTab
                 MeasurementTab._set_csv_info_label(None)
             except Exception:
                 pass
         else:
-            dpg.set_value("port_status", "(none)")
+            MeasurementTab.set_connection_status(None)
 
     def _calibration_measure(self, sender, app_data, user_data):
         """Get current measurement (like in Web).
