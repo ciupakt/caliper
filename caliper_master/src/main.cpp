@@ -565,6 +565,96 @@ void handleReferenceSet()
 }
 
 /**
+ * @brief Handles one-shot calibration (reference + measure + offset=raw)
+ *
+ * Endpoint: POST /api/calibrate
+ *
+ * Atomic calibration equivalent to GUI "Calibrate" button:
+ * sets the reference, performs a measurement, then sets calibrationOffset = raw,
+ * so that corrected = raw - offset + reference = reference.
+ *
+ * @details
+ * URL parameter: reference (float) - reference value in millimeters
+ *
+ * Validation:
+ * - Reference must be a floating-point number
+ * - Range: REFERENCE_MIN (-999.999) to REFERENCE_MAX (999.999)
+ *
+ * Operation flow:
+ * 1. Gets and validates the reference parameter
+ * 2. Sets systemStatus.reference
+ * 3. Sends CMD_MEASURE to Slave (with race condition protection)
+ * 4. On busy -> 503, on timeout -> 504, on error -> 400
+ * 5. On success -> sets calibrationOffset = measurementRaw
+ * 6. Returns JSON with raw, offset, reference and corrected
+ *
+ * JSON response format:
+ * ```json
+ * {
+ *   "success": true,
+ *   "measurementRaw": 12.345,
+ *   "calibrationOffset": 12.345,
+ *   "reference": 10.000,
+ *   "corrected": 10.000
+ * }
+ * ```
+ *
+ * Note: Like the other web calibration endpoints, offset/reference are stored
+ * only in RAM (not in Preferences), so they are lost after device restart.
+ */
+void handleCalibrate()
+{
+  const String refStr = server.arg("reference");
+  float refValue = 0.0f;
+
+  if (!parseFloatStrict(refStr, refValue))
+  {
+    server.send(400, "application/json", "{\"success\":false,\"error\":\"Invalid reference parameter\"}");
+    return;
+  }
+
+  if (refValue < REFERENCE_MIN || refValue > REFERENCE_MAX)
+  {
+    server.send(400, "application/json", "{\"success\":false,\"error\":\"Reference out of range (-999.999..999.999)\"}");
+    return;
+  }
+
+  systemStatus.reference = refValue;
+  DEBUG_I("reference:%.3f", (double)systemStatus.reference);
+
+  if (!executeMeasurementCommand(CMD_MEASURE, "Measure"))
+  {
+    if (!measurementState.isReady())
+    {
+      server.send(504, "application/json", "{\"success\":false,\"error\":\"No response from device\"}");
+    }
+    else
+    {
+      server.send(503, "application/json", "{\"success\":false,\"error\":\"Device busy - operation in progress\"}");
+    }
+    return;
+  }
+
+  const float raw = systemStatus.msgSlave.measurement;
+  const float oldOffset = systemStatus.calibrationOffset;
+  const float ref = systemStatus.reference;
+
+  // Pre-calibration corrected value (uses the PREVIOUS offset), like the GUI
+  // "Calibration:" label shown before sending the new offset (command 'c').
+  const float corrected = raw - oldOffset + ref;
+
+  systemStatus.calibrationOffset = raw;
+  DEBUG_I("calibrationOffset:%.3f", (double)systemStatus.calibrationOffset);
+
+  char response[JSON_RESPONSE_BUFFER_SIZE];
+  snprintf(response, sizeof(response),
+    "{\"success\":true,\"reference\":%.3f,\"corrected\":%.3f}",
+    ref, corrected);
+
+  server.send(200, "application/json", response);
+}
+
+/**
  * @brief Validates session name
  *
  * @param name Session name to validate
@@ -826,6 +916,7 @@ void setup()
   server.on("/api/calibration/measure", HTTP_POST, handleCalibrationMeasure);
   server.on("/api/calibration/offset", HTTP_POST, handleCalibrationSetOffset);
   server.on("/api/reference", HTTP_POST, handleReferenceSet);
+  server.on("/api/calibrate", HTTP_POST, handleCalibrate);
 
   server.on("/start_session", HTTP_POST, handleStartSession);
   server.on("/measure_session", HTTP_POST, handleMeasureSession);

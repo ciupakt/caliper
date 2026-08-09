@@ -439,9 +439,9 @@ WiFi AP jest konfigurowane w [`caliper_master/src/config.h`](caliper_master/src/
 2. **Nowa sesja pomiarowa** - tworzenie nowej sesji
 
 #### Kalibracja
-1. Kliknij "Pobierz bieżący pomiar" - wykona pomiar i pokaże surową wartość
-2. Wprowadź offset w polu input (-999.999 do 999.999)
-3. Kliknij "Zastosuj offset" - zapisze offset w systemie
+1. Wprowadź referencję (Reference, mm: -999.999..999.999) — pole automatycznie synchronizuje referencję z urządzeniem
+2. Kliknij "Calibrate" — wykonuje pomiar i ustawia offset = surowy pomiar (corrected = reference)
+3. Wynik pokazuje: Raw, Offset (applied), Reference, Corrected
 
 #### Sesja pomiarowa
 1. Utwórz sesję przez podanie nazwy
@@ -573,6 +573,21 @@ POST /api/calibration/offset?offset=1.234 HTTP/1.1
   "calibrationOffset": 1.234
 }
 ```
+
+**POST /api/calibrate**
+Jednorazowa kalibracja atomowa (jak przycisk "Calibrate" w GUI): ustawia referencję, wykonuje pomiar i ustawia `calibrationOffset = surowy pomiar`. `corrected` jest liczone ze **starego** offsetu (przed kalibracją) — jak etykieta `Calibration:` w GUI przed wysłaniem komendy `c`.
+```http
+POST /api/calibrate?reference=10.000 HTTP/1.1
+```
+**Odpowiedź (JSON):**
+```json
+{
+  "success": true,
+  "reference": 10.000,
+  "corrected": 9.931
+}
+```
+> Uwaga: jak pozostałe endpointy kalibracji Web, offset/referencja zapisywane są tylko w RAM (nie w NVS) — giną po restarcie Mastera.
 
 #### Endpointy sesji
 

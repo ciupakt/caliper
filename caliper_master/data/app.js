@@ -7,161 +7,64 @@ function showView(viewId) {
 }
 
 // Calibration functions
-// Assumption: UI calculates correction on its side:
-// corrected = measurementRaw - calibrationOffset
+// Single atomic endpoint POST /api/calibrate (set reference + measure + offset=raw).
+// "Calibration:" shows the pre-calibration corrected value (previous offset),
+// exactly like the GUI toolbar label before sending command 'c'.
 
-let lastCalibrationRaw = NaN;
-let lastCalibrationOffset = NaN;
+let lastCalibration = NaN;
 let lastReference = NaN;
-let offsetJustApplied = false;
+let calibrateBusy = false;
 
-function formatMm(value) {
-    return Number.isFinite(value) ? value.toFixed(3) : 'n/a';
-}
+function renderCalibrationResult() {
+    const el = document.getElementById('calibration-measurement');
+    const fmtLine = (v) => Number.isFinite(v) ? v.toFixed(3) + ' mm' : 'n/a';
 
-function renderCalibrationMeasurement() {
-    const elMeas = document.getElementById('calibration-measurement');
-
-    const raw = lastCalibrationRaw;
-    const offset = lastCalibrationOffset;
-    const ref = lastReference;
-    const corrected = (Number.isFinite(raw) && Number.isFinite(offset)) ? (raw - offset) : NaN;
-    const finalValue = Number.isFinite(corrected) && Number.isFinite(ref) ? corrected + ref : NaN;
-
-    const offsetLabel = offsetJustApplied ? 'Current offset (applied):' : 'Current offset:';
-
-    elMeas.innerHTML =
+    el.innerHTML =
         '<div class="cal-line">' +
-            '<span class="calibration-line-label">Raw:</span>' +
-            '<span class="calibration-line-value">' + formatMm(raw) + ' mm</span>' +
-        '</div>' +
-        '<div class="cal-line calibration-line--offset">' +
-            '<span class="calibration-line-label">' + offsetLabel + '</span>' +
-            '<span class="calibration-line-value">' + formatMm(offset) + ' mm</span>' +
+            '<span class="calibration-line-label">Calibration:</span>' +
+            '<span class="calibration-line-value">' + fmtLine(lastCalibration) + '</span>' +
         '</div>' +
         '<div class="cal-line">' +
             '<span class="calibration-line-label">Reference:</span>' +
-            '<span class="calibration-line-value">' + formatMm(ref) + ' mm</span>' +
-        '</div>' +
-        '<div class="cal-line">' +
-            '<span class="calibration-line-label">Corrected:</span>' +
-            '<span class="calibration-line-value">' + formatMm(finalValue) + ' mm</span>' +
+            '<span class="calibration-line-value">' + fmtLine(lastReference) + '</span>' +
         '</div>';
 }
 
-function calibrationMeasure() {
+// Initial render: shows "Calibration: n/a" and "Reference: n/a" (like GUI toolbar).
+renderCalibrationResult();
+
+function calibrate() {
+    if (calibrateBusy) return;
+
     const elStatus = document.getElementById('cal-status');
-
-    elStatus.textContent = 'Fetching current measurement...';
-
-    fetch('/api/calibration/measure', {
-        method: 'POST'
-    })
-    .then(response => {
-        if (!response.ok) {
-            return response.json().then(err => { throw new Error(err.error || 'Server error'); });
-        }
-        return response.json();
-    })
-    .then(data => {
-        if (!data || data.success !== true) {
-            throw new Error((data && data.error) ? data.error : 'Unknown error');
-        }
-
-        const raw = Number(data.measurementRaw);
-        const offset = Number(data.calibrationOffset);
-        const ref = Number(data.reference);
-
-        if (Number.isFinite(raw)) {
-            // calibration mode: prefill offset field with current measurement (without auto-sending)
-            document.getElementById('offset-input').value = raw.toFixed(3);
-        }
-
-        lastCalibrationRaw = raw;
-        lastCalibrationOffset = offset;
-        lastReference = Number.isFinite(ref) ? ref : 0;
-        offsetJustApplied = false;
-
-        renderCalibrationMeasurement();
-
-        elStatus.textContent = 'OK';
-    })
-    .catch(error => {
-        elStatus.textContent = 'Error: ' + error.message;
-    });
-}
-
-function applyCalibrationOffset() {
-    const offset = Number(document.getElementById('offset-input').value);
-    const elStatus = document.getElementById('cal-status');
-
-    if (!Number.isFinite(offset) || offset < -999.999 || offset > 999.999) {
-        alert('Offset must be in range -999.999 .. 999.999');
-        return;
-    }
-
-    elStatus.textContent = 'Setting offset...';
-
-    fetch('/api/calibration/offset', {
-        method: 'POST',
-        headers: {'Content-Type': 'application/x-www-form-urlencoded'},
-        body: 'offset=' + offset
-    })
-    .then(response => {
-        if (!response.ok) {
-            return response.json().then(err => { throw new Error(err.error || 'Server error'); });
-        }
-        return response.json();
-    })
-    .then(data => {
-        if (!data || data.success !== true) {
-            throw new Error((data && data.error) ? data.error : 'Unknown error');
-        }
-        lastCalibrationOffset = Number(data.calibrationOffset);
-        offsetJustApplied = true;
-        renderCalibrationMeasurement();
-
-        elStatus.textContent = 'OK';
-    })
-    .catch(error => {
-        elStatus.textContent = 'Error: ' + error.message;
-    });
-}
-
-function applyReference() {
     const ref = Number(document.getElementById('reference-input').value);
-    const elStatus = document.getElementById('cal-status');
 
     if (!Number.isFinite(ref) || ref < -999.999 || ref > 999.999) {
-        alert('Reference must be in range -999.999 .. 999.999');
+        elStatus.textContent = 'Enter reference (-999.999..999.999) first';
         return;
     }
 
-    elStatus.textContent = 'Setting reference...';
+    calibrateBusy = true;
+    elStatus.textContent = 'Calibrating...';
 
-    fetch('/api/reference', {
+    fetch('/api/calibrate', {
         method: 'POST',
         headers: {'Content-Type': 'application/x-www-form-urlencoded'},
         body: 'reference=' + ref
     })
-    .then(response => {
-        if (!response.ok) {
-            return response.json().then(err => { throw new Error(err.error || 'Server error'); });
-        }
-        return response.json();
-    })
+    .then(response => response.ok ? response.json()
+        : response.json().then(err => { throw new Error(err.error || 'Server error'); }))
     .then(data => {
         if (!data || data.success !== true) {
             throw new Error((data && data.error) ? data.error : 'Unknown error');
         }
+        lastCalibration = Number(data.corrected);
         lastReference = Number(data.reference);
-        renderCalibrationMeasurement();
-
+        renderCalibrationResult();
         elStatus.textContent = 'OK';
     })
-    .catch(error => {
-        elStatus.textContent = 'Error: ' + error.message;
-    });
+    .catch(error => { elStatus.textContent = 'Error: ' + error.message; })
+    .finally(() => { calibrateBusy = false; });
 }
 
 /**
