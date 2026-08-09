@@ -77,14 +77,15 @@ class MeasurementTab:
                 if dpg.does_item_exist("font_x2"):
                     dpg.bind_item_font(ref_input, "font_x2")
 
-                dpg.add_spacer(width=40)
+                # Flexible spacer pushing Calibration to the right edge.
+                dpg.add_spacer(width=10, tag="meas_toolbar_spacer")
 
-                cal_lbl = dpg.add_text("Calibration", color=(0, 200, 0))
-                if dpg.does_item_exist("font_x2_bold"):
-                    dpg.bind_item_font(cal_lbl, "font_x2_bold")
+                cal_lbl = dpg.add_text("Calibration", color=(255, 255, 255, 255))
+                if dpg.does_item_exist("font_x2"):
+                    dpg.bind_item_font(cal_lbl, "font_x2")
 
                 calib_btn = dpg.add_button(
-                    label="Calibration",
+                    label="Calibrate",
                     callback=self._on_calibrate_btn,
                     width=200,
                     height=45,
@@ -183,16 +184,6 @@ class MeasurementTab:
                     )
 
                     dpg.add_spacer(height=5)
-                    dpg.add_checkbox(
-                        label="Include timestamp",
-                        callback=self._timestamp_checkbox,
-                        tag="timestamp_cb",
-                    )
-                    dpg.add_checkbox(
-                        label="Include angle",
-                        callback=self._angle_checkbox,
-                        tag="angle_cb",
-                    )
                     dpg.add_spacer(height=5)
                     dpg.add_checkbox(
                         label="Auto-measure",
@@ -201,10 +192,10 @@ class MeasurementTab:
                         user_data=serial_handler,
                     )
                     dpg.add_text("Interval (ms)")
-                    dpg.add_input_int(
+                    dpg.add_input_text(
                         tag="interval_ms",
-                        default_value=1000,
-                        min_value=500,
+                        default_value="1000",
+                        decimal=True,
                         enabled=True,
                         width=150,
                         callback=self._on_interval_changed,
@@ -214,7 +205,12 @@ class MeasurementTab:
 
                 # --- Session info (right column)
                 with dpg.group(width=288):
-                    dpg.add_spacer(height=24)
+                    dpg.add_text("Session Info:", color=(100, 200, 255))
+                    dpg.add_spacer(height=5)
+                    with dpg.group(horizontal=True):
+                        dpg.add_text("Connected to:")
+                        dpg.add_text("(none)", tag="port_status")
+                    dpg.add_spacer(height=5)
                     with dpg.group(horizontal=True):
                         dpg.add_text("Session:")
                         csv_link_btn = dpg.add_button(
@@ -235,17 +231,21 @@ class MeasurementTab:
                                 dpg.add_theme_color(dpg.mvThemeCol_ButtonActive, (0, 0, 0, 0))
                     dpg.bind_item_theme(csv_link_btn, "csv_link_theme")
 
-            dpg.add_separator()
+                    dpg.add_spacer(height=15)
+                    dpg.add_checkbox(
+                        label="Include timestamp",
+                        callback=self._timestamp_checkbox,
+                        tag="timestamp_cb",
+                        default_value=True,
+                    )
+                    dpg.add_checkbox(
+                        label="Include angle",
+                        callback=self._angle_checkbox,
+                        tag="angle_cb",
+                        default_value=True,
+                    )
+
             dpg.add_spacer(height=10)
-
-            # Status row: Connected to (right-aligned)
-            with dpg.group(horizontal=True, tag="status_row"):
-                # Flexible spacer pushing "Connected to" to the right edge.
-                dpg.add_spacer(width=10, tag="status_row_spacer")
-                dpg.add_text("Connected to:")
-                dpg.add_text("(none)", tag="port_status")
-
-            dpg.add_spacer(height=4)
 
             # Live Plot
             with dpg.plot(label="Measurements", height=-1, width=-1, tag="measurement_plot"):
@@ -285,13 +285,9 @@ class MeasurementTab:
             pass
 
     @staticmethod
-    def update_status_row_layout() -> None:
-        """Adjust flexible spacer so "Connected to:" sticks to the right edge.
-
-        Works correctly after window resize and after
-        change in COM port name length.
-        """
-        MeasurementTab._align_row_spacer("status_row", "status_row_spacer")
+    def align_toolbar() -> None:
+        """Push Calibration label + button to the right edge of the toolbar."""
+        MeasurementTab._align_row_spacer("meas_toolbar_row", "meas_toolbar_spacer")
 
     @staticmethod
     def _align_row_spacer(row_tag: str, spacer_tag: str) -> None:
@@ -302,8 +298,6 @@ class MeasurementTab:
             if not dpg.does_item_exist(row_tag):
                 return
 
-            # Available tab area width – we use viewport width
-            # minus typical main window and tab area padding.
             try:
                 avail_w = int(dpg.get_viewport_client_width()) - 32
             except Exception:
@@ -311,13 +305,11 @@ class MeasurementTab:
             if avail_w <= 0:
                 avail_w = 1100
 
-            # List of row children
             try:
                 children = dpg.get_item_children(row_tag, 1) or []
             except Exception:
                 children = []
 
-            # Find spacer index
             spacer_index = None
             for idx, child in enumerate(children):
                 try:
@@ -329,7 +321,6 @@ class MeasurementTab:
             if spacer_index is None:
                 return
 
-            # Sum of widths of elements on left and right side of spacer
             left_w = 0
             for child in children[:spacer_index]:
                 try:
@@ -345,7 +336,6 @@ class MeasurementTab:
                 except Exception:
                     pass
 
-            # Item spacing in horizontal group (Dear PyGui default style ~8 px).
             ITEM_SPACING = 8
             num_gaps = max(len(children) - 1, 0)
             gaps_w = num_gaps * ITEM_SPACING
@@ -523,10 +513,9 @@ class MeasurementTab:
         """Enforce the dynamic min interval on the Interval (ms) input."""
         min_interval = self._get_min_interval()
         try:
-            dpg.configure_item("interval_ms", min_value=min_interval)
-            cur = int(dpg.get_value("interval_ms"))
+            cur = int(dpg.get_value("interval_ms") or "0")
             if cur < min_interval:
-                dpg.set_value("interval_ms", min_interval)
+                dpg.set_value("interval_ms", str(min_interval))
         except Exception:
             pass
 
@@ -534,9 +523,9 @@ class MeasurementTab:
         """Clamp the interval to the dynamic min when edited by the user."""
         min_interval = self._get_min_interval()
         try:
-            cur = int(dpg.get_value("interval_ms"))
+            cur = int(dpg.get_value("interval_ms") or "0")
             if cur < min_interval:
-                dpg.set_value("interval_ms", min_interval)
+                dpg.set_value("interval_ms", str(min_interval))
         except Exception:
             pass
 
@@ -577,7 +566,7 @@ class MeasurementTab:
         while not self._auto_event.is_set():
             # read interval "live" so that UI change works without restart
             try:
-                interval = int(dpg.get_value("interval_ms"))
+                interval = int(dpg.get_value("interval_ms") or "0")
             except Exception:
                 interval = 1000
 

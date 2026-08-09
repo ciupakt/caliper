@@ -559,9 +559,8 @@ class CaliperGUI:
             self.gauge_tab.recenter()
         except Exception:
             pass
-        # Align status row in Measurements tab (Session: ↔ Connected to:)
         try:
-            self.measurement_tab.update_status_row_layout()
+            self.measurement_tab.align_toolbar()
         except Exception:
             pass
     
@@ -632,9 +631,8 @@ class CaliperGUI:
             except Exception:
                 pass
             try:
-                # Live update of status row alignment (Session ↔ Connected to)
-                if dpg.does_item_exist("status_row") and dpg.is_item_visible("status_row"):
-                    self.measurement_tab.update_status_row_layout()
+                if dpg.does_item_exist("meas_toolbar_row") and dpg.is_item_visible("meas_toolbar_row"):
+                    self.measurement_tab.align_toolbar()
             except Exception:
                 pass
             dpg.render_dearpygui_frame()
