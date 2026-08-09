@@ -6,6 +6,7 @@
 
 #include <MacroDebugger.h>
 #include <shared_common.h>
+#include <shared_config.h>
 #include "preferences_manager.h"
 #include "measurement_state.h"
 
@@ -118,7 +119,7 @@ static void printSerialHelp()
           "t            - Send CMD_MOTORTEST (T) with current settings\n"
           "f            - Send CMD_OTA (O) – enter OTA mode on Slave (flash)\n"
           "p            - Pairing mode (30s broadcast CMD_PAIR)\n"
-          "c <±14.999>  - Set calibrationOffset (mm) on Master (without triggering measurement)\n"
+          "c <±999.999> - Set calibrationOffset (mm) on Master (without triggering measurement)\n"
           "v <±999.999>  - Set reference (mm) on Master (reference/nominal value)\n"
           "n <name>     - Set session name (max 31 characters, allowed: a-z, A-Z, 0-9, space, _, -)\n"
           "g            - Refresh settings (send all current values)\n"
@@ -259,9 +260,9 @@ bool SerialCli_tick(void *arg)
         break;
       }
 
-      if (fval < -14.999f || fval > 14.999f)
+      if (fval < CALIBRATION_OFFSET_MIN || fval > CALIBRATION_OFFSET_MAX)
       {
-        DEBUG_W("Serial: calibrationOffset out of range: %.3f (-14.999..14.999)", (double)fval);
+        DEBUG_W("Serial: calibrationOffset out of range: %.3f (-999.999..999.999)", (double)fval);
         break;
       }
 

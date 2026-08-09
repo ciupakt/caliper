@@ -211,7 +211,7 @@ class CaliperGUI:
                 # toolbar label, fill Settings offset field with raw and send it as offset.
                 if self.calibrate_pending:
                     self.calibrate_pending = False
-                    offset_val = self.calibration_tab._clamp_float(float(raw), -14.999, 14.999)
+                    offset_val = self.calibration_tab._clamp_float(float(raw), -999.999, 999.999)
                     try:
                         if dpg.does_item_exist("cal_offset_input"):
                             dpg.set_value("cal_offset_input", offset_val)

@@ -95,8 +95,8 @@ function applyCalibrationOffset() {
     const offset = Number(document.getElementById('offset-input').value);
     const elStatus = document.getElementById('cal-status');
 
-    if (!Number.isFinite(offset) || offset < -14.999 || offset > 14.999) {
-        alert('Offset must be in range -14.999 .. 14.999');
+    if (!Number.isFinite(offset) || offset < -999.999 || offset > 999.999) {
+        alert('Offset must be in range -999.999 .. 999.999');
         return;
     }
 

@@ -420,7 +420,7 @@ class CalibrationTab:
             self._set_status("Sent: m (get raw value)")
 
     def _apply_calibration_offset(self, sender, app_data, user_data):
-        """Apply offset (like in Web) – UART: c <±14.999>."""
+        """Apply offset (like in Web) – UART: c <±999.999>."""
         serial_handler = user_data
         try:
             val = float(dpg.get_value("cal_offset_input"))
@@ -428,7 +428,7 @@ class CalibrationTab:
             self._set_status("ERROR: Invalid calibrationOffset")
             return
 
-        val = self._clamp_float(val, -14.999, 14.999)
+        val = self._clamp_float(val, -999.999, 999.999)
         dpg.set_value("cal_offset_input", val)
 
         if self._safe_write(serial_handler, f"c {val:.3f}"):

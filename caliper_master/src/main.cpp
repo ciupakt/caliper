@@ -488,7 +488,7 @@ void handleCalibrationMeasure()
  *
  * Validation:
  * - Offset must be a floating-point number
- * - Range: CALIBRATION_OFFSET_MIN (-14.999) to CALIBRATION_OFFSET_MAX (14.999)
+ * - Range: CALIBRATION_OFFSET_MIN (-999.999) to CALIBRATION_OFFSET_MAX (999.999)
  *
  * Operation flow:
  * 1. Gets the offset parameter from the request
@@ -521,7 +521,7 @@ void handleCalibrationSetOffset()
 
   if (offsetValue < CALIBRATION_OFFSET_MIN || offsetValue > CALIBRATION_OFFSET_MAX)
   {
-    server.send(400, "application/json", "{\"success\":false,\"error\":\"Offset out of range (-14.999..14.999)\"}");
+    server.send(400, "application/json", "{\"success\":false,\"error\":\"Offset out of range (-999.999..999.999)\"}");
     return;
   }
 

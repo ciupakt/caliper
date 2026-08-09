@@ -440,7 +440,7 @@ WiFi AP jest konfigurowane w [`caliper_master/src/config.h`](caliper_master/src/
 
 #### Kalibracja
 1. Kliknij "Pobierz bieżący pomiar" - wykona pomiar i pokaże surową wartość
-2. Wprowadź offset w polu input (-14.999 do 14.999)
+2. Wprowadź offset w polu input (-999.999 do 999.999)
 3. Kliknij "Zastosuj offset" - zapisze offset w systemie
 
 #### Sesja pomiarowa
@@ -482,7 +482,7 @@ Podłącz Master przez USB Serial i użyj terminala (np. PuTTY, Arduino Serial M
 | `m` | Wykonaj pomiar |
 | `u` | Zaktualizuj status |
 | `t` | Test silnika |
-| `o <wartość>` | Ustaw offset kalibracji (-14.999..14.999) |
+| `o <wartość>` | Ustaw offset kalibracji (-999.999..999.999) |
 | `q <wartość>` | Ustaw timeout (ms, 0..600000) |
 | `s <wartość>` | Ustaw prędkość silnika (0..255) |
 | `r <wartość>` | Ustaw moment silnika (0..255) |
@@ -783,7 +783,7 @@ prefsManager.resetToDefaults();
 - `motorSpeed`: 0-255 (domyślnie: 100)
 - `motorTorque`: 0-255 (domyślnie: 100)
 - `timeout`: 0-600000 ms (domyślnie: 1000)
-- `calibrationOffset`: -14.999..14.999 mm (domyślnie: 0.0)
+- `calibrationOffset`: -999.999..999.999 mm (domyślnie: 0.0)
 
 ### Konfiguracja Master ([`caliper_master/src/config.h`](caliper_master/src/config.h:1))
 

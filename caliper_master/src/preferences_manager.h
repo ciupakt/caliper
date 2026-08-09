@@ -93,7 +93,7 @@ public:
    * - ERR_PREFS_SAVE_FAILED: Save operation failed
    * - ERR_VALIDATION_OUT_OF_RANGE: Value out of valid range
    *
-   * @param value Calibration offset in mm (-14.999..14.999)
+   * @param value Calibration offset in mm (-999.999..999.999)
    */
   void saveCalibrationOffset(float value);
 
@@ -154,8 +154,8 @@ private:
   static constexpr uint8_t MAX_MOTOR_TORQUE = 255;
   static constexpr uint32_t MIN_TIMEOUT_MS = 0;
   static constexpr uint32_t MAX_TIMEOUT_MS = 600000;
-  static constexpr float MIN_CALIBRATION_OFFSET = -14.999f;
-  static constexpr float MAX_CALIBRATION_OFFSET = 14.999f;
+  static constexpr float MIN_CALIBRATION_OFFSET = -999.999f;
+  static constexpr float MAX_CALIBRATION_OFFSET = 999.999f;
   static constexpr float MIN_REFERENCE = -999.999f;
   static constexpr float MAX_REFERENCE = 999.999f;
 
