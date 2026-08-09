@@ -45,16 +45,56 @@ class MeasurementTab:
         self._csv_handler = None
         self._on_drop = None
 
-    def create(self, parent: int, serial_handler, csv_handler, on_drop=None):
+    def create(self, parent: int, serial_handler, csv_handler, on_drop=None, on_calibrate=None):
         """Create the measurement tab UI
 
         Args:
             on_drop: optional callback invoked after canceling last
                      measurement (e.g. to sync Gauge tab).
+            on_calibrate: optional callback invoked by the toolbar
+                     "Calibration" button (same as Settings "Get raw value").
         """
         self._csv_handler = csv_handler
         self._on_drop = on_drop
+        self._on_calibrate = on_calibrate
         with dpg.tab(label="Measurements", parent=parent):
+            # --- Top toolbar: Reference + Calibration (2x font) ---
+            with dpg.group(horizontal=True, tag="meas_toolbar_row"):
+                ref_lbl = dpg.add_text("Reference (mm)")
+                if dpg.does_item_exist("font_x2"):
+                    dpg.bind_item_font(ref_lbl, "font_x2")
+
+                ref_input = dpg.add_input_float(
+                    tag="ref_input_meas",
+                    default_value=0.0,
+                    min_value=-999.999,
+                    max_value=999.999,
+                    format="%.3f",
+                    width=260,
+                    step=0,
+                    step_fast=0,
+                )
+                if dpg.does_item_exist("font_x2"):
+                    dpg.bind_item_font(ref_input, "font_x2")
+
+                dpg.add_spacer(width=40)
+
+                cal_lbl = dpg.add_text("Calibration", color=(0, 200, 0))
+                if dpg.does_item_exist("font_x2_bold"):
+                    dpg.bind_item_font(cal_lbl, "font_x2_bold")
+
+                calib_btn = dpg.add_button(
+                    label="Calibration",
+                    callback=self._on_calibrate_btn,
+                    width=200,
+                    height=45,
+                )
+                if dpg.does_item_exist("font_bold"):
+                    dpg.bind_item_font(calib_btn, "font_bold")
+
+            dpg.add_separator()
+            dpg.add_spacer(height=10)
+
             with dpg.group(horizontal=True):
                 # --- Measurement History (left column)
                 with dpg.group():
@@ -68,6 +108,51 @@ class MeasurementTab:
                 # --- Controls (center column, width=288)
                 with dpg.group(width=288):
                     dpg.add_text("Measurement Controls:", color=(100, 200, 255))
+                    dpg.add_spacer(height=5)
+                    new_session_btn = dpg.add_button(
+                        label="New Session", width=288, height=30
+                    )
+                    dpg.add_spacer(height=5)
+
+                    with dpg.popup(
+                        new_session_btn,
+                        mousebutton=dpg.mvMouseButton_Left,
+                        modal=True,
+                        tag="new_session_popup",
+                    ):
+                        dpg.add_text(
+                            "Enter session name (max 31 chars, allowed: a-z, A-Z, 0-9, space, _, -)"
+                        )
+                        dpg.add_text(
+                            "File will be created: <session_name>_YYYYMMDD_HHMMSS.csv"
+                        )
+                        dpg.add_spacer(height=5)
+                        dpg.add_input_text(
+                            tag="session_name_input",
+                            default_value=self.session_name,
+                            width=360,
+                            on_enter=True,
+                            callback=self._confirm_new_session,
+                            user_data=(serial_handler, csv_handler),
+                        )
+                        dpg.add_spacer(height=8)
+                        with dpg.group(horizontal=True):
+                            dpg.add_button(
+                                label="Create",
+                                callback=self._confirm_new_session,
+                                width=120,
+                                height=30,
+                                user_data=(serial_handler, csv_handler),
+                            )
+                            dpg.add_button(
+                                label="Cancel",
+                                callback=lambda: dpg.configure_item(
+                                    "new_session_popup", show=False
+                                ),
+                                width=120,
+                                height=30,
+                            )
+
                     dpg.add_spacer(height=5)
                     measure_btn = dpg.add_button(
                         label="Measure (m)",
@@ -127,87 +212,34 @@ class MeasurementTab:
 
                 dpg.add_spacer(width=30)
 
-                # --- Session / Reference (right column, width=288)
+                # --- Session info (right column)
                 with dpg.group(width=288):
-                    dpg.add_text("Session:", color=(100, 200, 255))
-                    dpg.add_spacer(height=5)
-                    new_session_btn = dpg.add_button(
-                        label="New Session", width=288, height=30
-                    )
-                    dpg.add_spacer(height=5)
-                    dpg.add_text("Reference (mm)")
-                    dpg.add_input_float(
-                        tag="ref_input_meas",
-                        default_value=0.0,
-                        min_value=-999.999,
-                        max_value=999.999,
-                        format="%.3f",
-                        width=288,
-                    )
-
-                    with dpg.popup(
-                        new_session_btn,
-                        mousebutton=dpg.mvMouseButton_Left,
-                        modal=True,
-                        tag="new_session_popup",
-                    ):
-                        dpg.add_text(
-                            "Enter session name (max 31 chars, allowed: a-z, A-Z, 0-9, space, _, -)"
+                    dpg.add_spacer(height=24)
+                    with dpg.group(horizontal=True):
+                        dpg.add_text("Session:")
+                        csv_link_btn = dpg.add_button(
+                            label="(none)",
+                            tag="csv_info",
+                            callback=self._open_csv_directory,
+                            user_data=csv_handler,
+                            small=True,
                         )
-                        dpg.add_text(
-                            "File will be created: <session_name>_YYYYMMDD_HHMMSS.csv"
-                        )
-                        dpg.add_spacer(height=5)
-                        dpg.add_input_text(
-                            tag="session_name_input",
-                            default_value=self.session_name,
-                            width=360,
-                            on_enter=True,
-                            callback=self._confirm_new_session,
-                            user_data=(serial_handler, csv_handler),
-                        )
-                        dpg.add_spacer(height=8)
-                        with dpg.group(horizontal=True):
-                            dpg.add_button(
-                                label="Create",
-                                callback=self._confirm_new_session,
-                                width=120,
-                                height=30,
-                                user_data=(serial_handler, csv_handler),
-                            )
-                            dpg.add_button(
-                                label="Cancel",
-                                callback=lambda: dpg.configure_item(
-                                    "new_session_popup", show=False
-                                ),
-                                width=120,
-                                height=30,
-                            )
+                    with dpg.tooltip("csv_info"):
+                        dpg.add_text("(none)", tag="csv_info_tooltip")
+                    if not dpg.does_item_exist("csv_link_theme"):
+                        with dpg.theme(tag="csv_link_theme"):
+                            with dpg.theme_component(dpg.mvButton):
+                                dpg.add_theme_color(dpg.mvThemeCol_Text, (100, 180, 255, 255))
+                                dpg.add_theme_color(dpg.mvThemeCol_Button, (0, 0, 0, 0))
+                                dpg.add_theme_color(dpg.mvThemeCol_ButtonHovered, (0, 0, 0, 0))
+                                dpg.add_theme_color(dpg.mvThemeCol_ButtonActive, (0, 0, 0, 0))
+                    dpg.bind_item_theme(csv_link_btn, "csv_link_theme")
 
             dpg.add_separator()
             dpg.add_spacer(height=10)
 
-            # Status row: Session (left) + Connected to (right)
+            # Status row: Connected to (right-aligned)
             with dpg.group(horizontal=True, tag="status_row"):
-                dpg.add_text("Session:")
-                csv_link_btn = dpg.add_button(
-                    label="(none)",
-                    tag="csv_info",
-                    callback=self._open_csv_directory,
-                    user_data=csv_handler,
-                    small=True,
-                )
-                with dpg.tooltip("csv_info"):
-                    dpg.add_text("(none)", tag="csv_info_tooltip")
-                if not dpg.does_item_exist("csv_link_theme"):
-                    with dpg.theme(tag="csv_link_theme"):
-                        with dpg.theme_component(dpg.mvButton):
-                            dpg.add_theme_color(dpg.mvThemeCol_Text, (100, 180, 255, 255))
-                            dpg.add_theme_color(dpg.mvThemeCol_Button, (0, 0, 0, 0))
-                            dpg.add_theme_color(dpg.mvThemeCol_ButtonHovered, (0, 0, 0, 0))
-                            dpg.add_theme_color(dpg.mvThemeCol_ButtonActive, (0, 0, 0, 0))
-                dpg.bind_item_theme(csv_link_btn, "csv_link_theme")
-
                 # Flexible spacer pushing "Connected to" to the right edge.
                 dpg.add_spacer(width=10, tag="status_row_spacer")
                 dpg.add_text("Connected to:")
@@ -254,16 +286,20 @@ class MeasurementTab:
 
     @staticmethod
     def update_status_row_layout() -> None:
-        """Adjust spacer width in status row so "Connected to:"
-        is aligned to the right edge of the window.
+        """Adjust flexible spacer so "Connected to:" sticks to the right edge.
 
         Works correctly after window resize and after
-        change in session name / COM port name length.
+        change in COM port name length.
         """
+        MeasurementTab._align_row_spacer("status_row", "status_row_spacer")
+
+    @staticmethod
+    def _align_row_spacer(row_tag: str, spacer_tag: str) -> None:
+        """Push elements after `spacer_tag` to the right edge of `row_tag`."""
         try:
-            if not dpg.does_item_exist("status_row_spacer"):
+            if not dpg.does_item_exist(spacer_tag):
                 return
-            if not dpg.does_item_exist("status_row"):
+            if not dpg.does_item_exist(row_tag):
                 return
 
             # Available tab area width – we use viewport width
@@ -275,9 +311,9 @@ class MeasurementTab:
             if avail_w <= 0:
                 avail_w = 1100
 
-            # List of status row children
+            # List of row children
             try:
-                children = dpg.get_item_children("status_row", 1) or []
+                children = dpg.get_item_children(row_tag, 1) or []
             except Exception:
                 children = []
 
@@ -285,7 +321,7 @@ class MeasurementTab:
             spacer_index = None
             for idx, child in enumerate(children):
                 try:
-                    if dpg.get_item_alias(child) == "status_row_spacer":
+                    if dpg.get_item_alias(child) == spacer_tag:
                         spacer_index = idx
                         break
                 except Exception:
@@ -318,7 +354,7 @@ class MeasurementTab:
             if spacer_w < 10:
                 spacer_w = 10
 
-            dpg.configure_item("status_row_spacer", width=spacer_w)
+            dpg.configure_item(spacer_tag, width=spacer_w)
         except Exception:
             pass
 
@@ -342,6 +378,15 @@ class MeasurementTab:
         """Send trigger command"""
         serial_handler = user_data
         serial_handler.write("m")
+
+    def _on_calibrate_btn(self, sender, app_data, user_data):
+        """Toolbar 'Calibration' button: invoke the on_calibrate callback
+        (same action as Settings 'Get raw value')."""
+        if callable(self._on_calibrate):
+            try:
+                self._on_calibrate()
+            except Exception:
+                pass
 
     def _cancel_last_measurement(self, sender=None, app_data=None, user_data=None):
         """Cancel last measurement: remove from history/chart, rewrite CSV, refresh Gauge."""
@@ -632,12 +677,6 @@ class MeasurementTab:
         """Display measurements in the history view"""
         if dpg.does_item_exist("meas_container"):
             dpg.delete_item("meas_container", children_only=True)
-
-        dpg.add_text(
-            f"Offset: {self.calibration_offset:.3f}   Reference: {self.reference:.3f}",
-            color=(200, 200, 100),
-            parent="meas_container",
-        )
 
         columns = ["Index", "Value"]
         if self.include_angle:

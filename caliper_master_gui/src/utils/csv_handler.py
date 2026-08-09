@@ -44,8 +44,6 @@ class CSVHandler:
             self._include_timestamp = include_timestamp
             self._include_angle = include_angle
 
-            self.writer.writerow([f"Offset: {calibration_offset:.3f}  Reference: {reference:.3f}"])
-
             columns = ["Index", "Value"]
             if self._include_angle:
                 columns.append("Angle")
@@ -82,7 +80,6 @@ class CSVHandler:
             try:
                 with open(saved_filename, "w", newline="") as f:
                     writer = csv.writer(f)
-                    writer.writerow([f"Offset: {calibration_offset:.3f}  Reference: {reference:.3f}"])
 
                     columns = ["Index", "Value"]
                     if include_angle:

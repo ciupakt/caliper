@@ -410,6 +410,14 @@ class CaliperGUI:
         else:
             self.gauge_tab.clear()
 
+    def _on_calibrate(self, sender=None, app_data=None, user_data=None):
+        """Toolbar 'Calibration' button: same as Settings 'Get raw value'
+        (send 'm', autofill calibrationOffset on next measurement)."""
+        try:
+            self.calibration_tab._calibration_measure(None, None, self.serial_handler)
+        except Exception:
+            pass
+
     def key_press_handler(self, sender, key):
         """Handle keyboard shortcuts"""
         # Hotkey: 'm' = execute measurement (like clicking "Measure (m)")
@@ -469,6 +477,14 @@ class CaliperGUI:
             with dpg.font(font_path, 16, tag="font_log"):
                 pass
 
+            # 2x font (twice the default 22) for Measurements toolbar controls
+            with dpg.font(font_path, 44, tag="font_x2"):
+                pass
+
+            # 2x bold font for the "Calibration" label
+            with dpg.font(font_bold_path, 44, tag="font_x2_bold"):
+                pass
+
             # Gauge meta font (smaller – for timestamp/angle in Gauge tab)
             with dpg.font(font_path, 20, tag="font_gauge_meta"):
                 pass
@@ -492,7 +508,13 @@ class CaliperGUI:
             # not the current `tab_bar`), instead we explicitly pass the identifier/tab tag.
             with dpg.tab_bar(tag="main_tab_bar") as tab_bar_id:
                 # Measurements
-                self.measurement_tab.create(tab_bar_id, self.serial_handler, self.csv_handler, on_drop=self._on_drop_measurement)
+                self.measurement_tab.create(
+                    tab_bar_id,
+                    self.serial_handler,
+                    self.csv_handler,
+                    on_drop=self._on_drop_measurement,
+                    on_calibrate=self._on_calibrate,
+                )
 
                 # Gauge
                 self.gauge_tab.create(tab_bar_id)
