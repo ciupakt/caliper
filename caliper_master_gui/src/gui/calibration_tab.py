@@ -59,7 +59,7 @@ class CalibrationTab:
                          previously open CSV file when switching ports).
         """
         self._csv_handler = csv_handler
-        with dpg.tab(label="Settings", parent=parent):
+        with dpg.tab(label="Settings", parent=parent, tag="settings_tab", show=False):
             with dpg.group(horizontal=True):
                 # --- COM Port Configuration
                 with dpg.group(width=288):

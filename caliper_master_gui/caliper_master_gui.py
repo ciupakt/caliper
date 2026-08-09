@@ -484,7 +484,22 @@ class CaliperGUI:
 
 
     def key_press_handler(self, sender, key):
-        """Handle keyboard shortcuts"""
+        """Handle keyboard shortcuts (key press events)"""
+        # Hotkey: F1 = toggle Settings tab visibility
+        if key == dpg.mvKey_F1:
+            try:
+                if dpg.does_item_exist("settings_tab"):
+                    current = dpg.get_item_configuration("settings_tab").get("show", True)
+                    dpg.configure_item("settings_tab", show=not current)
+                    self.calibration_tab.add_app_log(
+                        f"[HOTKEY] F1 -> Settings tab {'shown' if not current else 'hidden'}"
+                    )
+                return
+            except Exception:
+                pass
+
+    def key_release_handler(self, sender, key):
+        """Handle keyboard shortcuts (key release events)"""
         # Hotkey: 'm' = execute measurement (like clicking "Measure (m)")
         if key == dpg.mvKey_M:
             # Don't intercept if user is typing in a text field (e.g. session name)
@@ -560,7 +575,8 @@ class CaliperGUI:
         
         # Handler registry
         with dpg.handler_registry():
-            dpg.add_key_release_handler(callback=self.key_press_handler)
+            dpg.add_key_press_handler(callback=self.key_press_handler)
+            dpg.add_key_release_handler(callback=self.key_release_handler)
         
         # Create viewport
         # Larger height so that chart and history are visible without clipping on startup.

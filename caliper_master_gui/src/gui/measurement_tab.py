@@ -25,8 +25,10 @@ class MeasurementTab:
         self.plot_x = deque(maxlen=max_plot_points)
         self.plot_y = deque(maxlen=max_plot_points)
         self.measurement_count = 0
-        self.include_timestamp = False
-        self.include_angle = False
+        # Must match the default_value=True of the checkboxes below;
+        # _show_measurements() reads these flags, not the checkbox widgets.
+        self.include_timestamp = True
+        self.include_angle = True
 
         self.calibration_offset: float = 0.0
         self.reference: float = 0.0
