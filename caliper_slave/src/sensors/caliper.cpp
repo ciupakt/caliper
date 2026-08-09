@@ -256,3 +256,52 @@ float CaliperInterface::performMeasurement()
         return INVALID_MEASUREMENT_VALUE;
     }
 }
+
+/**
+ * @brief Perform a reliable measurement with two consecutive identical readings
+ *
+ * Calls performMeasurement() repeatedly and accepts the result only when two
+ * consecutive readings return the same value, to filter out sporadic bad
+ * readings from the caliper.
+ *
+ * @details
+ * Loop behavior:
+ * - Each iteration calls performMeasurement().
+ * - A reading equal to INVALID_MEASUREMENT_VALUE is treated as a failed
+ *   attempt and does not count as a candidate; the loop continues.
+ * - A valid reading is compared with the last valid reading. If they match,
+ *   the value is returned as the reliable result.
+ * - The whole procedure is bounded by RELIABLE_MEASUREMENT_TIMEOUT_MS (1s).
+ * - On timeout (no two consecutive identical readings), returns
+ *   INVALID_MEASUREMENT_VALUE and records ERR_CALIPER_INVALID_DATA.
+ *
+ * @return Measurement value in millimeters or INVALID_MEASUREMENT_VALUE on error
+ */
+float CaliperInterface::performReliableMeasurement()
+{
+    unsigned long startTime = millis();
+    float lastValid = INVALID_MEASUREMENT_VALUE;
+
+    while (millis() - startTime < RELIABLE_MEASUREMENT_TIMEOUT_MS)
+    {
+        float current = performMeasurement();
+
+        if (current == INVALID_MEASUREMENT_VALUE)
+        {
+            continue;
+        }
+
+        if (lastValid != INVALID_MEASUREMENT_VALUE && current == lastValid)
+        {
+            DEBUG_I("Reliable measurement: %.3f mm", current);
+            return current;
+        }
+
+        lastValid = current;
+    }
+
+    RECORD_ERROR(ERR_CALIPER_INVALID_DATA,
+        "Reliable measurement failed: no two consecutive identical readings within %u ms",
+        RELIABLE_MEASUREMENT_TIMEOUT_MS);
+    return INVALID_MEASUREMENT_VALUE;
+}

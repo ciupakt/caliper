@@ -219,7 +219,7 @@ void OnDataSent(const wifi_tx_info_t *info, esp_now_send_status_t status)
 bool updateMeasureData(void *arg)
 {
   accelerometer.update();
-  msgSlave.measurement = caliper.performMeasurement();
+  msgSlave.measurement = caliper.performReliableMeasurement();
   
   // Get Z angle - vertical deviation (0-90 degrees)
   float angleZ = accelerometer.getAngleZ();

@@ -50,6 +50,17 @@ public:
     float performMeasurement();
     
     /**
+     * @brief Perform a reliable measurement with two consecutive identical readings
+     * @return Measured value in millimeters, or INVALID_MEASUREMENT_VALUE on error
+     * @details Calls performMeasurement() repeatedly and accepts the result only
+     *          when two consecutive readings return the same value. Timeout:
+     *          RELIABLE_MEASUREMENT_TIMEOUT_MS (1s). If no two identical readings
+     *          are obtained within the timeout, returns INVALID_MEASUREMENT_VALUE
+     *          and records ERR_CALIPER_INVALID_DATA.
+     */
+    float performReliableMeasurement();
+    
+    /**
      * @brief Check if measurement data is ready
      * @return true if data is ready to be read
      */

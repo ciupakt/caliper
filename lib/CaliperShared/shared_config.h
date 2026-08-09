@@ -26,6 +26,7 @@
 // Timing Configuration
 // ============================================================================
 #define MEASUREMENT_TIMEOUT_MS 200
+#define RELIABLE_MEASUREMENT_TIMEOUT_MS 1000
 #define BATTERY_UPDATE_INTERVAL_MS 1000
 #define MOTOR_COMMAND_TIMEOUT_MS 50
 
