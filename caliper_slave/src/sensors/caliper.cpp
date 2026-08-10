@@ -224,12 +224,12 @@ void CaliperInterface::begin()
 float CaliperInterface::performMeasurement()
 {
     DEBUG_I("Triggering measurement TRIG...");
-    digitalWrite(TRIG_PIN, LOW);
 
     bitCount = 0;
     dataReady = false;
 
     attachInterrupt(digitalPinToInterrupt(CLOCK_PIN), clockISR, FALLING);
+    digitalWrite(TRIG_PIN, LOW);
 
     unsigned long startTime = millis();
     while (!dataReady && (millis() - startTime < MEASUREMENT_TIMEOUT_MS))
