@@ -17,6 +17,7 @@
 volatile uint8_t CaliperInterface::bitBuffer[CALIPER_BIT_BUFFER_SIZE] = {0};
 volatile int CaliperInterface::bitCount = 0;
 volatile bool CaliperInterface::dataReady = false;
+volatile uint8_t bit;
 
 /**
  * @brief Interrupt Service Routine (ISR) for caliper clock signal
@@ -41,9 +42,15 @@ volatile bool CaliperInterface::dataReady = false;
  */
 void IRAM_ATTR CaliperInterface::clockISR()
 {
+    bit = digitalRead(CLOCK_PIN);
+    if(bit == HIGH) return; // Only process on falling edge
+
     if (bitCount < CALIPER_BIT_BUFFER_SIZE)
     {
-        uint8_t bit = digitalRead(DATA_PIN);
+        bit = digitalRead(DATA_PIN);
+        bit = digitalRead(DATA_PIN);
+        bit = digitalRead(DATA_PIN);
+
         bitBuffer[bitCount] = bit;
         bitCount = bitCount + 1;
         if (bitCount == CALIPER_BIT_BUFFER_SIZE)
