@@ -137,7 +137,7 @@ static void sendRCCommand(CommandType cmd)
     DEBUG_E("RC send error: %c (err=0x%04X)", (char)cmd, result);
   }
 
-  digitalWrite(LED_PIN, HIGH);
+  digitalWrite(LED_PIN, LOW);
   ledOnTime = millis();
 }
 
@@ -189,7 +189,7 @@ static void handleButtons()
 
   if (ledOnTime > 0 && (now - ledOnTime) > LED_PULSE_MS)
   {
-    digitalWrite(LED_PIN, LOW);
+    digitalWrite(LED_PIN, HIGH);
     ledOnTime = 0;
   }
 }
@@ -224,7 +224,7 @@ void setup()
   pinMode(BUTTON_TRIG_PIN, INPUT_PULLUP);
   pinMode(BUTTON_DROP_PIN, INPUT_PULLUP);
   pinMode(LED_PIN, OUTPUT);
-  digitalWrite(LED_PIN, LOW);
+  digitalWrite(LED_PIN, HIGH);
 
   WiFi.mode(WIFI_STA);
   WiFi.setChannel(ESPNOW_WIFI_CHANNEL);

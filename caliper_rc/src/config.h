@@ -24,6 +24,6 @@
 // LED Indicator
 // ============================================================================
 
-#define LED_PIN LED_GREEN
+#define LED_PIN 8
 
 #endif // CONFIG_RC_H
