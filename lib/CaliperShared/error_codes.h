@@ -74,6 +74,18 @@ enum ErrorCode : uint16_t
   /** Serial timeout */
   ERR_SERIAL_TIMEOUT = 0x0107,
 
+  /** RS485 (MAX485) interface initialization failed */
+  ERR_RS485_INIT_FAILED = 0x0108,
+
+  /** RS485 measurement / query timeout - no response from device */
+  ERR_RS485_TIMEOUT = 0x010A,
+
+  /** RS485 invalid or unparseable response received */
+  ERR_RS485_INVALID_RESPONSE = 0x010B,
+
+  /** RS485 measurement value out of valid range */
+  ERR_RS485_OUT_OF_RANGE = 0x010C,
+
   // ============================================================================
   // Sensor Errors (0x02XX)
   // ============================================================================

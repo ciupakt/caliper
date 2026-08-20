@@ -68,6 +68,28 @@
 #define BATTERY_DIVIDER_R2 30000
 
 // ============================================================================
+// Pin Definitions - RS485 (MAX485 transceiver)
+// ============================================================================
+// Note: GPIO19/20 are also the ESP32-S3 native USB D-/D+ pins. They are only
+// safe to use here because TinyUSB is listed in lib_ignore (native USB CDC is
+// disabled). If native USB is ever enabled, these pins conflict.
+#define RS485_TX_PIN 19   // ESP32 TX -> MAX485 DI (Driver Input / DO)
+#define RS485_RX_PIN 20   // MAX485 RO (Receiver Output) -> ESP32 RX
+#define RS485_DE_RE_PIN 5 // Common DE/RE control (HIGH = transmit, LOW = receive)
+
+// ============================================================================
+// RS485 / S_Probe P12D (ASCII mode)
+// ============================================================================
+// Per doc/Quickstart-guide-S_Probe-P12D-Open_WEB.pdf:
+// ASCII mode: 115200 Bd, 8N1. All commands terminated by CR (0x0D).
+// Position query command: '?' ("Get the probe's position").
+#define RS485_BAUD_RATE 115200
+#define RS485_QUERY_CHAR '?'
+#define RS485_CR 0x0D
+#define RS485_RESPONSE_TIMEOUT_MS 200
+#define RS485_RESPONSE_BUFFER_SIZE 64
+
+// ============================================================================
 // Pin Definitions - LED indicator
 // ============================================================================
 #define LED_RED 1

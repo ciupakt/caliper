@@ -23,6 +23,10 @@ const char* getErrorCategoryName(ErrorCode code)
     case ERR_ESPNOW_INVALID_LENGTH:
     case ERR_SERIAL_COMM_ERROR:
     case ERR_SERIAL_TIMEOUT:
+    case ERR_RS485_INIT_FAILED:
+    case ERR_RS485_TIMEOUT:
+    case ERR_RS485_INVALID_RESPONSE:
+    case ERR_RS485_OUT_OF_RANGE:
       return "COMMUNICATION";
 
     case ERR_CALIPER_TIMEOUT:
@@ -100,6 +104,12 @@ const char* getErrorModuleName(ErrorCode code)
     case ERR_SERIAL_COMM_ERROR:
     case ERR_SERIAL_TIMEOUT:
       return "SERIAL";
+
+    case ERR_RS485_INIT_FAILED:
+    case ERR_RS485_TIMEOUT:
+    case ERR_RS485_INVALID_RESPONSE:
+    case ERR_RS485_OUT_OF_RANGE:
+      return "RS485";
 
     case ERR_CALIPER_TIMEOUT:
     case ERR_CALIPER_INVALID_DATA:
@@ -193,6 +203,14 @@ const char* getErrorDescription(ErrorCode code)
       return "Serial communication error";
     case ERR_SERIAL_TIMEOUT:
       return "Serial operation timeout";
+    case ERR_RS485_INIT_FAILED:
+      return "RS485 interface initialization failed";
+    case ERR_RS485_TIMEOUT:
+      return "RS485 measurement timeout - no response from device";
+    case ERR_RS485_INVALID_RESPONSE:
+      return "RS485 invalid or unparseable response received";
+    case ERR_RS485_OUT_OF_RANGE:
+      return "RS485 measurement value out of valid range";
 
     // Sensor Errors
     case ERR_CALIPER_TIMEOUT:
@@ -316,6 +334,14 @@ const char* getErrorRecoveryAction(ErrorCode code)
       return "Check serial connection, verify baud rate, restart device";
     case ERR_SERIAL_TIMEOUT:
       return "Check serial connection, verify baud rate, reduce data rate";
+    case ERR_RS485_INIT_FAILED:
+      return "Check RS485 wiring, verify UART pins and DE/RE control, restart device";
+    case ERR_RS485_TIMEOUT:
+      return "Check RS485 connection, verify probe power and baud rate, retry measurement";
+    case ERR_RS485_INVALID_RESPONSE:
+      return "Check RS485 bus integrity, verify probe firmware, retry measurement";
+    case ERR_RS485_OUT_OF_RANGE:
+      return "Verify measurement value, check probe zero position, recalibrate if needed";
 
     // Sensor Errors
     case ERR_CALIPER_TIMEOUT:
@@ -426,6 +452,9 @@ bool isRecoverableError(ErrorCode code)
     case ERR_ESPNOW_RECV_FAILED:
     case ERR_SERIAL_COMM_ERROR:
     case ERR_SERIAL_TIMEOUT:
+    case ERR_RS485_TIMEOUT:
+    case ERR_RS485_INVALID_RESPONSE:
+    case ERR_RS485_OUT_OF_RANGE:
     case ERR_CALIPER_TIMEOUT:
     case ERR_CALIPER_INVALID_DATA:
     case ERR_CALIPER_OUT_OF_RANGE:
@@ -467,6 +496,7 @@ bool isRecoverableError(ErrorCode code)
     case ERR_OTA_INIT_FAILED:
     case ERR_OTA_UPDATE_FAILED:
     case ERR_OTA_WIFI_AP_FAILED:
+    case ERR_RS485_INIT_FAILED:
        return false;
 
     // Hardware failures - not recoverable
@@ -496,6 +526,7 @@ uint8_t getErrorSeverity(ErrorCode code)
     case ERR_ESPNOW_SEND_FAILED:
     case ERR_ESPNOW_RECV_FAILED:
     case ERR_SERIAL_TIMEOUT:
+    case ERR_RS485_TIMEOUT:
     case ERR_CALIPER_TIMEOUT:
     case ERR_ACCEL_READ_FAILED:
     case ERR_ACCEL_I2C_ERROR:
@@ -513,6 +544,8 @@ uint8_t getErrorSeverity(ErrorCode code)
     case ERR_ESPNOW_PEER_ADD_FAILED:
     case ERR_ESPNOW_INVALID_LENGTH:
     case ERR_SERIAL_COMM_ERROR:
+    case ERR_RS485_INVALID_RESPONSE:
+    case ERR_RS485_OUT_OF_RANGE:
     case ERR_CALIPER_INVALID_DATA:
     case ERR_CALIPER_OUT_OF_RANGE:
     case ERR_ACCEL_INIT_FAILED:
@@ -543,6 +576,7 @@ uint8_t getErrorSeverity(ErrorCode code)
     case ERR_SYSTEM_WIFI_INIT_FAILED:
     case ERR_SYSTEM_NULL_POINTER:
     case ERR_OTA_UPDATE_FAILED:
+    case ERR_RS485_INIT_FAILED:
        return 3;
 
     default:

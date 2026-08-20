@@ -10,7 +10,15 @@
 #include <arduino-timer.h>
 
 // Module includes
-#include "sensors/caliper.h"
+#if defined(SPC) && defined(RS485)
+  #error "Define only one of SPC or RS485"
+#elif defined(SPC)
+  #include "sensors/caliper.h"
+#elif defined(RS485)
+  #include "sensors/rs485.h"
+#else
+  #error "Define either SPC or RS485 build flag"
+#endif
 #include "sensors/accelerometer.h"
 #include "power/battery.h"
 #include "motor/motor_ctrl.h"
@@ -20,7 +28,11 @@ uint8_t masterAddress[6] = {0x00, 0x00, 0x00, 0x00, 0x00, 0x00};
 
 Preferences slavePrefs;
 esp_now_peer_info_t peerInfo;
+#if defined(SPC)
 CaliperInterface caliper;
+#elif defined(RS485)
+RS485Interface caliper;
+#endif
 AccelerometerInterface accelerometer;
 BatteryMonitor battery;
 MessageMaster msgMaster;

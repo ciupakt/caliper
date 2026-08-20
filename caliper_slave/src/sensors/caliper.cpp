@@ -10,6 +10,8 @@
 
 #include "caliper.h"
 
+#if defined(SPC)
+
 #include <MacroDebugger.h>
 #include <error_handler.h>
 
@@ -312,3 +314,5 @@ float CaliperInterface::performReliableMeasurement()
         RELIABLE_MEASUREMENT_TIMEOUT_MS);
     return INVALID_MEASUREMENT_VALUE;
 }
+
+#endif // defined(SPC)

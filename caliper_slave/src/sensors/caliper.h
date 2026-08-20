@@ -15,6 +15,8 @@
 #ifndef CALIPER_H
 #define CALIPER_H
 
+#if defined(SPC)
+
 #include <Arduino.h>
 #include "../config.h"
 #include <shared_common.h>
@@ -66,5 +68,7 @@ public:
      */
     bool isDataReady() const { return dataReady; }
 };
+
+#endif // defined(SPC)
 
 #endif // CALIPER_H
